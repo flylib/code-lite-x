@@ -27,8 +27,9 @@ CodeLiteX 是一款高性能、深度融合大模型智能驱动（LLM Engine）
 ## 核心开发与工作准则
 
 1. **代码搜索与架构梳理规范**：优先使用 **CodeGraph MCP 工具** 与 **Ripgrep (grep_search)**，避免漫无目的的盲目扫描与读文件循环。
-   - `codegraph_explore` / `codegraph_search`：快速获取符号逐字源码与架构上下文；
+   - `codegraph_explore` / `codegraph_search`：快速获取符号逐字源码与架构上下文（调用时附带 `projectPath: "/Users/dev/rust/code-lite-x"`）；
    - `codegraph_callers` / `codegraph_callees`：追踪上下游调用链路；
+   - `codegraph_impact`：精准评估修改符号时的影响面（Blast Radius）；
    - 检索接口 URL、文本配置、i18n、样式或未建立索引的脚本统一使用 **Grep**。
 2. **Rust Cargo 离线构建与测试铁律**：
    - 依赖已在本地 Cargo vendor / cache 完备锁定，所有 cargo 命令**必须显式增加 `--offline` 标志**并指定 PATH：
@@ -169,3 +170,9 @@ crates/
 3. **功能点自动 Git 提交准则**：
    - 每一个功能点 / 演进子阶段（例如 Phase 8.1, Phase 8.2 等）改完并通过全部测试（Rust + Flutter 全绿）后，必须**自动执行 Git 提交**；
    - 提交信息遵循 Conventional Commits 规范（如 `feat(phase-8.1): lsp process supervisor & incremental did_change`），清晰记录里程碑。
+4. **CodeGraph 知识图谱自动同步准则**：
+   - 每次代码改动与验证完成后，必须立即同步 CodeGraph 代码索引：
+     ```bash
+     /Users/dev/.nvm/versions/node/v24.15.0/bin/codegraph sync /Users/dev/rust/code-lite-x
+     ```
+   - 并在 MCP 中确认图谱状态（`codegraph_status`），确保后续代码理解、符号跳转与调用链始终处于最新、最准确的 AST 状态。
