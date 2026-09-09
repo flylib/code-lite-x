@@ -10,6 +10,7 @@
 pub mod context_builder;
 pub mod error;
 pub mod executor;
+pub mod fim;
 pub mod llm;
 pub mod permission;
 pub mod planner;
@@ -18,6 +19,7 @@ pub mod tool_runtime;
 pub use context_builder::AgentContextBuilder;
 pub use error::{AgentError, ToolError};
 pub use executor::{PlanExecutor, StepExecutionResult};
+pub use fim::{FimContext, FimEngine};
 pub use llm::{
     BuiltinRuleProvider, ChatCompletion, ChatMessage, LlmProvider, LlmToolCall,
     LlmToolDefinition, OpenAiCompatibleProvider, OpenAiConfig, StreamToken,

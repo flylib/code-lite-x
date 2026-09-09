@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:code_lite_ui/core/client/api_client.dart';
 import 'package:code_lite_ui/features/editor/code_editor_controller.dart';
@@ -253,6 +254,144 @@ void main() {
 
       expect(ctrl.text, contains('// ok'));
       expect(changedText, contains('// ok'));
+
+      ctrl.dispose();
+    });
+
+    testWidgets('EditorViewWidget renders ghost text and handles Tab / Cmd+Right / Esc', (WidgetTester tester) async {
+      await tester.binding.setSurfaceSize(const Size(1000, 700));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      final ctrl = CodeEditorController(initialText: 'let x =');
+      ctrl.setCursor(const EditorPosition(0, 7));
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: EditorViewWidget(
+              openTabs: const ['src/main.rs'],
+              activeFile: 'src/main.rs',
+              codeContent: ctrl.text,
+              controller: ctrl,
+              onSelectTab: (_) {},
+              onCloseTab: (_) {},
+              onCodeChanged: (_) {},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Set ghost text
+      ctrl.setGhostText(' 42;', position: const EditorPosition(0, 7));
+      await tester.pump();
+
+      // Verify ghost text rendered in widget tree
+      expect(find.text(' 42;'), findsOneWidget);
+      expect(find.text('FIM Suggestion'), findsOneWidget);
+
+      // Press Tab to accept
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pump();
+
+      expect(ctrl.text, equals('let x = 42;'));
+      expect(ctrl.hasGhostText, isFalse);
+      expect(find.text('FIM Suggestion'), findsNothing);
+
+      // Now test accept word
+      ctrl.setGhostText(' // hello world', position: const EditorPosition(0, 11));
+      await tester.pump();
+      expect(find.text(' // hello world'), findsOneWidget);
+
+      // Press Cmd+Right or Ctrl+Right
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.meta);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.meta);
+      await tester.pump();
+
+      // First token ' ' accepted
+      expect(ctrl.text, equals('let x = 42; '));
+      expect(ctrl.hasGhostText, isTrue);
+      expect(ctrl.ghostText, equals('// hello world'));
+
+      // Press Esc to dismiss
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pump();
+      expect(ctrl.hasGhostText, isFalse);
+      expect(ctrl.text, equals('let x = 42; '));
+
+      ctrl.dispose();
+    });
+  });
+
+  group('CodeEditorController Ghost Text & FIM Unit Tests', () {
+    test('setGhostText and clearGhostText lifecycle', () {
+      final ctrl = CodeEditorController(initialText: 'fn test()');
+      ctrl.setCursor(const EditorPosition(0, 9));
+
+      expect(ctrl.hasGhostText, isFalse);
+      ctrl.setGhostText(' -> bool { true }', position: const EditorPosition(0, 9));
+      expect(ctrl.hasGhostText, isTrue);
+      expect(ctrl.ghostText, equals(' -> bool { true }'));
+      expect(ctrl.ghostPosition, equals(const EditorPosition(0, 9)));
+
+      ctrl.clearGhostText();
+      expect(ctrl.hasGhostText, isFalse);
+      expect(ctrl.ghostText, isNull);
+      expect(ctrl.ghostPosition, isNull);
+      ctrl.dispose();
+    });
+
+    test('acceptGhostText inserts suggestion and moves cursor', () {
+      final ctrl = CodeEditorController(initialText: 'let value =');
+      ctrl.setCursor(const EditorPosition(0, 11));
+      ctrl.setGhostText(' 100;', position: const EditorPosition(0, 11));
+
+      final accepted = ctrl.acceptGhostText();
+      expect(accepted, isTrue);
+      expect(ctrl.text, equals('let value = 100;'));
+      expect(ctrl.cursorPosition, equals(const EditorPosition(0, 16)));
+      expect(ctrl.hasGhostText, isFalse);
+      ctrl.dispose();
+    });
+
+    test('acceptGhostTextWord accepts word by word token', () {
+      final ctrl = CodeEditorController(initialText: 'let msg =');
+      ctrl.setCursor(const EditorPosition(0, 9));
+      ctrl.setGhostText(' "hello" + " world";', position: const EditorPosition(0, 9));
+
+      // 1. Accept whitespace
+      ctrl.acceptGhostTextWord();
+      expect(ctrl.text, equals('let msg = '));
+      expect(ctrl.ghostText, equals('"hello" + " world";'));
+
+      // 2. Accept '"'
+      ctrl.acceptGhostTextWord();
+      expect(ctrl.text, equals('let msg = "'));
+      expect(ctrl.ghostText, equals('hello" + " world";'));
+
+      // 3. Accept 'hello'
+      ctrl.acceptGhostTextWord();
+      expect(ctrl.text, equals('let msg = "hello'));
+      expect(ctrl.ghostText, equals('" + " world";'));
+
+      ctrl.dispose();
+    });
+
+    test('getPrefixForFim and getSuffixForFim extract contextual windows', () {
+      const text = 'Line 1\nLine 2\nLine 3\nLine 4';
+      final ctrl = CodeEditorController(initialText: text);
+      ctrl.setCursor(const EditorPosition(1, 4)); // In "Line 2" after "Line"
+
+      final prefix = ctrl.getPrefixForFim(100);
+      expect(prefix, equals('Line 1\nLine'));
+
+      final suffix = ctrl.getSuffixForFim(100);
+      expect(suffix, equals(' 2\nLine 3\nLine 4'));
+
+      // Test maxChars truncation
+      final shortPrefix = ctrl.getPrefixForFim(4);
+      expect(shortPrefix, equals('Line'));
 
       ctrl.dispose();
     });

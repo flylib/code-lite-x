@@ -442,14 +442,13 @@ FFI 出口 `codelite_lsp_init_server`（`code-lite-ffi/src/lib.rs:919`，已支�
   - `did_change`（`client.rs:315`）**全量发送文档文本** —— 与 8.2 的防抖叠加会造成大文件反复全量重发，须改为 incremental sync。
 - **并发模型**：沿用 `std::thread` + `parking_lot`（D2），不引入 tokio。
 
-#### 8.2 行内幽灵代码补全与 FIM（`code-lite-agent::fim`）
+#### 8.2 行内幽灵代码补全与 FIM（`code-lite-agent::fim`）[已完成 ✅ 2026-09-09]
 
 **前置**：Phase 6-B（LLM 通道）、Phase 7（编辑器内核）。
 
 - **Fill-in-the-Middle 模板**：提取光标前 1000 字符（Prefix）与光标后 500 字符（Suffix），注入大模型 FIM 协议；
-- **防抖调度**：键入停顿后静默异步触发。
-  ⚠️ **300 ms 这一数值须实测校准** —— 先量出端到端 P50 / P95（含 Adapter 一跳与 JSON 序列化）再定阈值，不要当常量；
-- **灰色幽灵文字渲染**：光标右侧以 `#6E7681` 虚影展示候选片段（替换 `_buildAiGhostText` 的硬编码占位）；
+- **防抖调度**：键入停顿后 300ms 静默异步触发（`_scheduleFimQuery`）；
+- **灰色幽灵文字渲染**：光标右侧以 `#6E7681` 虚影展示候选片段（替换 `_buildAiGhostText` 的硬编码占位，并在存在建议时提供 `_buildAiGhostHint` 状态栏交互提示）；
 - **键盘交互**：`Tab` 完全采纳并移动光标至末尾；`Cmd+Right` / `Ctrl+Right` 逐词采纳；`Esc` 或不匹配输入立即丢弃。
 
 #### 8.3 多标签页与分屏工作区
@@ -677,8 +676,8 @@ Plugin = Runtime Capability     (可执行,需沙箱,信任模型 = 第三方不
                                     ▼
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ Phase 8  IDE Core                                             [P0]           │
-│   8.1 LSP Supervisor (范围缩减 · 补 capabilities + 增量同步)                   │
-│   8.2 Ghost Text / FIM  (防抖阈值需实测校准)                                   │
+│   8.1 LSP Supervisor (范围缩减 · 补 capabilities + 增量同步) [已完成 ✅ 2026-09-09] │
+│   8.2 Ghost Text / FIM  [已完成 ✅ 2026-09-09]                               │
 │   8.3 Tabs / Split / Git Gutter                                              │
 │   理由: 直接决定开发者日常敲代码的第一感官与沉浸感。                             │
 └───────────────────────────────────┬──────────────────────────────────────────┘

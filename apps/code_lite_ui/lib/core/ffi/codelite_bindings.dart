@@ -63,6 +63,9 @@ typedef _AgentPendingApprovalsDart = Pointer<Char> Function(Pointer<Void> ctx, P
 typedef _AgentDiffReviewC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> sessionId);
 typedef _AgentDiffReviewDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> sessionId);
 
+typedef _AgentFimCompleteC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> filePath, Pointer<Char> prefix, Pointer<Char> suffix, Pointer<Char> language);
+typedef _AgentFimCompleteDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> filePath, Pointer<Char> prefix, Pointer<Char> suffix, Pointer<Char> language);
+
 typedef _StorageEventsC = Pointer<Char> Function(Pointer<Void> ctx);
 typedef _StorageEventsDart = Pointer<Char> Function(Pointer<Void> ctx);
 
@@ -165,6 +168,7 @@ class CodeLiteBindings {
   late final _AgentApproveDart _agentApprove;
   late final _AgentPendingApprovalsDart _agentPendingApprovals;
   late final _AgentDiffReviewDart _agentDiffReview;
+  late final _AgentFimCompleteDart _agentFimComplete;
   late final _StorageEventsDart _storageEvents;
   late final _GraphSymbolsDart _graphSymbols;
   late final _GraphFileDart _graphIndexFile;
@@ -229,6 +233,7 @@ class CodeLiteBindings {
       _agentApprove = _dylib!.lookupFunction<_AgentApproveC, _AgentApproveDart>('codelite_agent_approve_step');
       _agentPendingApprovals = _dylib!.lookupFunction<_AgentPendingApprovalsC, _AgentPendingApprovalsDart>('codelite_agent_get_pending_approvals');
       _agentDiffReview = _dylib!.lookupFunction<_AgentDiffReviewC, _AgentDiffReviewDart>('codelite_agent_get_diff_review');
+      _agentFimComplete = _dylib!.lookupFunction<_AgentFimCompleteC, _AgentFimCompleteDart>('codelite_agent_fim_complete');
       _storageEvents = _dylib!.lookupFunction<_StorageEventsC, _StorageEventsDart>('codelite_storage_events');
       _graphSymbols = _dylib!.lookupFunction<_GraphSymbolsC, _GraphSymbolsDart>('codelite_graph_symbols');
       _graphIndexFile = _dylib!.lookupFunction<_GraphFileC, _GraphFileDart>('codelite_graph_index_file');
@@ -383,6 +388,23 @@ class CodeLiteBindings {
     final sessPtr = _toCString(sessionId);
     final ptr = _agentRestore(_ctx!, sessPtr.pointer);
     _freeAllocatedString(sessPtr);
+    return _parseJsonMap(_fromCString(ptr));
+  }
+
+  /// Generates Fill-In-The-Middle (FIM) inline code completion (Phase 8.2).
+  Map<String, dynamic> agentFimComplete(String filePath, String prefix, String suffix, String language) {
+    if (!isAvailable) {
+      return {'status': 'ok', 'suggestion': '// [Mock FIM] completion unavailable'};
+    }
+    final filePtr = _toCString(filePath);
+    final prefixPtr = _toCString(prefix);
+    final suffixPtr = _toCString(suffix);
+    final langPtr = _toCString(language);
+    final ptr = _agentFimComplete(_ctx!, filePtr.pointer, prefixPtr.pointer, suffixPtr.pointer, langPtr.pointer);
+    _freeAllocatedString(filePtr);
+    _freeAllocatedString(prefixPtr);
+    _freeAllocatedString(suffixPtr);
+    _freeAllocatedString(langPtr);
     return _parseJsonMap(_fromCString(ptr));
   }
 

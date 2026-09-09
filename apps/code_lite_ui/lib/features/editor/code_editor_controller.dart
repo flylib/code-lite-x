@@ -89,9 +89,14 @@ class CodeEditorController extends ChangeNotifier {
   // IME composing range (if active)
   TextRange _composingRange = TextRange.empty;
 
+  // AI Ghost-text (Fill-in-the-Middle) state
+  String? _ghostText;
+  EditorPosition? _ghostPosition;
+
   void Function(String newText)? onTextChanged;
   void Function(EditorPosition pos)? onCursorChanged;
   void Function(bool isDirty)? onDirtyChanged;
+  void Function(String? ghostText)? onGhostTextChanged;
 
   CodeEditorController({String initialText = ''}) {
     setText(initialText, markDirty: false);
@@ -111,6 +116,97 @@ class CodeEditorController extends ChangeNotifier {
   bool get canRedo => _canRedo;
   bool get cursorVisible => _cursorVisible;
   TextRange get composingRange => _composingRange;
+
+  String? get ghostText => _ghostText;
+  EditorPosition? get ghostPosition => _ghostPosition;
+  bool get hasGhostText => _ghostText != null && _ghostText!.isNotEmpty;
+
+  /// Sets the active inline ghost text suggestion at the specified position.
+  void setGhostText(String? text, {EditorPosition? position}) {
+    final targetPos = position ?? cursorPosition;
+    if (_ghostText == text && _ghostPosition == targetPos) return;
+    _ghostText = (text != null && text.isNotEmpty) ? text : null;
+    _ghostPosition = _ghostText != null ? targetPos : null;
+    onGhostTextChanged?.call(_ghostText);
+    notifyListeners();
+  }
+
+  /// Clears active ghost text suggestion.
+  void clearGhostText() {
+    if (_ghostText != null) {
+      _ghostText = null;
+      _ghostPosition = null;
+      onGhostTextChanged?.call(null);
+      notifyListeners();
+    }
+  }
+
+  /// Fully accepts active ghost text and inserts it at cursor position.
+  bool acceptGhostText() {
+    if (_ghostText == null || _ghostText!.isEmpty) return false;
+    if (_ghostPosition != null && _ghostPosition != cursorPosition) {
+      clearGhostText();
+      return false;
+    }
+
+    final toInsert = _ghostText!;
+    clearGhostText();
+    insertText(toInsert);
+    return true;
+  }
+
+  /// Accepts the next word or token from the ghost text suggestion.
+  bool acceptGhostTextWord() {
+    if (_ghostText == null || _ghostText!.isEmpty) return false;
+    if (_ghostPosition != null && _ghostPosition != cursorPosition) {
+      clearGhostText();
+      return false;
+    }
+
+    final full = _ghostText!;
+    bool isWord(String ch) => RegExp(r'^[a-zA-Z0-9_]$').hasMatch(ch);
+
+    int end = 0;
+    if (end < full.length && isWord(full[end])) {
+      while (end < full.length && isWord(full[end])) {
+        end++;
+      }
+    } else if (end < full.length && (full[end] == ' ' || full[end] == '\t')) {
+      while (end < full.length && (full[end] == ' ' || full[end] == '\t')) {
+        end++;
+      }
+    } else {
+      end = 1;
+    }
+
+    final word = full.substring(0, end);
+    final remaining = full.substring(end);
+
+    insertText(word);
+    if (remaining.isNotEmpty) {
+      _ghostText = remaining;
+      _ghostPosition = cursorPosition;
+      onGhostTextChanged?.call(_ghostText);
+      notifyListeners();
+    } else {
+      clearGhostText();
+    }
+    return true;
+  }
+
+  /// Returns text before cursor for FIM (up to maxChars).
+  String getPrefixForFim([int maxChars = 1000]) {
+    final before = _getTextBefore(cursorPosition);
+    if (before.length <= maxChars) return before;
+    return before.substring(before.length - maxChars);
+  }
+
+  /// Returns text after cursor for FIM (up to maxChars).
+  String getSuffixForFim([int maxChars = 500]) {
+    final after = _getTextAfter(cursorPosition);
+    if (after.length <= maxChars) return after;
+    return after.substring(0, maxChars);
+  }
 
   void setHistoryStatus({required bool canUndo, required bool canRedo, bool? isDirty}) {
     _canUndo = canUndo;

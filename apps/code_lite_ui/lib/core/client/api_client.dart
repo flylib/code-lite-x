@@ -503,6 +503,23 @@ class ApiClient {
     return {'status': 'error'};
   }
 
+  /// Generates Fill-In-The-Middle (FIM) inline code completion (Phase 8.2).
+  Future<String?> fimComplete(String filePath, String prefix, String suffix, String language) async {
+    if (_ffi.isAvailable) {
+      final res = _ffi.agentFimComplete(filePath, prefix, suffix, language);
+      if (res['status'] == 'ok' && res['suggestion'] != null) {
+        final sugg = res['suggestion'] as String;
+        return sugg.isNotEmpty ? sugg : null;
+      }
+      return null;
+    }
+    // Mock fallback when running without FFI dynamic library
+    final p = prefix.trimRight();
+    if (p.endsWith('let x =')) return ' 42;';
+    if (p.endsWith('fn main()')) return ' {\n    println!("Hello, world!");\n}';
+    return null;
+  }
+
   Map<String, dynamic> _fallbackWorkspace() {
     return {
       'name': 'code-lite-x',

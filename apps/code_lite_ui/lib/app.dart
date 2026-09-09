@@ -240,6 +240,7 @@ pub fn revert(&self, op_id: i64) -> Result<(), StorageError> {
                                   onUndo: _handleUndo,
                                   onRedo: _handleRedo,
                                   isTabDirty: (p) => _sessionManager.tabs[p]?.isDirty ?? false,
+                                  apiClient: _client,
                                 ),
                               ),
 

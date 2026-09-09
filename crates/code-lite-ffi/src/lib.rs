@@ -646,6 +646,41 @@ pub unsafe extern "C" fn codelite_agent_restore_start(
     }
 }
 
+/// Fill-in-the-Middle (FIM) code completion (Phase 8.2).
+/// Evaluates cursor prefix and suffix context to produce inline ghost text suggestion.
+#[no_mangle]
+pub unsafe extern "C" fn codelite_agent_fim_complete(
+    ctx: *mut CodeLiteContext,
+    file_path: *const c_char,
+    prefix: *const c_char,
+    suffix: *const c_char,
+    language: *const c_char,
+) -> *const c_char {
+    if ctx.is_null() {
+        return err_json("Context is null");
+    }
+    let ctx = &*ctx;
+
+    let path_opt = c_str_to_str(file_path).map(|s| s.to_string());
+    let prefix_str = c_str_to_str(prefix).unwrap_or("");
+    let suffix_str = c_str_to_str(suffix).unwrap_or("");
+    let lang_str = c_str_to_str(language).unwrap_or("rust");
+
+    let fim_ctx = code_lite_agent::FimContext::new(prefix_str, suffix_str, lang_str, path_opt);
+    let fim_engine = code_lite_agent::FimEngine::new(ctx.llm_provider.clone());
+
+    match fim_engine.complete(&fim_ctx) {
+        Ok(suggestion) => {
+            let res = serde_json::json!({
+                "status": "ok",
+                "suggestion": suggestion,
+            });
+            json_to_c_char(&res)
+        }
+        Err(e) => err_json(&format!("FIM completion failed: {}", e)),
+    }
+}
+
 /// Formulates a structured multi-step execution plan from a user prompt and optional code context.
 #[no_mangle]
 pub unsafe extern "C" fn codelite_agent_plan_task(
@@ -2214,6 +2249,21 @@ mod tests {
             assert!(status_str.contains("tracked_documents_count"));
             assert!(status_str.contains("rust"));
             codelite_string_free(status_ptr as *mut c_char);
+
+            // 10. FIM Inline Completion (Phase 8.2)
+            let fim_prefix = CString::new("fn calc_").unwrap();
+            let fim_suffix = CString::new("\nfn main() {}").unwrap();
+            let fim_ptr = codelite_agent_fim_complete(
+                ctx,
+                lsp_file.as_ptr(),
+                fim_prefix.as_ptr(),
+                fim_suffix.as_ptr(),
+                lsp_lang.as_ptr(),
+            );
+            let fim_str = CStr::from_ptr(fim_ptr).to_str().unwrap();
+            assert!(fim_str.contains("\"status\":\"ok\""));
+            assert!(fim_str.contains("value() -> i32 { 42 }"));
+            codelite_string_free(fim_ptr as *mut c_char);
 
             // Phase 3: Agent Planning, Closed Loop Execution & Three-Tier Permissions
             let plan_sess = CString::new("agent-ffi-sess").unwrap();
