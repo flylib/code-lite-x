@@ -8,7 +8,7 @@ pub mod search;
 pub mod tree;
 
 pub use entry::FileSystemEntry;
-pub use git::{GitEngine, GitError, GitFileChange, GitStatusKind, GitStatusResult};
+pub use git::{DiffHunkKind, GitEngine, GitError, GitFileChange, GitLineDiff, GitStatusKind, GitStatusResult};
 pub use search::{SearchOptions, SearchResult, WorkspaceSearcher};
 pub use tree::WorkspaceTree;
 

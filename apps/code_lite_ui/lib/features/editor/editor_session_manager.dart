@@ -32,21 +32,85 @@ class EditorTabState {
   }
 }
 
-/// Manages multiple tabs, independent viewports, and bidirectional synchronization with Rust Core.
+/// Split direction for multi-pane editor workspace (Phase 8.3).
+enum SplitDirection {
+  none,
+  horizontal, // Left & Right columns
+  vertical,   // Top & Bottom rows
+}
+
+/// Manages multiple tabs, independent viewports, split panes, and synchronization with Rust Core.
 class EditorSessionManager extends ChangeNotifier {
   final ApiClient client;
   final Map<String, EditorTabState> _tabs = {};
+  final List<String> _tabOrder = [];
   String? _activePath;
+  String? _secondaryActivePath;
+  SplitDirection _splitDirection = SplitDirection.none;
 
   EditorSessionManager({required this.client});
 
   Map<String, EditorTabState> get tabs => Map.unmodifiable(_tabs);
-  List<String> get openPaths => _tabs.keys.toList();
+  List<String> get openPaths => List.unmodifiable(_tabOrder);
   String? get activePath => _activePath;
   EditorTabState? get activeTab => _activePath != null ? _tabs[_activePath] : null;
 
+  SplitDirection get splitDirection => _splitDirection;
+  String? get secondaryActivePath => _secondaryActivePath;
+  EditorTabState? get secondaryTab => _secondaryActivePath != null ? _tabs[_secondaryActivePath] : null;
+
+  bool isTabDirty(String path) => _tabs[path]?.isDirty ?? false;
+
+  /// Reorders tabs in the tab strip (Phase 8.3).
+  void reorderTabs(int oldIndex, int newIndex) {
+    if (oldIndex < 0 || oldIndex >= _tabOrder.length) return;
+    if (oldIndex < newIndex) {
+      newIndex -= 1;
+    }
+    if (newIndex < 0) newIndex = 0;
+    if (newIndex >= _tabOrder.length) newIndex = _tabOrder.length - 1;
+    final item = _tabOrder.removeAt(oldIndex);
+    _tabOrder.insert(newIndex, item);
+    notifyListeners();
+  }
+
+  /// Activates or toggles split pane mode (horizontal or vertical).
+  void splitPane(SplitDirection direction, [String? path]) {
+    _splitDirection = direction;
+    if (direction == SplitDirection.none) {
+      _secondaryActivePath = null;
+    } else {
+      if (path != null && _tabs.containsKey(path)) {
+        _secondaryActivePath = path;
+      } else {
+        final other = _tabOrder.firstWhere((p) => p != _activePath, orElse: () => _activePath ?? '');
+        _secondaryActivePath = other.isNotEmpty ? other : null;
+      }
+    }
+    notifyListeners();
+  }
+
+  /// Selects an open tab for the secondary split pane.
+  void selectSecondaryTab(String path) {
+    if (_tabs.containsKey(path) && _secondaryActivePath != path) {
+      _secondaryActivePath = path;
+      notifyListeners();
+    }
+  }
+
+  /// Closes split mode, returning to single-pane layout.
+  void closeSplit() {
+    _splitDirection = SplitDirection.none;
+    _secondaryActivePath = null;
+    notifyListeners();
+  }
+
   /// Opens a tab or switches to it if already open.
   Future<EditorTabState> openFile(String path, {String? defaultContent}) async {
+    if (!_tabOrder.contains(path)) {
+      _tabOrder.add(path);
+    }
+
     if (_tabs.containsKey(path)) {
       _activePath = path;
       notifyListeners();
@@ -100,16 +164,31 @@ class EditorSessionManager extends ChangeNotifier {
   }
 
   /// Closes an open tab and activates a fallback if any remain.
-  void closeTab(String path) {
-    if (!_tabs.containsKey(path)) return;
+  /// Returns false if the tab is dirty and force is false.
+  bool closeTab(String path, {bool force = true}) {
+    if (!_tabs.containsKey(path)) return true;
+    if (!force && isTabDirty(path)) {
+      return false;
+    }
 
     final tab = _tabs.remove(path);
+    _tabOrder.remove(path);
     tab?.dispose();
 
     if (_activePath == path) {
-      _activePath = _tabs.isNotEmpty ? _tabs.keys.last : null;
+      _activePath = _tabOrder.isNotEmpty ? _tabOrder.last : null;
+    }
+    if (_secondaryActivePath == path) {
+      _secondaryActivePath = _tabOrder.isNotEmpty
+          ? _tabOrder.firstWhere((p) => p != _activePath, orElse: () => _activePath ?? '')
+          : null;
+      if (_secondaryActivePath == null || _secondaryActivePath!.isEmpty) {
+        _secondaryActivePath = null;
+        _splitDirection = SplitDirection.none;
+      }
     }
     notifyListeners();
+    return true;
   }
 
   /// Saves the active file to disk via Rust Core FFI.
@@ -172,6 +251,7 @@ class EditorSessionManager extends ChangeNotifier {
       tab.dispose();
     }
     _tabs.clear();
+    _tabOrder.clear();
     super.dispose();
   }
 }

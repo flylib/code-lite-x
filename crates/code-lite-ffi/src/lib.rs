@@ -2083,6 +2083,61 @@ pub unsafe extern "C" fn codelite_git_commit(
     }
 }
 
+/// Retrieves diff hunks (added, modified, deleted) for a specific file.
+#[no_mangle]
+pub unsafe extern "C" fn codelite_git_file_diff_hunks(
+    ctx: *mut CodeLiteContext,
+    file_path: *const c_char,
+) -> *const c_char {
+    if ctx.is_null() {
+        return err_json("Context is null");
+    }
+    let ctx = &*ctx;
+
+    let path = match c_str_to_str(file_path) {
+        Some(p) => p,
+        None => return err_json("file_path is required"),
+    };
+
+    let engine = GitEngine::new(&ctx.workspace_root);
+    match engine.diff_hunks(path) {
+        Ok(hunks) => {
+            let res = serde_json::json!({
+                "status": "ok",
+                "hunks": hunks,
+            });
+            json_to_c_char(&res)
+        }
+        Err(e) => err_json(&e.to_string()),
+    }
+}
+
+/// Reverts working tree changes on a file via git checkout / restore.
+#[no_mangle]
+pub unsafe extern "C" fn codelite_git_revert_file(
+    ctx: *mut CodeLiteContext,
+    file_path: *const c_char,
+) -> *const c_char {
+    if ctx.is_null() {
+        return err_json("Context is null");
+    }
+    let ctx = &*ctx;
+
+    let path = match c_str_to_str(file_path) {
+        Some(p) => p,
+        None => return err_json("file_path is required"),
+    };
+
+    let engine = GitEngine::new(&ctx.workspace_root);
+    match engine.revert_file(path) {
+        Ok(()) => {
+            let res = serde_json::json!({ "status": "ok" });
+            json_to_c_char(&res)
+        }
+        Err(e) => err_json(&e.to_string()),
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -2432,6 +2487,19 @@ mod tests {
             let diff_str = CStr::from_ptr(diff_ptr).to_str().unwrap();
             assert!(diff_str.contains("+Line 2 modified"));
             codelite_string_free(diff_ptr as *mut c_char);
+
+            // Diff hunks (Phase 8.3)
+            let hunks_ptr = codelite_git_file_diff_hunks(ctx, tf_c.as_ptr());
+            let hunks_str = CStr::from_ptr(hunks_ptr).to_str().unwrap();
+            assert!(hunks_str.contains("\"status\":\"ok\""));
+            assert!(hunks_str.contains("hunks"));
+            codelite_string_free(hunks_ptr as *mut c_char);
+
+            // Revert file (Phase 8.3)
+            let rev_ptr = codelite_git_revert_file(ctx, tf_c.as_ptr());
+            let rev_str = CStr::from_ptr(rev_ptr).to_str().unwrap();
+            assert!(rev_str.contains("\"status\":\"ok\""));
+            codelite_string_free(rev_ptr as *mut c_char);
 
             // 2. Test Streaming AI Assistant
             let sess_c = CString::new("session-p5-test").unwrap();

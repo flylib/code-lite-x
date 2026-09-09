@@ -1,0 +1,252 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap">
+  <style>
+    :root{
+      --bg-editor:#1E1F22; --bg-panel:#2B2D30; --bg-sub:#232428;
+      --bd:#393B40; --bd-sub:#2E3035;
+      --acc:#3574F0; --acc-y:#E5A84B; --hover:#35373C; --sel:rgba(53,116,240,.20);
+      --g-green:#59A869; --g-blue:#3574F0; --g-red:#DB5860;
+      --t-high:#DFE1E5; --t-pri:#BCBEC4; --t-sec:#9DA0A8; --t-mut:#707278; --t-gut:#606366;
+      --s-kw:#CF8E6D; --s-ty:#C886E5; --s-fn:#56A8F5; --s-str:#6AAB73; --s-cm:#7A7E85; --s-num:#2AACB8;
+      --ghost:#6E7681; --caret:#589DF6; --err:#F97A7A; --warn:#E5C07B;
+      --ui:-apple-system,"SF Pro Text",system-ui,"Segoe UI",sans-serif;
+      --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,monospace;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg-editor);font-family:var(--ui);
+         -webkit-font-smoothing:antialiased;color:var(--t-pri)}
+    a{color:var(--acc)} a:hover{color:#5A8DF5}
+    .ico{width:16px;height:16px;flex:none;stroke:currentColor;fill:none;
+         stroke-width:1.2;stroke-linecap:round;stroke-linejoin:round}
+    .ico.s18{width:18px;height:18px}
+    .ico.s14{width:14px;height:14px}
+    .ico.s12{width:12px;height:12px}
+    .row{display:flex;align-items:center}
+  </style>
+</helmet>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <symbol id="i-folder" viewBox="0 0 16 16"><path d="M1.8 4.2h4l1.2 1.4h7.2v6.6a1 1 0 0 1-1 1H2.8a1 1 0 0 1-1-1z"/></symbol>
+  <symbol id="i-chev-r" viewBox="0 0 16 16"><path d="M6.2 4.2 10 8l-3.8 3.8"/></symbol>
+  <symbol id="i-chev-d" viewBox="0 0 16 16"><path d="M4.2 6.2 8 10l3.8-3.8"/></symbol>
+  <symbol id="i-rust" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.4"/><path d="M5.6 10.6V5.4h2.6a1.4 1.4 0 0 1 0 2.8H5.6m2.2 0 2.4 2.4"/></symbol>
+  <symbol id="i-dart" viewBox="0 0 16 16"><path d="M2.6 8 8 2.6 13.4 8 8 13.4z"/><path d="M8 5.4v5.2"/></symbol>
+  <symbol id="i-toml" viewBox="0 0 16 16"><rect x="2.6" y="2.4" width="10.8" height="11.2" rx="1"/><path d="M5 6.2h6M5 8.6h4M5 11h5"/></symbol>
+  <symbol id="i-git" viewBox="0 0 16 16"><circle cx="4.4" cy="4" r="1.7"/><circle cx="4.4" cy="12" r="1.7"/><circle cx="11.6" cy="8" r="1.7"/><path d="M4.4 5.7v4.6M5.9 4.6h2.6a1.6 1.6 0 0 1 1.6 1.6v.3"/></symbol>
+  <symbol id="i-search" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.2"/><path d="m10.2 10.2 3.2 3.2"/></symbol>
+  <symbol id="i-run" viewBox="0 0 16 16"><path d="M5 3.4 12.2 8 5 12.6z" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-bug" viewBox="0 0 16 16"><rect x="5" y="5.4" width="6" height="6.4" rx="3"/><path d="M8 3.4v2M3.4 7.2h1.6M11 7.2h1.6M3.6 10.4h1.4M11 10.4h1.4M5.4 4.2 6.4 5.4M10.6 4.2 9.6 5.4"/></symbol>
+  <symbol id="i-more" viewBox="0 0 16 16"><circle cx="4" cy="8" r=".9" fill="currentColor" stroke="none"/><circle cx="8" cy="8" r=".9" fill="currentColor" stroke="none"/><circle cx="12" cy="8" r=".9" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 16 16"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.9v1.8M8 12.3v1.8M2.9 8H1.1M14.9 8h-1.8M4.4 4.4 3.1 3.1M12.9 12.9l-1.3-1.3M11.6 4.4l1.3-1.3M3.1 12.9l1.3-1.3"/></symbol>
+  <symbol id="i-user" viewBox="0 0 16 16"><circle cx="8" cy="6" r="2.4"/><path d="M3.4 13.2a4.8 4.8 0 0 1 9.2 0"/></symbol>
+  <symbol id="i-bell" viewBox="0 0 16 16"><path d="M4.4 11.2V7.4a3.6 3.6 0 0 1 7.2 0v3.8zM3.4 11.2h9.2M6.6 12.8a1.5 1.5 0 0 0 2.8 0"/></symbol>
+  <symbol id="i-close" viewBox="0 0 16 16"><path d="M4.6 4.6l6.8 6.8M11.4 4.6l-6.8 6.8"/></symbol>
+  <symbol id="i-minus" viewBox="0 0 16 16"><path d="M3.6 8h8.8"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 16 16"><path d="M8 3.6v8.8M3.6 8h8.8"/></symbol>
+  <symbol id="i-target" viewBox="0 0 16 16"><circle cx="8" cy="8" r="4.6"/><circle cx="8" cy="8" r="1.3"/><path d="M8 1.6v1.6M8 12.8v1.6M1.6 8h1.6M12.8 8h1.6"/></symbol>
+  <symbol id="i-collapse" viewBox="0 0 16 16"><path d="M5 6.4 8 3.6l3 2.8M5 9.6 8 12.4l3-2.8"/></symbol>
+  <symbol id="i-tree" viewBox="0 0 16 16"><rect x="2.2" y="2.4" width="11.6" height="11.2" rx="1"/><path d="M5.4 5.6h5.2M5.4 8h3.4M5.4 10.4h4.2"/></symbol>
+  <symbol id="i-commit" viewBox="0 0 16 16"><circle cx="8" cy="8" r="2.4"/><path d="M8 1.6v4M8 10.4v4"/></symbol>
+  <symbol id="i-branch" viewBox="0 0 16 16"><circle cx="4.6" cy="3.6" r="1.6"/><circle cx="11.4" cy="3.6" r="1.6"/><circle cx="4.6" cy="12.4" r="1.6"/><path d="M4.6 5.2v5.6M11.4 5.2v1.4a3 3 0 0 1-3 3H6.8"/></symbol>
+  <symbol id="i-term" viewBox="0 0 16 16"><rect x="2.2" y="3" width="11.6" height="10" rx="1"/><path d="M4.8 7l1.8 1.8-1.8 1.8M8.4 10.6h3"/></symbol>
+  <symbol id="i-sparkle" viewBox="0 0 16 16"><path d="M8 2.4l1.3 3.3L12.6 7 9.3 8.3 8 11.6 6.7 8.3 3.4 7l3.3-1.3z"/><path d="M12.4 11.2l.5 1.3 1.3.5-1.3.5-.5 1.3-.5-1.3-1.3-.5 1.3-.5z"/></symbol>
+  <symbol id="i-db" viewBox="0 0 16 16"><ellipse cx="8" cy="4.2" rx="4.8" ry="1.9"/><path d="M3.2 4.2v7.6c0 1 2.2 1.9 4.8 1.9s4.8-.9 4.8-1.9V4.2M3.2 8c0 1 2.2 1.9 4.8 1.9s4.8-.9 4.8-1.9"/></symbol>
+  <symbol id="i-graph" viewBox="0 0 16 16"><circle cx="4" cy="4.4" r="1.5"/><circle cx="12" cy="4.4" r="1.5"/><circle cx="8" cy="11.6" r="1.5"/><path d="M5.1 5.5 7 10.4M10.9 5.5 9 10.4M5.5 4.4h5"/></symbol>
+  <symbol id="i-check" viewBox="0 0 16 16"><path d="M3.4 8.4l3 3 6.2-7"/></symbol>
+  <symbol id="i-warn" viewBox="0 0 16 16"><path d="M8 2.8 14 13H2z"/><path d="M8 6.6v3M8 11.2v.6"/></symbol>
+  <symbol id="i-up" viewBox="0 0 16 16"><path d="M4.6 9.4 8 6l3.4 3.4"/></symbol>
+  <symbol id="i-down" viewBox="0 0 16 16"><path d="M4.6 6.6 8 10l3.4-3.4"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 16 16"><rect x="3.8" y="7" width="8.4" height="6.2" rx="1"/><path d="M5.8 7V5.4a2.2 2.2 0 0 1 4.4 0V7"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 16 16"><path d="M13 8a5 5 0 1 1-1.6-3.7M13 2.6v2.4h-2.4"/></symbol>
+  <symbol id="i-filter" viewBox="0 0 16 16"><path d="M2.6 3.6h10.8L9.4 8.4v4l-2.8-1.4V8.4z"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 16 16"><path d="M1.6 8S4 4.2 8 4.2 14.4 8 14.4 8 12 11.8 8 11.8 1.6 8 1.6 8z"/><circle cx="8" cy="8" r="1.7"/></symbol>
+  <symbol id="i-undo" viewBox="0 0 16 16"><path d="M3 8a5 5 0 1 0 1.6-3.7M3 2.6v2.4h2.4"/></symbol>
+</defs></svg>
+
+
+<div style="width:1440px;height:900px;position:relative;background:var(--bg-editor);overflow:hidden">
+
+  <!-- ── 背景工作区(变暗) ── -->
+  <div style="position:absolute;inset:0;display:grid;grid-template-rows:40px 1fr 22px">
+    <div class="row" style="height:40px;border-bottom:1px solid var(--bd-sub);padding:0 12px;gap:8px">
+      <div class="row" style="gap:6px;padding-right:6px">
+        <span style="width:12px;height:12px;border-radius:50%;background:#EC6A5E"></span>
+        <span style="width:12px;height:12px;border-radius:50%;background:#F4BF4F"></span>
+        <span style="width:12px;height:12px;border-radius:50%;background:#62C554"></span>
+      </div>
+      <div class="row" style="gap:6px;padding:3px 8px;background:var(--bg-panel);border:1px solid var(--bd);border-radius:5px">
+        <span style="padding:1px 3px;background:var(--acc);border-radius:3px;color:#fff;font-size:9px;font-weight:700">CL</span>
+        <span style="color:var(--t-high);font-size:12px;font-weight:600">code-lite-x</span>
+      </div>
+      <div style="flex:1"></div>
+    </div>
+    <div style="display:grid;grid-template-columns:44px 250px 1fr 310px">
+      <div style="border-right:1px solid var(--bd-sub)"></div>
+      <div style="background:var(--bg-panel);border-right:1px solid var(--bd-sub)"></div>
+      <div style="display:flex;flex-direction:column">
+        <div style="height:34px;background:var(--bg-panel);border-bottom:1px solid var(--bd-sub)"></div>
+        <div style="height:24px;background:var(--bg-sub);border-bottom:1px solid var(--bd-sub)"></div>
+        <div style="flex:1;display:flex">
+          <div style="width:48px;padding:8px 0;text-align:right;font-family:var(--mono);font-size:11px;line-height:20px;color:#3B3D42">
+            <div>128</div><div>129</div><div>130</div><div>131</div><div>132</div><div>133</div><div>134</div><div>135</div>
+          </div>
+          <div style="flex:1;padding:8px 0 0 10px;font-family:var(--mono);font-size:12px;line-height:20px;white-space:pre;color:#3F4146">
+    pub fn execute(&amp;self, cmd: &amp;str, args: &amp;[&amp;str])
+        -&gt; Result&lt;ExecutionResult, ToolError&gt; {
+        let output = Command::new(cmd)
+            .args(args)
+            .current_dir(&amp;self.workspace_root)</div>
+        </div>
+      </div>
+      <div style="background:var(--bg-panel);border-left:1px solid var(--bd-sub)"></div>
+    </div>
+    <div style="height:22px;border-top:1px solid var(--bd-sub)"></div>
+  </div>
+
+  <!-- 遮罩 -->
+  <div style="position:absolute;inset:0;background:rgba(20,21,23,.62)"></div>
+
+  <!-- ══ ApprovalTicket 对话框 ══ -->
+  <div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:620px;
+              background:var(--bg-panel);border:1px solid var(--bd);border-radius:8px;
+              box-shadow:0 24px 68px rgba(0,0,0,.66);overflow:hidden">
+
+    <!-- 标题栏 -->
+    <div class="row" style="height:38px;padding:0 10px 0 14px;gap:9px;background:var(--bg-sub);border-bottom:1px solid var(--bd)">
+      <svg class="ico s14" style="color:var(--g-red)"><use href="#i-lock"/></svg>
+      <span style="color:var(--t-high);font-size:13px;font-weight:600">Agent 操作需要批准</span>
+      <span style="padding:0 6px;background:rgba(219,88,96,.16);border:1px solid rgba(219,88,96,.42);
+                   border-radius:9px;font-size:9px;color:var(--g-red);font-weight:700;letter-spacing:.04em">CRITICAL</span>
+      <div style="flex:1"></div>
+      <span style="font-size:10px;color:var(--t-mut);font-family:var(--mono)">#A-219</span>
+      <svg class="ico s14" style="color:var(--t-mut);margin-left:6px"><use href="#i-close"/></svg>
+    </div>
+
+    <!-- 请求主体 -->
+    <div style="padding:14px">
+
+      <!-- 工具调用 -->
+      <div style="border:1px solid var(--bd);border-radius:6px;background:var(--bg-editor);overflow:hidden;margin-bottom:12px">
+        <div class="row" style="height:26px;padding:0 10px;gap:7px;background:var(--bg-sub);border-bottom:1px solid var(--bd-sub)">
+          <svg class="ico s12" style="color:var(--s-fn)"><use href="#i-term"/></svg>
+          <span style="font-size:11px;color:var(--t-high);font-weight:600;font-family:var(--mono)">execute</span>
+          <div style="flex:1"></div>
+          <span style="font-size:10px;color:var(--t-mut)">Tool Runtime &middot; 唯一受控入口</span>
+        </div>
+        <div style="padding:9px 10px;font-family:var(--mono);font-size:11px;line-height:19px;color:var(--t-pri)">
+          <div><span style="color:var(--t-mut)">cmd  </span> <span style="color:var(--s-str)">"cargo"</span></div>
+          <div><span style="color:var(--t-mut)">args </span> [<span style="color:var(--s-str)">"test"</span>, <span style="color:var(--s-str)">"--offline"</span>, <span style="color:var(--s-str)">"--workspace"</span>]</div>
+          <div><span style="color:var(--t-mut)">cwd  </span> <span style="color:var(--s-fn)">.codelite/worktree/task-7f3a</span></div>
+        </div>
+      </div>
+
+      <!-- 三级风险评级 -->
+      <div style="margin-bottom:12px">
+        <div style="font-size:10px;color:var(--t-mut);letter-spacing:.04em;margin-bottom:7px">三级权限评级</div>
+        <div class="row" style="gap:6px">
+          <div style="flex:1;padding:7px 9px;border:1px solid rgba(89,168,105,.28);border-radius:6px;background:rgba(89,168,105,.06)">
+            <div class="row" style="gap:5px;margin-bottom:3px">
+              <span style="width:7px;height:7px;border-radius:50%;background:var(--g-green)"></span>
+              <span style="font-size:10px;color:var(--g-green);font-weight:600;font-family:var(--mono)">Low</span>
+            </div>
+            <div style="font-size:10px;color:var(--t-mut);line-height:1.5">只读 &middot; 静默执行</div>
+          </div>
+          <div style="flex:1;padding:7px 9px;border:1px solid rgba(229,168,75,.28);border-radius:6px;background:rgba(229,168,75,.06)">
+            <div class="row" style="gap:5px;margin-bottom:3px">
+              <span style="width:7px;height:7px;border-radius:50%;background:var(--acc-y)"></span>
+              <span style="font-size:10px;color:var(--acc-y);font-weight:600;font-family:var(--mono)">Medium</span>
+            </div>
+            <div style="font-size:10px;color:var(--t-mut);line-height:1.5">工作区写入 &middot; 需批准</div>
+          </div>
+          <div style="flex:1;padding:7px 9px;border:1.5px solid var(--g-red);border-radius:6px;background:rgba(219,88,96,.11)">
+            <div class="row" style="gap:5px;margin-bottom:3px">
+              <span style="width:7px;height:7px;border-radius:50%;background:var(--g-red)"></span>
+              <span style="font-size:10px;color:var(--g-red);font-weight:700;font-family:var(--mono)">Critical</span>
+              <div style="flex:1"></div>
+              <svg class="ico s12" style="color:var(--g-red)"><use href="#i-check"/></svg>
+            </div>
+            <div style="font-size:10px;color:var(--t-pri);line-height:1.5">外部 Shell &middot; 强制挂起</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 路径守卫结果 -->
+      <div style="border:1px solid var(--bd);border-radius:6px;overflow:hidden;margin-bottom:12px">
+        <div class="row" style="height:26px;padding:0 10px;gap:7px;background:var(--bg-sub);border-bottom:1px solid var(--bd-sub)">
+          <svg class="ico s12" style="color:var(--t-sec)"><use href="#i-lock"/></svg>
+          <span style="font-size:11px;color:var(--t-high);font-weight:600">路径守卫</span>
+          <div style="flex:1"></div>
+          <span style="font-size:10px;color:var(--t-mut);font-family:var(--mono)">canonicalize + starts_with</span>
+        </div>
+        <div style="padding:8px 10px;display:flex;flex-direction:column;gap:6px">
+          <div class="row" style="gap:7px">
+            <svg class="ico s12" style="color:var(--g-green);flex:none"><use href="#i-check"/></svg>
+            <span style="font-size:11px;color:var(--t-pri);flex:1;font-family:var(--mono)">.codelite/worktree/task-7f3a</span>
+            <span style="font-size:10px;color:var(--g-green)">在工作区内</span>
+          </div>
+          <div class="row" style="gap:7px">
+            <svg class="ico s12" style="color:var(--g-red);flex:none"><use href="#i-close"/></svg>
+            <span style="font-size:11px;color:var(--t-mut);flex:1;font-family:var(--mono);text-decoration:line-through">~/.ssh/id_ed25519</span>
+            <span style="font-size:10px;color:var(--g-red)">已拦截 &middot; 逃逸</span>
+          </div>
+          <div class="row" style="gap:7px">
+            <svg class="ico s12" style="color:var(--g-red);flex:none"><use href="#i-close"/></svg>
+            <span style="font-size:11px;color:var(--t-mut);flex:1;font-family:var(--mono);text-decoration:line-through">../../etc/passwd</span>
+            <span style="font-size:10px;color:var(--g-red)">已拦截 &middot; 穿越</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 白名单校验 -->
+      <div class="row" style="gap:7px;padding:8px 10px;background:rgba(89,168,105,.08);
+                  border:1px solid rgba(89,168,105,.26);border-radius:6px;margin-bottom:12px">
+        <svg class="ico s12" style="color:var(--g-green);flex:none"><use href="#i-check"/></svg>
+        <span style="font-size:11px;color:var(--t-pri);flex:1">
+          <span style="font-family:var(--mono);color:var(--g-green)">cargo</span> 在命令白名单内（构建 / 测试 / VCS 类）
+        </span>
+      </div>
+
+      <!-- 审计与回滚 -->
+      <div class="row" style="gap:14px;padding-top:2px">
+        <span class="row" style="gap:6px;font-size:10px;color:var(--t-mut)">
+          <svg class="ico s12" style="color:var(--t-sec)"><use href="#i-db"/></svg>写入审计 project.db
+        </span>
+        <span class="row" style="gap:6px;font-size:10px;color:var(--t-mut)">
+          <svg class="ico s12" style="color:var(--t-sec)"><use href="#i-undo"/></svg>可原子回滚至 op #1284
+        </span>
+        <div style="flex:1"></div>
+        <label class="row" style="gap:5px;font-size:10px;color:var(--t-mut)">
+          <span style="width:11px;height:11px;border:1px solid var(--t-mut);border-radius:2px"></span>
+          本会话内记住此命令
+        </label>
+      </div>
+    </div>
+
+    <!-- 按钮行 -->
+    <div class="row" style="height:48px;padding:0 14px;gap:8px;background:var(--bg-sub);border-top:1px solid var(--bd)">
+      <span class="row" style="gap:5px;font-size:10px;color:var(--t-mut)">
+        <svg class="ico s12"><use href="#i-eye"/></svg>查看完整审计链
+      </span>
+      <div style="flex:1"></div>
+      <div class="row" style="justify-content:center;padding:0 14px;height:28px;border:1px solid var(--bd);
+                  border-radius:5px;font-size:12px;color:var(--t-pri)">驳回</div>
+      <div class="row" style="justify-content:center;padding:0 14px;height:28px;border:1px solid var(--bd);
+                  border-radius:5px;font-size:12px;color:var(--t-pri)">仅本次跳过</div>
+      <div class="row" style="justify-content:center;gap:6px;padding:0 16px;height:28px;background:var(--acc);
+                  border-radius:5px;font-size:12px;font-weight:600;color:#fff">
+        <svg class="ico s12" style="color:#fff"><use href="#i-check"/></svg>批准并执行
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

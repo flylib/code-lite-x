@@ -25,7 +25,7 @@
 | :-- | :--- | :-- | :-- |
 | **Phase 6** | 安全底座与工程前置（含 Core API 契约 + codegen） | Phase 5.5 | — |
 | **Phase 7** | Editable Editor Kernel（可编辑编辑器内核） | Phase 6.0 | [已完成 ✅ 2026-09-09] |
-| **Phase 8** | IDE Core（LSP Supervisor / Ghost Text / Tabs·Split·Gutter） | Phase 6 | Phase 6 |
+| **Phase 8** | IDE Core（LSP Supervisor / Ghost Text / Tabs·Split·Gutter） | Phase 6 | [已完成 ✅ 2026-09-10] |
 | **Phase 9** | Agent Runtime + Multi-file + Git Worktree | Phase 7 | Phase 7 |
 | **Phase 10** | 检索/上下文层（项目指令 → Memory → Skill → MCP） | — | — |
 | **Phase 11** | Cross-platform Release（全平台发布与增量更新） | Phase 9 | Phase 9 |
@@ -451,7 +451,7 @@ FFI 出口 `codelite_lsp_init_server`（`code-lite-ffi/src/lib.rs:919`，已支�
 - **灰色幽灵文字渲染**：光标右侧以 `#6E7681` 虚影展示候选片段（替换 `_buildAiGhostText` 的硬编码占位，并在存在建议时提供 `_buildAiGhostHint` 状态栏交互提示）；
 - **键盘交互**：`Tab` 完全采纳并移动光标至末尾；`Cmd+Right` / `Ctrl+Right` 逐词采纳；`Esc` 或不匹配输入立即丢弃。
 
-#### 8.3 多标签页与分屏工作区
+#### 8.3 多标签页与分屏工作区 [已完成 ✅ 2026-09-10]
 
 **前置**：Phase 7。
 

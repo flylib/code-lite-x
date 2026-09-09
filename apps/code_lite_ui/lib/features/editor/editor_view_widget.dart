@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../../core/client/api_client.dart';
 import '../../core/theme/intellij_theme.dart';
 import 'code_editor_controller.dart';
+import 'editor_session_manager.dart';
 import 'ime_text_input_client.dart';
 import 'lsp_overlay.dart';
 import 'syntax_highlighter.dart';
@@ -27,6 +28,16 @@ class EditorViewWidget extends StatefulWidget {
   final bool Function(String path)? isTabDirty;
   final ApiClient? apiClient;
 
+  // Phase 8.3 Additions: Split Pane & Tabs & Git Gutter
+  final SplitDirection splitDirection;
+  final EditorTabState? secondaryTab;
+  final ValueChanged<SplitDirection>? onSplitChange;
+  final VoidCallback? onCloseSplit;
+  final void Function(int oldIndex, int newIndex)? onReorderTabs;
+  final VoidCallback? onCloseActiveTab;
+  final ValueChanged<String>? onSelectSecondaryTab;
+  final ValueChanged<String>? onRevertFile;
+
   const EditorViewWidget({
     super.key,
     required this.openTabs,
@@ -45,6 +56,14 @@ class EditorViewWidget extends StatefulWidget {
     this.onRedo,
     this.isTabDirty,
     this.apiClient,
+    this.splitDirection = SplitDirection.none,
+    this.secondaryTab,
+    this.onSplitChange,
+    this.onCloseSplit,
+    this.onReorderTabs,
+    this.onCloseActiveTab,
+    this.onSelectSecondaryTab,
+    this.onRevertFile,
   });
 
   @override
@@ -64,8 +83,14 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
   final FocusNode _focusNode = FocusNode();
   late ImeTextInputBridge _imeBridge;
 
+  final FocusNode _secondaryFocusNode = FocusNode();
+  ImeTextInputBridge? _secondaryImeBridge;
+
   double _charWidth = 7.2;
   Timer? _fimDebounceTimer;
+
+  List<GitLineDiff> _diffHunks = [];
+  GitLineDiff? _activeHunkOverlay;
 
   @override
   void initState() {
@@ -86,6 +111,38 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
         _imeBridge.detach();
       }
     });
+
+    _initSecondaryBridge();
+    _fetchDiffHunks();
+  }
+
+  void _initSecondaryBridge() {
+    if (widget.secondaryTab != null) {
+      _secondaryImeBridge = ImeTextInputBridge(
+        controller: widget.secondaryTab!.controller,
+        focusNode: _secondaryFocusNode,
+      );
+      _secondaryFocusNode.addListener(() {
+        if (_secondaryFocusNode.hasFocus) {
+          _secondaryImeBridge?.attach();
+        } else {
+          _secondaryImeBridge?.detach();
+        }
+      });
+    }
+  }
+
+  void _fetchDiffHunks() async {
+    final client = widget.apiClient;
+    if (client == null) return;
+    try {
+      final hunks = await client.getGitLineDiffs(widget.activeFile);
+      if (mounted) {
+        setState(() {
+          _diffHunks = hunks;
+        });
+      }
+    } catch (_) {}
   }
 
   void _initController() {
@@ -149,6 +206,16 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
   void didUpdateWidget(EditorViewWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
 
+    if (widget.activeFile != oldWidget.activeFile) {
+      _fetchDiffHunks();
+      _activeHunkOverlay = null;
+    }
+
+    if (widget.secondaryTab != oldWidget.secondaryTab) {
+      _secondaryImeBridge?.detach();
+      _initSecondaryBridge();
+    }
+
     if (widget.controller != oldWidget.controller) {
       _fimDebounceTimer?.cancel();
       if (_ownsController) _controller.dispose();
@@ -177,7 +244,9 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
   void dispose() {
     _fimDebounceTimer?.cancel();
     _imeBridge.detach();
+    _secondaryImeBridge?.detach();
     _focusNode.dispose();
+    _secondaryFocusNode.dispose();
     if (_ownsController) _controller.dispose();
     if (_ownsVerticalScroll) _verticalScroll.dispose();
     if (_ownsHorizontalScroll) _horizontalScroll.dispose();
@@ -223,7 +292,12 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
     });
   }
 
-  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+  KeyEventResult _handlePaneKeyEvent(
+    CodeEditorController controller,
+    ImeTextInputBridge? imeBridge,
+    KeyEvent event, {
+    required bool isPrimary,
+  }) {
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
       return KeyEventResult.ignored;
     }
@@ -232,10 +306,24 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
     final isShift = HardwareKeyboard.instance.isShiftPressed;
     final isAlt = HardwareKeyboard.instance.isAltPressed;
 
-    // Shortcuts: Dismiss Ghost Text with Escape
+    // Shortcuts: Close active tab (Cmd+W / Ctrl+W)
+    if (isCmd && event.logicalKey == LogicalKeyboardKey.keyW) {
+      if (widget.onCloseActiveTab != null) {
+        widget.onCloseActiveTab!.call();
+      } else {
+        widget.onCloseTab(widget.activeFile);
+      }
+      return KeyEventResult.handled;
+    }
+
+    // Shortcuts: Dismiss Ghost Text with Escape or close MiniDiffOverlay
     if (event.logicalKey == LogicalKeyboardKey.escape) {
-      if (_controller.hasGhostText) {
-        _controller.clearGhostText();
+      if (controller.hasGhostText) {
+        controller.clearGhostText();
+        return KeyEventResult.handled;
+      }
+      if (_activeHunkOverlay != null) {
+        setState(() => _activeHunkOverlay = null);
         return KeyEventResult.handled;
       }
     }
@@ -248,7 +336,7 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
 
     // Shortcuts: Undo
     if (isCmd && !isShift && event.logicalKey == LogicalKeyboardKey.keyZ) {
-      if (widget.onUndo != null) {
+      if (isPrimary && widget.onUndo != null) {
         widget.onUndo!.call();
       }
       return KeyEventResult.handled;
@@ -257,7 +345,7 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
     // Shortcuts: Redo
     if ((isCmd && isShift && event.logicalKey == LogicalKeyboardKey.keyZ) ||
         (isCmd && event.logicalKey == LogicalKeyboardKey.keyY)) {
-      if (widget.onRedo != null) {
+      if (isPrimary && widget.onRedo != null) {
         widget.onRedo!.call();
       }
       return KeyEventResult.handled;
@@ -265,125 +353,124 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
 
     // Shortcuts: Select All
     if (isCmd && event.logicalKey == LogicalKeyboardKey.keyA) {
-      _controller.selectAll();
-      _imeBridge.syncState();
+      controller.selectAll();
+      imeBridge?.syncState();
       return KeyEventResult.handled;
     }
 
     // Shortcuts: Copy
     if (isCmd && event.logicalKey == LogicalKeyboardKey.keyC) {
-      _controller.copy();
+      controller.copy();
       return KeyEventResult.handled;
     }
 
     // Shortcuts: Cut
     if (isCmd && event.logicalKey == LogicalKeyboardKey.keyX) {
-      _controller.cut();
-      _imeBridge.syncState();
+      controller.cut();
+      imeBridge?.syncState();
       return KeyEventResult.handled;
     }
 
     // Shortcuts: Paste
     if (isCmd && event.logicalKey == LogicalKeyboardKey.keyV) {
-      _controller.paste();
-      _imeBridge.syncState();
+      controller.paste();
+      imeBridge?.syncState();
       return KeyEventResult.handled;
     }
 
     // Navigation: Arrows
     if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-      _controller.moveCursor(
+      controller.moveCursor(
         direction: NavigationDirection.left,
         extendSelection: isShift,
         wordJump: isAlt,
         lineJump: isCmd,
       );
-      _imeBridge.syncState();
+      imeBridge?.syncState();
       return KeyEventResult.handled;
     }
     if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
-      // Cmd/Ctrl + Right accepts ghost text word-by-word
-      if (isCmd && _controller.hasGhostText) {
-        _controller.acceptGhostTextWord();
-        _imeBridge.syncState();
+      if (isCmd && controller.hasGhostText) {
+        controller.acceptGhostTextWord();
+        imeBridge?.syncState();
         return KeyEventResult.handled;
       }
-      _controller.moveCursor(
+      controller.moveCursor(
         direction: NavigationDirection.right,
         extendSelection: isShift,
         wordJump: isAlt,
         lineJump: isCmd,
       );
-      _imeBridge.syncState();
+      imeBridge?.syncState();
       return KeyEventResult.handled;
     }
     if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-      _controller.moveCursor(
+      controller.moveCursor(
         direction: NavigationDirection.up,
         extendSelection: isShift,
         documentJump: isCmd,
       );
-      _imeBridge.syncState();
+      imeBridge?.syncState();
       return KeyEventResult.handled;
     }
     if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-      _controller.moveCursor(
+      controller.moveCursor(
         direction: NavigationDirection.down,
         extendSelection: isShift,
         documentJump: isCmd,
       );
-      _imeBridge.syncState();
+      imeBridge?.syncState();
       return KeyEventResult.handled;
     }
 
     // Home / End
     if (event.logicalKey == LogicalKeyboardKey.home) {
-      _controller.moveCursor(direction: NavigationDirection.left, extendSelection: isShift, lineJump: true);
-      _imeBridge.syncState();
+      controller.moveCursor(direction: NavigationDirection.left, extendSelection: isShift, lineJump: true);
+      imeBridge?.syncState();
       return KeyEventResult.handled;
     }
     if (event.logicalKey == LogicalKeyboardKey.end) {
-      _controller.moveCursor(direction: NavigationDirection.right, extendSelection: isShift, lineJump: true);
-      _imeBridge.syncState();
+      controller.moveCursor(direction: NavigationDirection.right, extendSelection: isShift, lineJump: true);
+      imeBridge?.syncState();
       return KeyEventResult.handled;
     }
 
     // Backspace / Delete
     if (event.logicalKey == LogicalKeyboardKey.backspace) {
-      _controller.clearGhostText();
-      _controller.deleteBackward();
-      _imeBridge.syncState();
+      controller.clearGhostText();
+      controller.deleteBackward();
+      imeBridge?.syncState();
       return KeyEventResult.handled;
     }
     if (event.logicalKey == LogicalKeyboardKey.delete) {
-      _controller.clearGhostText();
-      _controller.deleteForward();
-      _imeBridge.syncState();
+      controller.clearGhostText();
+      controller.deleteForward();
+      imeBridge?.syncState();
       return KeyEventResult.handled;
     }
 
     // Enter
     if (event.logicalKey == LogicalKeyboardKey.enter || event.logicalKey == LogicalKeyboardKey.numpadEnter) {
-      _controller.clearGhostText();
-      _controller.insertNewline();
-      _imeBridge.syncState();
+      controller.clearGhostText();
+      controller.insertNewline();
+      imeBridge?.syncState();
       return KeyEventResult.handled;
     }
 
-    // Tab / Shift+Tab (Tab accepts full ghost text if present)
+    // Tab / Shift+Tab
     if (event.logicalKey == LogicalKeyboardKey.tab) {
-      if (!isShift && _controller.hasGhostText) {
-        _controller.acceptGhostText();
-        _imeBridge.syncState();
+      if (!isShift && controller.hasGhostText) {
+        controller.acceptGhostText();
+        imeBridge?.syncState();
         return KeyEventResult.handled;
       }
-      _controller.clearGhostText();
+      controller.clearGhostText();
       if (isShift) {
-        _controller.unindent();
+        controller.unindent();
       } else {
-        _controller.insertTab();
+        controller.insertTab();
       }
-      _imeBridge.syncState();
+      imeBridge?.syncState();
       return KeyEventResult.handled;
     }
 
@@ -391,9 +478,9 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
     if (!isCmd && event.character != null && event.character!.isNotEmpty) {
       final code = event.character!.codeUnitAt(0);
       if (code >= 32) {
-        _controller.clearGhostText();
-        _controller.insertText(event.character!);
-        _imeBridge.syncState();
+        controller.clearGhostText();
+        controller.insertText(event.character!);
+        imeBridge?.syncState();
         return KeyEventResult.handled;
       }
     }
@@ -401,17 +488,57 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
     return KeyEventResult.ignored;
   }
 
+  Widget _buildFileTypeIcon(String filePath) {
+    final ext = filePath.split('.').last.toLowerCase();
+    switch (ext) {
+      case 'rs':
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 0.5),
+          decoration: BoxDecoration(
+            color: const Color(0xFFD87642).withValues(alpha: 0.18),
+            borderRadius: BorderRadius.circular(2),
+            border: Border.all(color: const Color(0xFFD87642), width: 0.8),
+          ),
+          child: const Text('rs', style: TextStyle(color: Color(0xFFD87642), fontSize: 9, fontWeight: FontWeight.bold)),
+        );
+      case 'dart':
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 0.5),
+          decoration: BoxDecoration(
+            color: const Color(0xFF3574F0).withValues(alpha: 0.18),
+            borderRadius: BorderRadius.circular(2),
+            border: Border.all(color: const Color(0xFF3574F0), width: 0.8),
+          ),
+          child: const Text('dt', style: TextStyle(color: Color(0xFF3574F0), fontSize: 9, fontWeight: FontWeight.bold)),
+        );
+      case 'json':
+      case 'toml':
+      case 'yaml':
+      case 'yml':
+        return const Text('{ }', style: TextStyle(color: Color(0xFFE5C07B), fontSize: 10, fontWeight: FontWeight.bold));
+      case 'md':
+        return const Text('M↓', style: TextStyle(color: Color(0xFF6CB4F8), fontSize: 10, fontWeight: FontWeight.bold));
+      default:
+        return const Icon(Icons.insert_drive_file_outlined, size: 12, color: Color(0xFF8C8C8C));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final listenables = <Listenable>[
+      _controller,
+      if (widget.secondaryTab != null) widget.secondaryTab!.controller,
+    ];
+
     return AnimatedBuilder(
-      animation: _controller,
+      animation: Listenable.merge(listenables),
       builder: (context, _) {
-        final lines = _controller.lines;
+        final isSplit = widget.splitDirection != SplitDirection.none && widget.secondaryTab != null;
 
         return Focus(
           focusNode: _focusNode,
           autofocus: true,
-          onKeyEvent: _handleKeyEvent,
+          onKeyEvent: (node, event) => _handlePaneKeyEvent(_controller, _imeBridge, event, isPrimary: true),
           child: Container(
             color: IntelliJTheme.editorBg,
             child: Column(
@@ -419,86 +546,78 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
                 // 1. Tab Bar
                 _buildTabBar(),
 
-                // 2. Editor Breadcrumb Sub-Header
-                _buildSubHeader(lines.length),
-
-                // 3. Main Text Area (Gutter + Code)
+                // 2. Editor Panes
                 Expanded(
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: SingleChildScrollView(
-                          controller: _verticalScroll,
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              // Line numbers gutter
-                              _buildGutter(lines.length),
-
-                              // Git Diff stripe
-                              _buildGitDiffStripe(lines.length),
-
-                              // Code View
-                              Expanded(
-                                child: SingleChildScrollView(
-                                  controller: _horizontalScroll,
-                                  scrollDirection: Axis.horizontal,
-                                  child: GestureDetector(
-                                    behavior: HitTestBehavior.opaque,
-                                    onTapDown: (details) {
-                                      _focusNode.requestFocus();
-                                      _imeBridge.attach();
-                                      final line = (details.localPosition.dy / 20.0).floor();
-                                      final col = (details.localPosition.dx / _charWidth).round();
-                                      _controller.setCursor(EditorPosition(line, col));
-                                      _imeBridge.syncState();
-                                    },
-                                    onDoubleTapDown: (details) {
-                                      final line = (details.localPosition.dy / 20.0).floor();
-                                      final col = (details.localPosition.dx / _charWidth).round();
-                                      _controller.selectWord(EditorPosition(line, col));
-                                      _imeBridge.syncState();
-                                    },
-                                    onPanStart: (details) {
-                                      _focusNode.requestFocus();
-                                      final line = (details.localPosition.dy / 20.0).floor();
-                                      final col = (details.localPosition.dx / _charWidth).round();
-                                      _controller.setCursor(EditorPosition(line, col));
-                                      _imeBridge.syncState();
-                                    },
-                                    onPanUpdate: (details) {
-                                      final line = (details.localPosition.dy / 20.0).floor();
-                                      final col = (details.localPosition.dx / _charWidth).round();
-                                      _controller.setCursor(EditorPosition(line, col), extendSelection: true);
-                                      _imeBridge.syncState();
-                                    },
-                                    child: Padding(
-                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          ...lines.asMap().entries.map((entry) {
-                                            return _buildCodeLine(entry.key, entry.value);
-                                          }),
-
-                                          // AI Ghost-text inline suggestion hint
-                                          _buildAiGhostHint(),
-                                        ],
-                                      ),
-                                    ),
+                  child: isSplit
+                      ? (widget.splitDirection == SplitDirection.horizontal
+                          ? Row(
+                              children: [
+                                Expanded(
+                                  child: _buildPane(
+                                    controller: _controller,
+                                    verticalScroll: _verticalScroll,
+                                    horizontalScroll: _horizontalScroll,
+                                    filePath: widget.activeFile,
+                                    diagnostics: widget.diagnostics,
+                                    focusNode: _focusNode,
+                                    imeBridge: _imeBridge,
+                                    isPrimary: true,
                                   ),
                                 ),
-                              ),
-                            ],
-                          ),
+                                Container(width: 1, color: IntelliJTheme.borderSubtle),
+                                Expanded(
+                                  child: _buildPane(
+                                    controller: widget.secondaryTab!.controller,
+                                    verticalScroll: widget.secondaryTab!.verticalScroll,
+                                    horizontalScroll: widget.secondaryTab!.horizontalScroll,
+                                    filePath: widget.secondaryTab!.filePath,
+                                    diagnostics: widget.secondaryTab!.diagnostics,
+                                    focusNode: _secondaryFocusNode,
+                                    imeBridge: _secondaryImeBridge,
+                                    isPrimary: false,
+                                  ),
+                                ),
+                              ],
+                            )
+                          : Column(
+                              children: [
+                                Expanded(
+                                  child: _buildPane(
+                                    controller: _controller,
+                                    verticalScroll: _verticalScroll,
+                                    horizontalScroll: _horizontalScroll,
+                                    filePath: widget.activeFile,
+                                    diagnostics: widget.diagnostics,
+                                    focusNode: _focusNode,
+                                    imeBridge: _imeBridge,
+                                    isPrimary: true,
+                                  ),
+                                ),
+                                Container(height: 1, color: IntelliJTheme.borderSubtle),
+                                Expanded(
+                                  child: _buildPane(
+                                    controller: widget.secondaryTab!.controller,
+                                    verticalScroll: widget.secondaryTab!.verticalScroll,
+                                    horizontalScroll: widget.secondaryTab!.horizontalScroll,
+                                    filePath: widget.secondaryTab!.filePath,
+                                    diagnostics: widget.secondaryTab!.diagnostics,
+                                    focusNode: _secondaryFocusNode,
+                                    imeBridge: _secondaryImeBridge,
+                                    isPrimary: false,
+                                  ),
+                                ),
+                              ],
+                            ))
+                      : _buildPane(
+                          controller: _controller,
+                          verticalScroll: _verticalScroll,
+                          horizontalScroll: _horizontalScroll,
+                          filePath: widget.activeFile,
+                          diagnostics: widget.diagnostics,
+                          focusNode: _focusNode,
+                          imeBridge: _imeBridge,
+                          isPrimary: true,
                         ),
-                      ),
-
-                      // Right error/change stripe
-                      _buildRightErrorStripe(lines.length),
-                    ],
-                  ),
                 ),
               ],
             ),
@@ -518,73 +637,276 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
       child: Row(
         children: [
           Expanded(
-            child: ListView.builder(
+            child: ReorderableListView.builder(
               scrollDirection: Axis.horizontal,
+              buildDefaultDragHandles: false,
+              padding: EdgeInsets.zero,
               itemCount: widget.openTabs.length,
+              onReorder: (oldIndex, newIndex) {
+                widget.onReorderTabs?.call(oldIndex, newIndex);
+              },
               itemBuilder: (context, index) {
                 final path = widget.openTabs[index];
                 final fileName = path.split('/').last;
                 final isActive = path == widget.activeFile;
                 final isDirty = widget.isTabDirty?.call(path) ?? (isActive && _controller.isDirty);
 
-                return InkWell(
-                  onTap: () => widget.onSelectTab(path),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    decoration: BoxDecoration(
-                      color: isActive ? IntelliJTheme.tabActiveBg : IntelliJTheme.tabInactiveBg,
-                      border: Border(
-                        bottom: BorderSide(
-                          color: isActive ? IntelliJTheme.accentBlue : Colors.transparent,
-                          width: 2,
-                        ),
-                        right: const BorderSide(color: IntelliJTheme.borderSubtle, width: 0.5),
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Text('⚙', style: TextStyle(color: Color(0xFFD87642), fontSize: 10)),
-                        const SizedBox(width: 6),
-                        Text(
-                          fileName,
-                          style: TextStyle(
-                            color: isActive ? IntelliJTheme.textHigh : IntelliJTheme.textMuted,
-                            fontSize: 12,
-                            fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
+                return ReorderableDelayedDragStartListener(
+                  key: ValueKey('tab_$path'),
+                  index: index,
+                  child: InkWell(
+                    onTap: () => widget.onSelectTab(path),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      decoration: BoxDecoration(
+                        color: isActive ? IntelliJTheme.tabActiveBg : IntelliJTheme.tabInactiveBg,
+                        border: Border(
+                          bottom: BorderSide(
+                            color: isActive ? IntelliJTheme.accentBlue : Colors.transparent,
+                            width: 2,
                           ),
+                          right: const BorderSide(color: IntelliJTheme.borderSubtle, width: 0.5),
                         ),
-                        if (isDirty) ...[
-                          const SizedBox(width: 4),
-                          Container(
-                            width: 6,
-                            height: 6,
-                            decoration: const BoxDecoration(
-                              color: Color(0xFF6CB4F8),
-                              shape: BoxShape.circle,
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _buildFileTypeIcon(path),
+                          const SizedBox(width: 6),
+                          Text(
+                            fileName,
+                            style: TextStyle(
+                              color: isActive ? IntelliJTheme.textHigh : IntelliJTheme.textMuted,
+                              fontSize: 12,
+                              fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
                             ),
                           ),
+                          if (isDirty) ...[
+                            const SizedBox(width: 5),
+                            Container(
+                              width: 6,
+                              height: 6,
+                              decoration: const BoxDecoration(
+                                color: Color(0xFF6CB4F8),
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                          ],
+                          const SizedBox(width: 8),
+                          InkWell(
+                            onTap: () => widget.onCloseTab(path),
+                            child: const Icon(Icons.close, size: 12, color: IntelliJTheme.textMuted),
+                          ),
                         ],
-                        const SizedBox(width: 8),
-                        InkWell(
-                          onTap: () => widget.onCloseTab(path),
-                          child: const Icon(Icons.close, size: 12, color: IntelliJTheme.textMuted),
-                        ),
-                      ],
+                      ),
                     ),
                   ),
                 );
               },
             ),
           ),
+          // Split Pane Action Icons
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Tooltip(
+                message: 'Split Right (Horizontal)',
+                child: InkWell(
+                  onTap: () => widget.onSplitChange?.call(
+                    widget.splitDirection == SplitDirection.horizontal
+                        ? SplitDirection.none
+                        : SplitDirection.horizontal,
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+                    child: Icon(
+                      Icons.vertical_split,
+                      size: 14,
+                      color: widget.splitDirection == SplitDirection.horizontal
+                          ? IntelliJTheme.accentBlue
+                          : IntelliJTheme.textMuted,
+                    ),
+                  ),
+                ),
+              ),
+              Tooltip(
+                message: 'Split Down (Vertical)',
+                child: InkWell(
+                  onTap: () => widget.onSplitChange?.call(
+                    widget.splitDirection == SplitDirection.vertical
+                        ? SplitDirection.none
+                        : SplitDirection.vertical,
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+                    child: Icon(
+                      Icons.horizontal_split,
+                      size: 14,
+                      color: widget.splitDirection == SplitDirection.vertical
+                          ? IntelliJTheme.accentBlue
+                          : IntelliJTheme.textMuted,
+                    ),
+                  ),
+                ),
+              ),
+              if (widget.splitDirection != SplitDirection.none)
+                Tooltip(
+                  message: 'Close Split',
+                  child: InkWell(
+                    onTap: () => widget.onCloseSplit?.call(),
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+                      child: Icon(
+                        Icons.close_fullscreen,
+                        size: 13,
+                        color: IntelliJTheme.textMuted,
+                      ),
+                    ),
+                  ),
+                ),
+              const SizedBox(width: 4),
+            ],
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildSubHeader(int lineCount) {
-    final segments = widget.activeFile.split('/').where((s) => s.isNotEmpty).toList();
-    final isDirty = _controller.isDirty;
+  Widget _buildPane({
+    required CodeEditorController controller,
+    required ScrollController verticalScroll,
+    required ScrollController horizontalScroll,
+    required String filePath,
+    required List<EditorDiagnostic> diagnostics,
+    required FocusNode focusNode,
+    required ImeTextInputBridge? imeBridge,
+    required bool isPrimary,
+  }) {
+    final lines = controller.lines;
+
+    Widget content = Column(
+      children: [
+        _buildSubHeader(
+          lines.length,
+          filePath: filePath,
+          isPrimary: isPrimary,
+          isDirty: controller.isDirty,
+        ),
+        Expanded(
+          child: Stack(
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: SingleChildScrollView(
+                      controller: verticalScroll,
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildGutter(lines.length, diagnostics: diagnostics),
+                          _buildGitDiffStripe(
+                            lines.length,
+                            hunks: isPrimary ? _diffHunks : const [],
+                            onHunkTap: (hunk) {
+                              if (isPrimary) {
+                                setState(() {
+                                  if (_activeHunkOverlay?.line == hunk.line) {
+                                    _activeHunkOverlay = null;
+                                  } else {
+                                    _activeHunkOverlay = hunk;
+                                  }
+                                });
+                              }
+                            },
+                          ),
+                          Expanded(
+                            child: SingleChildScrollView(
+                              controller: horizontalScroll,
+                              scrollDirection: Axis.horizontal,
+                              child: GestureDetector(
+                                behavior: HitTestBehavior.opaque,
+                                onTapDown: (details) {
+                                  focusNode.requestFocus();
+                                  imeBridge?.attach();
+                                  final line = (details.localPosition.dy / 20.0).floor();
+                                  final col = (details.localPosition.dx / _charWidth).round();
+                                  controller.setCursor(EditorPosition(line, col));
+                                  imeBridge?.syncState();
+                                },
+                                onDoubleTapDown: (details) {
+                                  final line = (details.localPosition.dy / 20.0).floor();
+                                  final col = (details.localPosition.dx / _charWidth).round();
+                                  controller.selectWord(EditorPosition(line, col));
+                                  imeBridge?.syncState();
+                                },
+                                onPanStart: (details) {
+                                  focusNode.requestFocus();
+                                  final line = (details.localPosition.dy / 20.0).floor();
+                                  final col = (details.localPosition.dx / _charWidth).round();
+                                  controller.setCursor(EditorPosition(line, col));
+                                  imeBridge?.syncState();
+                                },
+                                onPanUpdate: (details) {
+                                  final line = (details.localPosition.dy / 20.0).floor();
+                                  final col = (details.localPosition.dx / _charWidth).round();
+                                  controller.setCursor(EditorPosition(line, col), extendSelection: true);
+                                  imeBridge?.syncState();
+                                },
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      ...lines.asMap().entries.map((entry) {
+                                        return _buildCodeLine(
+                                          entry.key,
+                                          entry.value,
+                                          controller: controller,
+                                          filePath: filePath,
+                                          diagnostics: diagnostics,
+                                          showGhost: isPrimary,
+                                        );
+                                      }),
+                                      if (isPrimary) _buildAiGhostHint(),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  _buildRightErrorStripe(lines.length, diagnostics: diagnostics),
+                ],
+              ),
+              if (isPrimary) _buildMiniDiffOverlay(),
+            ],
+          ),
+        ),
+      ],
+    );
+
+    if (!isPrimary) {
+      return Focus(
+        focusNode: focusNode,
+        onKeyEvent: (node, event) => _handlePaneKeyEvent(controller, imeBridge, event, isPrimary: false),
+        child: content,
+      );
+    }
+
+    return content;
+  }
+
+  Widget _buildSubHeader(
+    int lineCount, {
+    required String filePath,
+    required bool isPrimary,
+    required bool isDirty,
+  }) {
+    final segments = filePath.split('/').where((s) => s.isNotEmpty).toList();
 
     return Container(
       height: 24,
@@ -596,7 +918,6 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          // Breadcrumbs Bar
           Expanded(
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
@@ -625,7 +946,7 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
                       ],
                     );
                   }),
-                  if (widget.activeSymbol != null && widget.activeSymbol!.isNotEmpty) ...[
+                  if (isPrimary && widget.activeSymbol != null && widget.activeSymbol!.isNotEmpty) ...[
                     const Padding(
                       padding: EdgeInsets.symmetric(horizontal: 4),
                       child: Icon(Icons.chevron_right, size: 11, color: IntelliJTheme.textMuted),
@@ -654,23 +975,38 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
             ),
           ),
           const SizedBox(width: 8),
-          Text(
-            '$lineCount lines • UTF-8${isDirty ? ' • Modified' : ''}',
-            style: const TextStyle(color: IntelliJTheme.textMuted, fontSize: 10),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                '$lineCount lines • UTF-8${isDirty ? ' • Modified' : ''}',
+                style: const TextStyle(color: IntelliJTheme.textMuted, fontSize: 10),
+              ),
+              if (!isPrimary) ...[
+                const SizedBox(width: 8),
+                InkWell(
+                  onTap: () => widget.onCloseSplit?.call(),
+                  child: const Tooltip(
+                    message: 'Close Split Pane',
+                    child: Icon(Icons.close, size: 13, color: IntelliJTheme.textMuted),
+                  ),
+                ),
+              ],
+            ],
           ),
         ],
       ),
     );
   }
 
-  Widget _buildGutter(int totalLines) {
+  Widget _buildGutter(int totalLines, {required List<EditorDiagnostic> diagnostics}) {
     return Container(
       width: 48,
       padding: const EdgeInsets.symmetric(vertical: 8),
       color: IntelliJTheme.editorBg,
       child: Column(
         children: List.generate(totalLines, (index) {
-          final lineDiags = widget.diagnostics.where((d) => d.line == index).toList();
+          final lineDiags = diagnostics.where((d) => d.line == index).toList();
           final hasError = lineDiags.any((d) => d.isError);
           final hasWarning = lineDiags.any((d) => d.isWarning);
 
@@ -722,33 +1058,206 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
     );
   }
 
-  Widget _buildGitDiffStripe(int totalLines) {
+  Widget _buildGitDiffStripe(
+    int totalLines, {
+    required List<GitLineDiff> hunks,
+    required ValueChanged<GitLineDiff> onHunkTap,
+  }) {
     return Container(
-      width: 3,
+      width: 5,
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Column(
         children: List.generate(totalLines, (index) {
+          final lineNum = index + 1;
+          final hunk = hunks.cast<GitLineDiff?>().firstWhere(
+            (h) => h?.line == lineNum,
+            orElse: () => null,
+          );
+
           Color color = Colors.transparent;
-          if (index == 2 || index == 3) {
-            color = IntelliJTheme.gitGreen;
-          } else if (index == 5 || index == 6) {
-            color = IntelliJTheme.gitBlue;
+          if (hunk != null) {
+            switch (hunk.kind) {
+              case DiffHunkKind.added:
+                color = const Color(0xFF59A869);
+                break;
+              case DiffHunkKind.modified:
+                color = const Color(0xFF3574F0);
+                break;
+              case DiffHunkKind.deleted:
+                color = const Color(0xFFDB5860);
+                break;
+            }
           }
-          return Container(height: 20, color: color);
+
+          Widget stripe = Container(height: 20, color: color);
+
+          if (hunk != null) {
+            return Tooltip(
+              message: '${hunk.kind.name.toUpperCase()} (Line ${hunk.line}) - Click to inspect diff',
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => onHunkTap(hunk),
+                child: stripe,
+              ),
+            );
+          }
+
+          return stripe;
         }),
       ),
     );
   }
 
-  Widget _buildCodeLine(int lineIndex, String lineText) {
-    final lang = widget.activeFile.endsWith('.dart') ? 'dart' : 'rust';
+  Widget _buildMiniDiffOverlay() {
+    if (_activeHunkOverlay == null) return const SizedBox.shrink();
+    final hunk = _activeHunkOverlay!;
+    final topOffset = ((hunk.line - 1) * 20.0).clamp(0.0, 450.0);
+
+    Color badgeColor = const Color(0xFF3574F0);
+    if (hunk.kind == DiffHunkKind.added) badgeColor = const Color(0xFF59A869);
+    if (hunk.kind == DiffHunkKind.deleted) badgeColor = const Color(0xFFDB5860);
+
+    return Positioned(
+      top: topOffset,
+      left: 56,
+      right: 20,
+      child: Material(
+        elevation: 8,
+        color: Colors.transparent,
+        child: Container(
+          decoration: BoxDecoration(
+            color: const Color(0xFF2B2D30),
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: badgeColor, width: 1.2),
+            boxShadow: const [
+              BoxShadow(color: Colors.black54, blurRadius: 10, offset: Offset(0, 4)),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: const BoxDecoration(
+                  color: Color(0xFF1E1F22),
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(5)),
+                  border: Border(bottom: BorderSide(color: Color(0xFF393B40))),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: badgeColor.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(3),
+                        border: Border.all(color: badgeColor, width: 0.8),
+                      ),
+                      child: Text(
+                        hunk.kind.name.toUpperCase(),
+                        style: TextStyle(color: badgeColor, fontSize: 10, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Line ${hunk.line}',
+                      style: const TextStyle(color: IntelliJTheme.textPrimary, fontSize: 11, fontWeight: FontWeight.w600),
+                    ),
+                    const Spacer(),
+                    InkWell(
+                      onTap: () async {
+                        final client = widget.apiClient;
+                        if (client != null) {
+                          await client.gitRevertFile(widget.activeFile);
+                        }
+                        widget.onRevertFile?.call(widget.activeFile);
+                        setState(() {
+                          _activeHunkOverlay = null;
+                        });
+                        _fetchDiffHunks();
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF353B48),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(color: const Color(0xFF4C5052), width: 0.8),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.undo, size: 11, color: Color(0xFF6CB4F8)),
+                            SizedBox(width: 4),
+                            Text('Revert', style: TextStyle(color: Color(0xFF6CB4F8), fontSize: 10, fontWeight: FontWeight.w600)),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    InkWell(
+                      onTap: () => setState(() => _activeHunkOverlay = null),
+                      child: const Icon(Icons.close, size: 14, color: IntelliJTheme.textMuted),
+                    ),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (hunk.originalContent.isNotEmpty)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        color: const Color(0xFF3C1F24),
+                        child: Text(
+                          '- ${hunk.originalContent}',
+                          style: const TextStyle(
+                            color: Color(0xFFFF8B8B),
+                            fontFamily: 'monospace',
+                            fontSize: 11,
+                          ),
+                        ),
+                      ),
+                    if (hunk.newContent.isNotEmpty)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        color: const Color(0xFF1D3528),
+                        child: Text(
+                          '+ ${hunk.newContent}',
+                          style: const TextStyle(
+                            color: Color(0xFF70D28E),
+                            fontFamily: 'monospace',
+                            fontSize: 11,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCodeLine(
+    int lineIndex,
+    String lineText, {
+    required CodeEditorController controller,
+    required String filePath,
+    required List<EditorDiagnostic> diagnostics,
+    required bool showGhost,
+  }) {
+    final lang = filePath.endsWith('.dart') ? 'dart' : 'rust';
     final spans = SyntaxHighlighter.highlightLine(lineText, language: lang);
 
-    final lineDiags = widget.diagnostics.where((d) => d.line == lineIndex).toList();
+    final lineDiags = diagnostics.where((d) => d.line == lineIndex).toList();
     final hasError = lineDiags.any((d) => d.isError);
     final hasWarning = lineDiags.any((d) => d.isWarning);
 
-    final sel = _controller.selection;
+    final sel = controller.selection;
     final isLineSelected = !sel.isCollapsed && lineIndex >= sel.start.line && lineIndex <= sel.end.line;
 
     int selStartCol = 0;
@@ -769,8 +1278,8 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
       }
     }
 
-    final isCaretLine = lineIndex == _controller.cursorPosition.line;
-    final caretCol = _controller.cursorPosition.col;
+    final isCaretLine = lineIndex == controller.cursorPosition.line;
+    final caretCol = controller.cursorPosition.col;
 
     Widget lineContent = SizedBox(
       height: 20,
@@ -803,34 +1312,35 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
           ),
 
           // 2.5 AI Ghost Text (Inline at Caret)
-          if (isCaretLine &&
-              _controller.hasGhostText &&
-              _controller.ghostPosition?.line == lineIndex &&
-              _controller.ghostPosition?.col == caretCol) ...[
+          if (showGhost &&
+              isCaretLine &&
+              controller.hasGhostText &&
+              controller.ghostPosition?.line == lineIndex &&
+              controller.ghostPosition?.col == caretCol) ...[
             Positioned(
               left: (caretCol * _charWidth).clamp(0.0, 99999.0),
               top: 0,
               bottom: 0,
               child: IgnorePointer(
                 child: Text(
-                  _controller.ghostText!.split('\n').first,
+                  controller.ghostText!.split('\n').first,
                   style: const TextStyle(
                     fontSize: 12,
                     fontFamily: 'monospace',
                     fontStyle: FontStyle.italic,
                     height: 1.4,
-                    color: Color(0xFF6E7681), // #6E7681 GitHub Copilot standard ghost grey
+                    color: Color(0xFF6E7681),
                   ),
                 ),
               ),
             ),
-            if (_controller.ghostText!.contains('\n'))
+            if (controller.ghostText!.contains('\n'))
               Positioned(
                 left: 0,
                 top: 20,
                 child: IgnorePointer(
                   child: Text(
-                    _controller.ghostText!.split('\n').skip(1).join('\n'),
+                    controller.ghostText!.split('\n').skip(1).join('\n'),
                     style: const TextStyle(
                       fontSize: 12,
                       fontFamily: 'monospace',
@@ -844,7 +1354,7 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
           ],
 
           // 3. Caret (Blinking Cursor)
-          if (isCaretLine && _controller.cursorVisible)
+          if (isCaretLine && controller.cursorVisible)
             Positioned(
               left: (caretCol * _charWidth).clamp(0.0, 99999.0),
               top: 2,
@@ -918,7 +1428,7 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
     );
   }
 
-  Widget _buildRightErrorStripe(int totalLines) {
+  Widget _buildRightErrorStripe(int totalLines, {required List<EditorDiagnostic> diagnostics}) {
     return Container(
       width: 12,
       decoration: const BoxDecoration(
@@ -930,7 +1440,7 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
           final height = constraints.maxHeight;
           return Stack(
             children: [
-              ...widget.diagnostics.map((d) {
+              ...diagnostics.map((d) {
                 final topPos = totalLines > 0 ? (d.line / totalLines) * height : 0.0;
                 return Positioned(
                   top: topPos.clamp(0.0, height - 4),

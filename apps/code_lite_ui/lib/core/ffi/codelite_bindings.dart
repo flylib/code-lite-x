@@ -132,6 +132,12 @@ typedef _GitStageDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> 
 typedef _GitCommitC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> message);
 typedef _GitCommitDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> message);
 
+typedef _GitFileHunksC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> filePath);
+typedef _GitFileHunksDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> filePath);
+
+typedef _GitRevertFileC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> filePath);
+typedef _GitRevertFileDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> filePath);
+
 typedef _JsonRpcCallC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> requestJson);
 typedef _JsonRpcCallDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> requestJson);
 
@@ -200,6 +206,8 @@ class CodeLiteBindings {
   late final _GitStageDart _gitStage;
   late final _GitStageDart _gitUnstage;
   late final _GitCommitDart _gitCommit;
+  late final _GitFileHunksDart _gitFileHunks;
+  late final _GitRevertFileDart _gitRevertFile;
   late final _JsonRpcCallDart _jsonRpcCall;
 
   Pointer<Void>? get contextPointer => _ctx;
@@ -265,6 +273,8 @@ class CodeLiteBindings {
       _gitStage = _dylib!.lookupFunction<_GitStageC, _GitStageDart>('codelite_git_stage');
       _gitUnstage = _dylib!.lookupFunction<_GitStageC, _GitStageDart>('codelite_git_unstage');
       _gitCommit = _dylib!.lookupFunction<_GitCommitC, _GitCommitDart>('codelite_git_commit');
+      _gitFileHunks = _dylib!.lookupFunction<_GitFileHunksC, _GitFileHunksDart>('codelite_git_file_diff_hunks');
+      _gitRevertFile = _dylib!.lookupFunction<_GitRevertFileC, _GitRevertFileDart>('codelite_git_revert_file');
       _jsonRpcCall = _dylib!.lookupFunction<_JsonRpcCallC, _JsonRpcCallDart>('codelite_jsonrpc_call');
 
       final pathPtr = _toCString(workspacePath);
@@ -728,6 +738,22 @@ class CodeLiteBindings {
     return _parseJsonMap(_fromCString(ptr));
   }
 
+  Map<String, dynamic> gitFileDiffHunks(String filePath) {
+    if (!isAvailable) return {'status': 'error', 'hunks': []};
+    final pathPtr = _toCString(filePath);
+    final ptr = _gitFileHunks(_ctx!, pathPtr.pointer);
+    _freeAllocatedString(pathPtr);
+    return _parseJsonMap(_fromCString(ptr));
+  }
+
+  Map<String, dynamic> gitRevertFile(String filePath) {
+    if (!isAvailable) return {'status': 'error'};
+    final pathPtr = _toCString(filePath);
+    final ptr = _gitRevertFile(_ctx!, pathPtr.pointer);
+    _freeAllocatedString(pathPtr);
+    return _parseJsonMap(_fromCString(ptr));
+  }
+
   // ---------------------------------------------------------------------------
   // Memory and Conversion Helpers
   // ---------------------------------------------------------------------------
@@ -781,9 +807,12 @@ class CodeLiteBindings {
   DynamicLibrary? _loadLibrary() {
     final candidates = [
       'target/debug/libcodelite.dylib',
+      'target/release/libcodelite.dylib',
       '../../target/debug/libcodelite.dylib',
+      '../../target/release/libcodelite.dylib',
       'libcodelite.dylib',
       '/Users/dev/rust/code-lite-x/target/debug/libcodelite.dylib',
+      '/Users/dev/rust/code-lite-x/target/release/libcodelite.dylib',
       'target/debug/libcodelite.so',
       '../../target/debug/libcodelite.so',
       'codelite.dll',

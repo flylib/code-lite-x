@@ -396,4 +396,230 @@ void main() {
       ctrl.dispose();
     });
   });
+
+  group('Phase 8.3: Tab Reorder & Split Pane Tests', () {
+    test('EditorSessionManager reorders tabs', () async {
+      final client = ApiClient();
+      final session = EditorSessionManager(client: client);
+
+      await session.openFile('a.rs', defaultContent: 'a');
+      await session.openFile('b.dart', defaultContent: 'b');
+      await session.openFile('c.json', defaultContent: 'c');
+
+      expect(session.openPaths, equals(['a.rs', 'b.dart', 'c.json']));
+
+      // Move c.json to index 0
+      session.reorderTabs(2, 0);
+      expect(session.openPaths, equals(['c.json', 'a.rs', 'b.dart']));
+
+      // Move c.json to index 2
+      session.reorderTabs(0, 3);
+      expect(session.openPaths, equals(['a.rs', 'b.dart', 'c.json']));
+
+      session.dispose();
+    });
+
+    test('EditorSessionManager split pane horizontal and vertical workflow', () async {
+      final client = ApiClient();
+      final session = EditorSessionManager(client: client);
+
+      await session.openFile('main.rs', defaultContent: 'fn main() {}');
+      await session.openFile('lib.rs', defaultContent: 'pub mod test;');
+
+      expect(session.splitDirection, equals(SplitDirection.none));
+      expect(session.secondaryTab, isNull);
+
+      // Split horizontally
+      session.splitPane(SplitDirection.horizontal);
+      expect(session.splitDirection, equals(SplitDirection.horizontal));
+      expect(session.secondaryActivePath, equals('main.rs'));
+      expect(session.secondaryTab, isNotNull);
+
+      // Switch secondary tab
+      session.selectSecondaryTab('lib.rs');
+      expect(session.secondaryActivePath, equals('lib.rs'));
+
+      // Split vertically
+      session.splitPane(SplitDirection.vertical);
+      expect(session.splitDirection, equals(SplitDirection.vertical));
+
+      // Close split
+      session.closeSplit();
+      expect(session.splitDirection, equals(SplitDirection.none));
+      expect(session.secondaryTab, isNull);
+
+      session.dispose();
+    });
+
+    test('EditorSessionManager dirty check on closeTab', () async {
+      final client = ApiClient();
+      final session = EditorSessionManager(client: client);
+
+      final tab = await session.openFile('test.rs', defaultContent: 'initial');
+      expect(session.isTabDirty('test.rs'), isFalse);
+
+      tab.controller.insertText(' modified');
+      expect(session.isTabDirty('test.rs'), isTrue);
+
+      // Attempt to close with force: false
+      final closedSafe = session.closeTab('test.rs', force: false);
+      expect(closedSafe, isFalse);
+      expect(session.openPaths, contains('test.rs'));
+
+      // Close with force: true
+      final closedForce = session.closeTab('test.rs', force: true);
+      expect(closedForce, isTrue);
+      expect(session.openPaths, isEmpty);
+
+      session.dispose();
+    });
+  });
+
+  group('Phase 8.3: EditorViewWidget Interactive Split Pane & Git Gutter Tests', () {
+    testWidgets('EditorViewWidget renders split pane layout and switches views', (WidgetTester tester) async {
+      await tester.binding.setSurfaceSize(const Size(1200, 800));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      final client = ApiClient();
+      final session = EditorSessionManager(client: client);
+      await session.openFile('primary.rs', defaultContent: 'fn primary() {}');
+      await session.openFile('secondary.rs', defaultContent: 'fn secondary() {}');
+      session.splitPane(SplitDirection.horizontal, 'secondary.rs');
+
+      SplitDirection changedDirection = SplitDirection.none;
+      bool splitClosed = false;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: EditorViewWidget(
+              openTabs: session.openPaths,
+              activeFile: 'primary.rs',
+              codeContent: session.activeTab!.controller.text,
+              controller: session.activeTab!.controller,
+              splitDirection: session.splitDirection,
+              secondaryTab: session.secondaryTab,
+              onSelectTab: (_) {},
+              onCloseTab: (_) {},
+              onCodeChanged: (_) {},
+              onSplitChange: (dir) => changedDirection = dir,
+              onCloseSplit: () => splitClosed = true,
+              apiClient: client,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Verify file type badge
+      expect(find.text('rs'), findsWidgets);
+      // Verify both file contents are visible on screen simultaneously
+      expect(find.text('primary.rs'), findsWidgets);
+      expect(find.text('secondary.rs'), findsWidgets);
+
+      // Verify Split Pane buttons in Tab Bar
+      final splitDownBtn = find.byTooltip('Split Down (Vertical)');
+      expect(splitDownBtn, findsOneWidget);
+      await tester.tap(splitDownBtn);
+      await tester.pump();
+      expect(changedDirection, equals(SplitDirection.vertical));
+
+      final closeSplitBtn = find.byTooltip('Close Split');
+      expect(closeSplitBtn, findsOneWidget);
+      await tester.tap(closeSplitBtn);
+      await tester.pump();
+      expect(splitClosed, isTrue);
+
+      session.dispose();
+    });
+
+    testWidgets('EditorViewWidget renders Git diff stripe, opens MiniDiffOverlay, and reverts', (WidgetTester tester) async {
+      await tester.binding.setSurfaceSize(const Size(1000, 700));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      final client = ApiClient();
+      final ctrl = CodeEditorController(initialText: 'line 1\nlet op = self.get(op_id)?;\nline 3\nline 4\nline 5\nline 6');
+      String revertedPath = '';
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: EditorViewWidget(
+              openTabs: const ['src/op_store.rs'],
+              activeFile: 'src/op_store.rs',
+              codeContent: ctrl.text,
+              controller: ctrl,
+              onSelectTab: (_) {},
+              onCloseTab: (_) {},
+              onCodeChanged: (_) {},
+              onRevertFile: (path) => revertedPath = path,
+              apiClient: client,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Look for Git diff tooltip on gutter
+      final diffMarker = find.byTooltip('ADDED (Line 2) - Click to inspect diff');
+      expect(diffMarker, findsOneWidget);
+
+      // Tap diff marker to trigger MiniDiffOverlay
+      await tester.tap(diffMarker);
+      await tester.pump();
+
+      // Verify MiniDiffOverlay opened with Hunk details and Revert button
+      expect(find.text('ADDED'), findsOneWidget);
+      expect(find.text('Line 2'), findsOneWidget);
+      expect(find.text('Revert'), findsOneWidget);
+
+      // Click Revert
+      await tester.tap(find.text('Revert'));
+      await tester.pump();
+
+      expect(revertedPath, equals('src/op_store.rs'));
+      expect(find.text('ADDED'), findsNothing);
+
+      ctrl.dispose();
+    });
+
+    testWidgets('Cmd+W shortcut triggers tab close callback', (WidgetTester tester) async {
+      await tester.binding.setSurfaceSize(const Size(1000, 700));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      final ctrl = CodeEditorController(initialText: 'code');
+      bool closeCalled = false;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: EditorViewWidget(
+              openTabs: const ['src/main.rs'],
+              activeFile: 'src/main.rs',
+              codeContent: ctrl.text,
+              controller: ctrl,
+              onSelectTab: (_) {},
+              onCloseTab: (_) {},
+              onCloseActiveTab: () => closeCalled = true,
+              onCodeChanged: (_) {},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Focus editor
+      await tester.tap(find.byType(EditorViewWidget));
+      await tester.pump();
+
+      // Press Cmd+W
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.meta);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyW);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.meta);
+      await tester.pump();
+
+      expect(closeCalled, isTrue);
+      ctrl.dispose();
+    });
+  });
 }

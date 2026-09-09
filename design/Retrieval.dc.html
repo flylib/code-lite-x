@@ -1,0 +1,405 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap">
+  <style>
+    :root{
+      --bg-editor:#1E1F22; --bg-panel:#2B2D30; --bg-sub:#232428;
+      --bd:#393B40; --bd-sub:#2E3035;
+      --acc:#3574F0; --acc-y:#E5A84B; --hover:#35373C; --sel:rgba(53,116,240,.20);
+      --g-green:#59A869; --g-blue:#3574F0; --g-red:#DB5860;
+      --t-high:#DFE1E5; --t-pri:#BCBEC4; --t-sec:#9DA0A8; --t-mut:#707278; --t-gut:#606366;
+      --s-kw:#CF8E6D; --s-ty:#C886E5; --s-fn:#56A8F5; --s-str:#6AAB73; --s-cm:#7A7E85; --s-num:#2AACB8;
+      --ghost:#6E7681; --caret:#589DF6; --err:#F97A7A; --warn:#E5C07B;
+      --ui:-apple-system,"SF Pro Text",system-ui,"Segoe UI",sans-serif;
+      --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,monospace;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg-editor);font-family:var(--ui);
+         -webkit-font-smoothing:antialiased;color:var(--t-pri)}
+    a{color:var(--acc)} a:hover{color:#5A8DF5}
+    .ico{width:16px;height:16px;flex:none;stroke:currentColor;fill:none;
+         stroke-width:1.2;stroke-linecap:round;stroke-linejoin:round}
+    .ico.s18{width:18px;height:18px}
+    .ico.s14{width:14px;height:14px}
+    .ico.s12{width:12px;height:12px}
+    .row{display:flex;align-items:center}
+  </style>
+</helmet>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <symbol id="i-folder" viewBox="0 0 16 16"><path d="M1.8 4.2h4l1.2 1.4h7.2v6.6a1 1 0 0 1-1 1H2.8a1 1 0 0 1-1-1z"/></symbol>
+  <symbol id="i-chev-r" viewBox="0 0 16 16"><path d="M6.2 4.2 10 8l-3.8 3.8"/></symbol>
+  <symbol id="i-chev-d" viewBox="0 0 16 16"><path d="M4.2 6.2 8 10l3.8-3.8"/></symbol>
+  <symbol id="i-rust" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.4"/><path d="M5.6 10.6V5.4h2.6a1.4 1.4 0 0 1 0 2.8H5.6m2.2 0 2.4 2.4"/></symbol>
+  <symbol id="i-dart" viewBox="0 0 16 16"><path d="M2.6 8 8 2.6 13.4 8 8 13.4z"/><path d="M8 5.4v5.2"/></symbol>
+  <symbol id="i-toml" viewBox="0 0 16 16"><rect x="2.6" y="2.4" width="10.8" height="11.2" rx="1"/><path d="M5 6.2h6M5 8.6h4M5 11h5"/></symbol>
+  <symbol id="i-git" viewBox="0 0 16 16"><circle cx="4.4" cy="4" r="1.7"/><circle cx="4.4" cy="12" r="1.7"/><circle cx="11.6" cy="8" r="1.7"/><path d="M4.4 5.7v4.6M5.9 4.6h2.6a1.6 1.6 0 0 1 1.6 1.6v.3"/></symbol>
+  <symbol id="i-search" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.2"/><path d="m10.2 10.2 3.2 3.2"/></symbol>
+  <symbol id="i-run" viewBox="0 0 16 16"><path d="M5 3.4 12.2 8 5 12.6z" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-bug" viewBox="0 0 16 16"><rect x="5" y="5.4" width="6" height="6.4" rx="3"/><path d="M8 3.4v2M3.4 7.2h1.6M11 7.2h1.6M3.6 10.4h1.4M11 10.4h1.4M5.4 4.2 6.4 5.4M10.6 4.2 9.6 5.4"/></symbol>
+  <symbol id="i-more" viewBox="0 0 16 16"><circle cx="4" cy="8" r=".9" fill="currentColor" stroke="none"/><circle cx="8" cy="8" r=".9" fill="currentColor" stroke="none"/><circle cx="12" cy="8" r=".9" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 16 16"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.9v1.8M8 12.3v1.8M2.9 8H1.1M14.9 8h-1.8M4.4 4.4 3.1 3.1M12.9 12.9l-1.3-1.3M11.6 4.4l1.3-1.3M3.1 12.9l1.3-1.3"/></symbol>
+  <symbol id="i-user" viewBox="0 0 16 16"><circle cx="8" cy="6" r="2.4"/><path d="M3.4 13.2a4.8 4.8 0 0 1 9.2 0"/></symbol>
+  <symbol id="i-bell" viewBox="0 0 16 16"><path d="M4.4 11.2V7.4a3.6 3.6 0 0 1 7.2 0v3.8zM3.4 11.2h9.2M6.6 12.8a1.5 1.5 0 0 0 2.8 0"/></symbol>
+  <symbol id="i-close" viewBox="0 0 16 16"><path d="M4.6 4.6l6.8 6.8M11.4 4.6l-6.8 6.8"/></symbol>
+  <symbol id="i-minus" viewBox="0 0 16 16"><path d="M3.6 8h8.8"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 16 16"><path d="M8 3.6v8.8M3.6 8h8.8"/></symbol>
+  <symbol id="i-target" viewBox="0 0 16 16"><circle cx="8" cy="8" r="4.6"/><circle cx="8" cy="8" r="1.3"/><path d="M8 1.6v1.6M8 12.8v1.6M1.6 8h1.6M12.8 8h1.6"/></symbol>
+  <symbol id="i-collapse" viewBox="0 0 16 16"><path d="M5 6.4 8 3.6l3 2.8M5 9.6 8 12.4l3-2.8"/></symbol>
+  <symbol id="i-tree" viewBox="0 0 16 16"><rect x="2.2" y="2.4" width="11.6" height="11.2" rx="1"/><path d="M5.4 5.6h5.2M5.4 8h3.4M5.4 10.4h4.2"/></symbol>
+  <symbol id="i-commit" viewBox="0 0 16 16"><circle cx="8" cy="8" r="2.4"/><path d="M8 1.6v4M8 10.4v4"/></symbol>
+  <symbol id="i-branch" viewBox="0 0 16 16"><circle cx="4.6" cy="3.6" r="1.6"/><circle cx="11.4" cy="3.6" r="1.6"/><circle cx="4.6" cy="12.4" r="1.6"/><path d="M4.6 5.2v5.6M11.4 5.2v1.4a3 3 0 0 1-3 3H6.8"/></symbol>
+  <symbol id="i-term" viewBox="0 0 16 16"><rect x="2.2" y="3" width="11.6" height="10" rx="1"/><path d="M4.8 7l1.8 1.8-1.8 1.8M8.4 10.6h3"/></symbol>
+  <symbol id="i-sparkle" viewBox="0 0 16 16"><path d="M8 2.4l1.3 3.3L12.6 7 9.3 8.3 8 11.6 6.7 8.3 3.4 7l3.3-1.3z"/><path d="M12.4 11.2l.5 1.3 1.3.5-1.3.5-.5 1.3-.5-1.3-1.3-.5 1.3-.5z"/></symbol>
+  <symbol id="i-db" viewBox="0 0 16 16"><ellipse cx="8" cy="4.2" rx="4.8" ry="1.9"/><path d="M3.2 4.2v7.6c0 1 2.2 1.9 4.8 1.9s4.8-.9 4.8-1.9V4.2M3.2 8c0 1 2.2 1.9 4.8 1.9s4.8-.9 4.8-1.9"/></symbol>
+  <symbol id="i-graph" viewBox="0 0 16 16"><circle cx="4" cy="4.4" r="1.5"/><circle cx="12" cy="4.4" r="1.5"/><circle cx="8" cy="11.6" r="1.5"/><path d="M5.1 5.5 7 10.4M10.9 5.5 9 10.4M5.5 4.4h5"/></symbol>
+  <symbol id="i-check" viewBox="0 0 16 16"><path d="M3.4 8.4l3 3 6.2-7"/></symbol>
+  <symbol id="i-warn" viewBox="0 0 16 16"><path d="M8 2.8 14 13H2z"/><path d="M8 6.6v3M8 11.2v.6"/></symbol>
+  <symbol id="i-up" viewBox="0 0 16 16"><path d="M4.6 9.4 8 6l3.4 3.4"/></symbol>
+  <symbol id="i-down" viewBox="0 0 16 16"><path d="M4.6 6.6 8 10l3.4-3.4"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 16 16"><rect x="3.8" y="7" width="8.4" height="6.2" rx="1"/><path d="M5.8 7V5.4a2.2 2.2 0 0 1 4.4 0V7"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 16 16"><path d="M13 8a5 5 0 1 1-1.6-3.7M13 2.6v2.4h-2.4"/></symbol>
+  <symbol id="i-filter" viewBox="0 0 16 16"><path d="M2.6 3.6h10.8L9.4 8.4v4l-2.8-1.4V8.4z"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 16 16"><path d="M1.6 8S4 4.2 8 4.2 14.4 8 14.4 8 12 11.8 8 11.8 1.6 8 1.6 8z"/><circle cx="8" cy="8" r="1.7"/></symbol>
+  <symbol id="i-undo" viewBox="0 0 16 16"><path d="M3 8a5 5 0 1 0 1.6-3.7M3 2.6v2.4h2.4"/></symbol>
+</defs></svg>
+
+
+<div style="width:1440px;height:900px;display:grid;grid-template-rows:40px 36px 1fr 22px;background:var(--bg-editor);overflow:hidden">
+
+  <div class="row" style="height:40px;border-bottom:1px solid var(--bd-sub);padding:0 12px;gap:8px">
+    <div class="row" style="gap:6px;padding-right:6px">
+      <span style="width:12px;height:12px;border-radius:50%;background:#EC6A5E;border:.8px solid #D15246"></span>
+      <span style="width:12px;height:12px;border-radius:50%;background:#F4BF4F;border:.8px solid #D7A13C"></span>
+      <span style="width:12px;height:12px;border-radius:50%;background:#62C554;border:.8px solid #48A93C"></span>
+    </div>
+    <div class="row" style="gap:6px;padding:3px 8px;background:var(--bg-panel);border:1px solid var(--bd);border-radius:5px">
+      <span style="padding:1px 3px;background:var(--acc);border-radius:3px;color:#fff;font-size:9px;font-weight:700">CL</span>
+      <span style="color:var(--t-high);font-size:12px;font-weight:600">code-lite-x</span>
+    </div>
+    <div class="row" style="gap:5px;padding:3px 7px">
+      <svg class="ico s14" style="color:var(--g-green)"><use href="#i-branch"/></svg>
+      <span style="color:var(--t-high);font-size:11px;font-family:var(--mono)">main</span>
+    </div>
+    <div style="flex:1"></div>
+    <svg class="ico s18" style="color:var(--t-sec)"><use href="#i-search"/></svg>
+    <svg class="ico s18" style="color:var(--t-sec)"><use href="#i-gear"/></svg>
+  </div>
+
+  <!-- ══ 工具条 ══ -->
+  <div class="row" style="height:36px;padding:0 12px;gap:10px;background:var(--bg-panel);border-bottom:1px solid var(--bd)">
+    <svg class="ico s14" style="color:var(--s-fn)"><use href="#i-graph"/></svg>
+    <span style="color:var(--t-high);font-size:12px;font-weight:600">上下文检索</span>
+    <span style="width:1px;height:16px;background:var(--bd)"></span>
+    <div class="row" style="gap:6px;flex:none;width:300px;height:24px;padding:0 8px;background:var(--bg-editor);border:1px solid var(--bd);border-radius:5px">
+      <svg class="ico s12" style="color:var(--t-mut)"><use href="#i-search"/></svg>
+      <span style="font-size:11px;color:var(--t-pri)">自愈重试为什么会原样重跑？</span>
+    </div>
+    <span style="font-size:11px;color:var(--t-sec)">命中 6 项</span>
+    <span style="font-size:11px;color:var(--t-mut);font-family:var(--mono)">4.2k / 8k tok</span>
+    <div style="flex:1"></div>
+    <span class="row" style="gap:5px;font-size:11px;color:var(--t-pri)">
+      <svg class="ico s12" style="color:var(--t-mut)"><use href="#i-filter"/></svg>按来源筛选
+    </span>
+    <div class="row" style="gap:5px;padding:0 11px;height:24px;background:var(--acc);border-radius:5px;font-size:11px;font-weight:600;color:#fff">
+      <svg class="ico s12" style="color:#fff"><use href="#i-sparkle"/></svg>用此上下文提问
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:44px 300px 1fr 340px;min-height:0">
+
+    <div style="border-right:1px solid var(--bd-sub);padding:8px 0;display:flex;flex-direction:column;align-items:center;gap:6px">
+      <div class="row" style="justify-content:center;width:32px;height:32px;color:var(--t-mut)"><svg class="ico s18"><use href="#i-tree"/></svg></div>
+      <div class="row" style="justify-content:center;width:32px;height:32px;color:var(--t-mut)"><svg class="ico s18"><use href="#i-sparkle"/></svg></div>
+      <div class="row" style="justify-content:center;width:32px;height:32px;border-radius:6px;background:var(--sel);color:var(--acc)"><svg class="ico s18"><use href="#i-graph"/></svg></div>
+      <div class="row" style="justify-content:center;width:32px;height:32px;color:var(--t-mut)"><svg class="ico s18"><use href="#i-db"/></svg></div>
+      <div style="flex:1"></div>
+      <div class="row" style="justify-content:center;width:32px;height:32px;color:var(--t-mut)"><svg class="ico s18"><use href="#i-term"/></svg></div>
+    </div>
+
+    <!-- ── 来源分组 ── -->
+    <div style="background:var(--bg-panel);border-right:1px solid var(--bd-sub);display:flex;flex-direction:column;min-height:0;overflow:hidden">
+
+      <!-- 1. 项目指令文件 -->
+      <div class="row" style="height:26px;padding:0 12px;gap:6px;background:var(--bg-sub);border-bottom:1px solid var(--bd-sub)">
+        <svg class="ico s12" style="color:var(--t-sec)"><use href="#i-chev-d"/></svg>
+        <span style="font-size:10px;color:var(--t-sec);font-weight:600;letter-spacing:.05em">项目指令</span>
+        <div style="flex:1"></div>
+        <span style="font-size:10px;color:var(--t-mut);font-family:var(--mono)">1</span>
+      </div>
+      <div class="row" style="height:26px;padding:0 12px 0 26px;gap:6px;background:var(--sel);box-shadow:inset 2px 0 0 var(--acc)">
+        <svg class="ico s14" style="color:var(--t-pri)"><use href="#i-toml"/></svg>
+        <span style="font-size:12px;color:var(--t-high);flex:1">AGENTS.md</span>
+        <span style="font-size:10px;color:var(--acc);font-family:var(--mono)">常驻</span>
+      </div>
+      <div style="padding:2px 12px 7px 46px;font-size:10px;color:var(--t-mut);line-height:1.55">
+        Tool Runtime 唯一入口 &middot; cargo 必须 --offline &middot; SymbolKey 稳定哈希
+      </div>
+
+      <!-- 2. Memory -->
+      <div class="row" style="height:26px;padding:0 12px;gap:6px;background:var(--bg-sub);border-top:1px solid var(--bd-sub);border-bottom:1px solid var(--bd-sub)">
+        <svg class="ico s12" style="color:var(--t-sec)"><use href="#i-chev-d"/></svg>
+        <span style="font-size:10px;color:var(--t-sec);font-weight:600;letter-spacing:.05em">MEMORY</span>
+        <div style="flex:1"></div>
+        <span style="font-size:10px;color:var(--t-mut);font-family:var(--mono)">3</span>
+      </div>
+      <!-- decision memory -->
+      <div style="padding:6px 12px 6px 26px;border-bottom:1px solid var(--bd-sub)">
+        <div class="row" style="gap:6px;margin-bottom:3px">
+          <span style="padding:0 5px;background:rgba(142,107,196,.16);border:1px solid rgba(142,107,196,.36);
+                       border-radius:3px;font-size:9px;color:#B69AD8;font-family:var(--mono)">Decision</span>
+          <div style="flex:1"></div>
+          <span style="font-size:9px;color:var(--g-green);font-family:var(--mono)">0.91</span>
+        </div>
+        <div style="font-size:11px;color:var(--t-pri);line-height:1.5">自愈重试保留规则引擎作离线兜底，不删</div>
+        <div class="row" style="gap:5px;margin-top:3px">
+          <svg class="ico s12" style="color:var(--t-gut)"><use href="#i-commit"/></svg>
+          <span style="font-size:9px;color:var(--t-mut);font-family:var(--mono)">op #1284 &middot; 3 天前</span>
+        </div>
+      </div>
+      <!-- error memory (hit) -->
+      <div style="padding:6px 12px 6px 26px;border-bottom:1px solid var(--bd-sub);background:rgba(53,116,240,.06);box-shadow:inset 2px 0 0 rgba(53,116,240,.5)">
+        <div class="row" style="gap:6px;margin-bottom:3px">
+          <span style="padding:0 5px;background:rgba(219,88,96,.16);border:1px solid rgba(219,88,96,.36);
+                       border-radius:3px;font-size:9px;color:var(--g-red);font-family:var(--mono)">Error</span>
+          <div style="flex:1"></div>
+          <span style="font-size:9px;color:var(--g-green);font-family:var(--mono)">0.88</span>
+        </div>
+        <div style="font-size:11px;color:var(--t-high);line-height:1.5">
+          <span style="font-family:var(--mono);color:var(--err)">E0308</span> 在 executor.rs 出现过 2 次，
+          两次都因 step.args 未更新就重跑
+        </div>
+        <div class="row" style="gap:5px;margin-top:3px">
+          <svg class="ico s12" style="color:var(--t-gut)"><use href="#i-undo"/></svg>
+          <span style="font-size:9px;color:var(--t-mut);font-family:var(--mono)">rollback 事件自动写入</span>
+        </div>
+      </div>
+      <!-- code memory -->
+      <div style="padding:6px 12px 6px 26px;border-bottom:1px solid var(--bd-sub)">
+        <div class="row" style="gap:6px;margin-bottom:3px">
+          <span style="padding:0 5px;background:rgba(53,116,240,.16);border:1px solid rgba(53,116,240,.36);
+                       border-radius:3px;font-size:9px;color:var(--acc);font-family:var(--mono)">Code</span>
+          <div style="flex:1"></div>
+          <span style="font-size:9px;color:var(--t-sec);font-family:var(--mono)">0.74</span>
+        </div>
+        <div style="font-size:11px;color:var(--t-pri);line-height:1.5">
+          <span style="font-family:var(--mono);color:var(--s-fn)">execute_next_step</span> 的调用者 2 个，被 FFI 直接暴露
+        </div>
+        <div class="row" style="gap:5px;margin-top:3px">
+          <svg class="ico s12" style="color:var(--t-gut)"><use href="#i-graph"/></svg>
+          <span style="font-size:9px;color:var(--t-mut);font-family:var(--mono)">CodeGraph &middot; 结构化检索</span>
+        </div>
+      </div>
+
+      <!-- 3. Skills -->
+      <div class="row" style="height:26px;padding:0 12px;gap:6px;background:var(--bg-sub);border-bottom:1px solid var(--bd-sub)">
+        <svg class="ico s12" style="color:var(--t-sec)"><use href="#i-chev-d"/></svg>
+        <span style="font-size:10px;color:var(--t-sec);font-weight:600;letter-spacing:.05em">SKILL</span>
+        <div style="flex:1"></div>
+        <span style="font-size:10px;color:var(--t-mut);font-family:var(--mono)">1 / 12</span>
+      </div>
+      <div class="row" style="height:28px;padding:0 12px 0 26px;gap:6px;background:rgba(53,116,240,.06);box-shadow:inset 2px 0 0 rgba(53,116,240,.5)">
+        <svg class="ico s14" style="color:var(--s-fn)"><use href="#i-sparkle"/></svg>
+        <span style="font-size:12px;color:var(--t-high);flex:1">rust-agent-debug</span>
+        <span style="font-size:9px;color:var(--g-green);font-family:var(--mono)">0.83</span>
+      </div>
+      <div class="row" style="height:26px;padding:0 12px 0 26px;gap:6px;opacity:.5">
+        <svg class="ico s14" style="color:var(--t-mut)"><use href="#i-sparkle"/></svg>
+        <span style="font-size:12px;color:var(--t-mut);flex:1">flutter-ui-review</span>
+        <span style="font-size:9px;color:var(--t-gut);font-family:var(--mono)">0.21</span>
+      </div>
+
+      <!-- 4. MCP -->
+      <div class="row" style="height:26px;padding:0 12px;gap:6px;background:var(--bg-sub);border-top:1px solid var(--bd-sub);border-bottom:1px solid var(--bd-sub)">
+        <svg class="ico s12" style="color:var(--t-sec)"><use href="#i-chev-d"/></svg>
+        <span style="font-size:10px;color:var(--t-sec);font-weight:600;letter-spacing:.05em">MCP TOOL</span>
+        <div style="flex:1"></div>
+        <span style="font-size:10px;color:var(--t-mut);font-family:var(--mono)">1</span>
+      </div>
+      <div class="row" style="height:26px;padding:0 12px 0 26px;gap:6px">
+        <svg class="ico s14" style="color:var(--s-ty)"><use href="#i-db"/></svg>
+        <span style="font-size:12px;color:var(--t-pri);flex:1">codegraph_callers</span>
+        <span style="font-size:9px;padding:0 4px;background:rgba(89,168,105,.14);border-radius:3px;color:var(--g-green);font-family:var(--mono)">Low</span>
+      </div>
+
+      <div style="flex:1"></div>
+      <div class="row" style="gap:6px;padding:8px 12px;border-top:1px solid var(--bd-sub)">
+        <svg class="ico s12" style="color:var(--t-mut)"><use href="#i-eye"/></svg>
+        <span style="font-size:10px;color:var(--t-mut)">检索由模型按 description 判断</span>
+      </div>
+    </div>
+
+    <!-- ── 注入预览 ── -->
+    <div style="display:flex;flex-direction:column;min-width:0;min-height:0">
+      <div class="row" style="height:26px;flex:none;padding:0 12px;gap:8px;background:var(--bg-sub);border-bottom:1px solid var(--bd-sub)">
+        <span style="font-size:11px;color:var(--t-high);font-weight:600">注入预览</span>
+        <span style="font-size:10px;color:var(--t-mut);font-family:var(--mono)">build_prompt_context()</span>
+        <div style="flex:1"></div>
+        <span class="row" style="gap:4px;font-size:10px;color:var(--t-mut)"><svg class="ico s12"><use href="#i-collapse"/></svg>按来源着色</span>
+      </div>
+
+      <div style="flex:1;overflow:hidden;padding:10px 12px;font-family:var(--mono);font-size:11px;line-height:19px">
+
+        <!-- 指令段 -->
+        <div style="border-left:2px solid var(--acc);padding:0 0 0 9px;margin-bottom:10px">
+          <div class="row" style="gap:6px;margin-bottom:3px">
+            <span style="font-size:9px;color:var(--acc);letter-spacing:.05em">AGENTS.md</span>
+            <span style="font-size:9px;color:var(--t-gut)">312 tok</span>
+          </div>
+          <div style="color:var(--t-sec);white-space:pre-wrap">### 项目准则
+- Tool Runtime 是 Agent 与系统能力之间的唯一受控入口
+- cargo 命令必须显式 --offline
+- 严禁依赖 symbols.id 自增主键作全局标识</div>
+        </div>
+
+        <!-- Memory 段 -->
+        <div style="border-left:2px solid var(--g-red);padding:0 0 0 9px;margin-bottom:10px">
+          <div class="row" style="gap:6px;margin-bottom:3px">
+            <span style="font-size:9px;color:var(--g-red);letter-spacing:.05em">MEMORY / ERROR</span>
+            <span style="font-size:9px;color:var(--t-gut)">184 tok</span>
+          </div>
+          <div style="color:var(--t-sec);white-space:pre-wrap">### 历史失败
+E0308 mismatched types 在 executor.rs 出现 2 次(op #1284, #1301)。
+两次均为 step.args 未随 Observation 更新即重跑,导致原样失败。
+上次的处理:原子回滚,未修正 args。</div>
+        </div>
+
+        <!-- Skill 段 -->
+        <div style="border-left:2px solid var(--s-fn);padding:0 0 0 9px;margin-bottom:10px">
+          <div class="row" style="gap:6px;margin-bottom:3px">
+            <span style="font-size:9px;color:var(--s-fn);letter-spacing:.05em">SKILL / rust-agent-debug</span>
+            <span style="font-size:9px;color:var(--t-gut)">596 tok</span>
+          </div>
+          <div style="color:var(--t-sec);white-space:pre-wrap">### 工作流
+1. 先读 StepStatus 状态流转,确认卡在哪一态
+2. 用 codegraph_callers 找出该 step 的所有触发点
+3. 检查 args 是否随 observation 更新 &larr; 常见根因</div>
+        </div>
+
+        <!-- CodeGraph 段 -->
+        <div style="border-left:2px solid var(--s-ty);padding:0 0 0 9px">
+          <div class="row" style="gap:6px;margin-bottom:3px">
+            <span style="font-size:9px;color:var(--s-ty);letter-spacing:.05em">CODEGRAPH</span>
+            <span style="font-size:9px;color:var(--t-gut)">1.1k tok</span>
+          </div>
+          <div style="color:var(--t-sec);white-space:pre-wrap">### Symbol: execute_next_step (fn)
+File: crates/code-lite-agent/src/executor.rs:75-291
+Callers:  codelite_agent_execute_next_step (ffi)
+          PlanExecutor::run_to_completion
+Callees:  ToolRuntime::apply_patch, LspClient::did_change</div>
+        </div>
+      </div>
+
+      <!-- token 预算条 -->
+      <div style="flex:none;padding:9px 12px;border-top:1px solid var(--bd-sub)">
+        <div class="row" style="gap:8px;margin-bottom:6px">
+          <span style="font-size:10px;color:var(--t-mut)">上下文预算</span>
+          <div style="flex:1"></div>
+          <span style="font-size:10px;color:var(--t-pri);font-family:var(--mono)">4,224 / 8,192</span>
+        </div>
+        <div class="row" style="height:6px;border-radius:3px;overflow:hidden;background:var(--bg-panel)">
+          <div style="width:7.4%;height:100%;background:var(--acc)"></div>
+          <div style="width:4.4%;height:100%;background:var(--g-red)"></div>
+          <div style="width:14.2%;height:100%;background:var(--s-fn)"></div>
+          <div style="width:26.2%;height:100%;background:var(--s-ty)"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Skill 详情 ── -->
+    <div style="background:var(--bg-panel);border-left:1px solid var(--bd-sub);display:flex;flex-direction:column;min-height:0">
+      <div class="row" style="height:26px;flex:none;padding:0 12px;gap:6px;background:var(--bg-sub);border-bottom:1px solid var(--bd-sub)">
+        <svg class="ico s12" style="color:var(--s-fn)"><use href="#i-sparkle"/></svg>
+        <span style="font-size:11px;color:var(--t-high);font-weight:600">Skill 详情</span>
+        <div style="flex:1"></div>
+        <svg class="ico s12" style="color:var(--t-mut)"><use href="#i-more"/></svg>
+      </div>
+
+      <div style="padding:12px;display:flex;flex-direction:column;gap:11px;overflow:hidden;min-height:0">
+        <div>
+          <div style="font-size:13px;color:var(--t-high);font-weight:600">rust-agent-debug</div>
+          <div class="row" style="gap:6px;margin-top:5px">
+            <span style="padding:0 5px;background:var(--sel);border-radius:3px;font-size:9px;color:var(--acc);font-family:var(--mono)">prompt 层</span>
+            <span style="font-size:10px;color:var(--t-mut);font-family:var(--mono)">SKILL.md &middot; 2.4 KB</span>
+          </div>
+        </div>
+
+        <div style="font-size:11px;color:var(--t-sec);line-height:1.6">
+          排查 Agent 步骤卡住或原样重试的问题：定位状态机停在哪一态，检查 args 是否随 observation 更新。
+        </div>
+
+        <!-- 命中原因 -->
+        <div style="border:1px solid rgba(53,116,240,.30);border-radius:6px;background:rgba(53,116,240,.06);padding:8px 9px">
+          <div class="row" style="gap:6px;margin-bottom:5px">
+            <svg class="ico s12" style="color:var(--acc)"><use href="#i-target"/></svg>
+            <span style="font-size:10px;color:var(--acc);font-weight:600">命中原因</span>
+            <div style="flex:1"></div>
+            <span style="font-size:10px;color:var(--g-green);font-family:var(--mono)">0.83</span>
+          </div>
+          <div style="font-size:10px;color:var(--t-pri);line-height:1.6">
+            提问含「自愈重试」「原样重跑」，与 description 中的「原样重试」「状态机停在哪一态」高度匹配
+          </div>
+        </div>
+
+        <!-- Tool Bindings -->
+        <div>
+          <div style="font-size:10px;color:var(--t-mut);letter-spacing:.04em;margin-bottom:6px">TOOL BINDINGS</div>
+          <div style="display:flex;flex-direction:column;gap:5px">
+            <div class="row" style="gap:7px;padding:5px 8px;background:var(--bg-editor);border:1px solid var(--bd-sub);border-radius:5px">
+              <svg class="ico s12" style="color:var(--s-ty)"><use href="#i-graph"/></svg>
+              <span style="font-size:11px;color:var(--t-pri);flex:1;font-family:var(--mono)">codegraph_callers</span>
+              <span style="font-size:9px;padding:0 4px;background:rgba(89,168,105,.14);border-radius:3px;color:var(--g-green)">已授权</span>
+            </div>
+            <div class="row" style="gap:7px;padding:5px 8px;background:var(--bg-editor);border:1px solid var(--bd-sub);border-radius:5px">
+              <svg class="ico s12" style="color:var(--t-sec)"><use href="#i-db"/></svg>
+              <span style="font-size:11px;color:var(--t-pri);flex:1;font-family:var(--mono)">read_audit_log</span>
+              <span style="font-size:9px;padding:0 4px;background:rgba(89,168,105,.14);border-radius:3px;color:var(--g-green)">已授权</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 安全边界 -->
+        <div class="row" style="gap:7px;padding:8px 9px;background:rgba(229,168,75,.08);
+                    border:1px solid rgba(229,168,75,.26);border-radius:6px">
+          <svg class="ico s12" style="color:var(--acc-y);flex:none"><use href="#i-lock"/></svg>
+          <span style="font-size:10px;color:var(--t-pri);line-height:1.6">
+            Skill 只能<strong style="color:var(--t-high);font-weight:600">引用</strong>已授权 Tool，不能携带或触发安装 Plugin
+          </span>
+        </div>
+
+        <div style="flex:1"></div>
+
+        <div class="row" style="gap:6px">
+          <div class="row" style="justify-content:center;flex:1;height:26px;border:1px solid var(--bd);border-radius:5px;font-size:11px;color:var(--t-pri)">
+            打开 SKILL.md
+          </div>
+          <div class="row" style="justify-content:center;padding:0 10px;height:26px;border:1px solid var(--bd);border-radius:5px;font-size:11px;color:var(--t-pri)">
+            停用
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row" style="height:22px;border-top:1px solid var(--bd-sub);padding:0 12px;gap:8px;font-size:10px;color:var(--t-mut)">
+    <svg class="ico s12" style="color:var(--s-fn)"><use href="#i-graph"/></svg>
+    <span>检索层</span><svg class="ico s12"><use href="#i-chev-r"/></svg>
+    <span style="color:var(--t-pri)">6 项命中</span>
+    <div style="flex:1"></div>
+    <span style="font-family:var(--mono)">AGENTS.md 常驻</span>
+    <span style="font-family:var(--mono)">Memory 3</span>
+    <span style="font-family:var(--mono)">Skill 1/12</span>
+    <span style="font-family:var(--mono)">4,224 tok</span>
+    <svg class="ico s12"><use href="#i-lock"/></svg>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

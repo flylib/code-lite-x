@@ -1,0 +1,24 @@
+{
+  "pages": [
+    { "id": "page-1", "name": "工作区" },
+    { "id": "page-2", "name": "Agent 工作流" },
+    { "id": "page-3", "name": "检索层" }
+  ],
+  "artboards": [
+    { "file": "Main.dc.html",          "x": 0,    "y": 0, "w": 1440, "h": 900, "page": "page-1", "title": "主工作区" },
+    { "file": "SplitDiff.dc.html",     "x": 1560, "y": 0, "w": 1440, "h": 900, "page": "page-1", "title": "分屏 + Gutter 行内 Diff" },
+    { "file": "AgentRuntime.dc.html",  "x": 0,    "y": 0, "w": 1440, "h": 900, "page": "page-2", "title": "Agent Runtime 步骤状态机" },
+    { "file": "MultiFileDiff.dc.html", "x": 1560, "y": 0, "w": 1440, "h": 900, "page": "page-2", "title": "多文件审查 + Worktree 沙箱" },
+    { "file": "Approval.dc.html",      "x": 3120, "y": 0, "w": 1440, "h": 900, "page": "page-2", "title": "ApprovalTicket 审批" },
+    { "file": "Retrieval.dc.html",     "x": 0,    "y": 0, "w": 1440, "h": 900, "page": "page-3", "title": "上下文检索层" }
+  ],
+  "annotations": [
+    { "id": "n-workspace", "x": 0, "y": -170, "w": 900, "page": "page-1",
+      "text": "工作区 — 已实现部分的还原 + Phase 8.3 待建部分\n\n色值与几何全部取自 apps/code_lite_ui/lib/core/theme/intellij_theme.dart 及各 widget 源码：标题栏 40 / 活动条 44 / 文件树 250 / 标签 34 / 面包屑 24 / Gutter 48 / 行高 20 / 代码 12px·1.4 / AI 面板 310 / 底栏 220 / 状态栏 22。\n图标为原创描边图标（16px 网格，stroke 1.2），未使用 JetBrains 品牌资产。右侧工具窗按实际技术栈做成 Cargo。" },
+    { "id": "n-agent", "x": 0, "y": -170, "w": 900, "page": "page-2",
+      "text": "Agent 工作流 — 对应路线图 Phase 9 与 Phase 6-A\n\n三张图覆盖：7 态状态机可视化与 Observation→Re-plan 回流边（v4.2 里标为「缺口二」）、拓扑排序的多文件审查与 Worktree 沙箱验证流水、Critical 操作的 ApprovalTicket 弹窗（含路径守卫拦截结果与命令白名单校验）。" },
+    { "id": "n-retrieval", "x": 0, "y": -170, "w": 900, "page": "page-3",
+      "text": "检索层 — 对应路线图 Phase 10\n\n核心是把「注入了什么、来自哪里、为什么命中」摊开：项目指令文件常驻、Memory 只做有自动写入触发点的 Error/Decision、Skill 走 description 匹配并只能引用已授权 Tool、MCP 与 Core Tool 同权限路径。左栏是来源分组，中栏是按来源着色的注入预览与 token 预算，右栏是命中详情。" }
+  ],
+  "launch": { "view": "canvas", "page": "page-1" }
+}

@@ -126,6 +126,56 @@ pub fn revert(&self, op_id: i64) -> Result<(), StorageError> {
     _openFile(_activeFile);
   }
 
+  void _handleCloseTab(String path) {
+    if (_sessionManager.isTabDirty(path)) {
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: const Color(0xFF2B2D30),
+          title: const Text('Unsaved Changes', style: TextStyle(color: IntelliJTheme.textHigh, fontSize: 14)),
+          content: Text(
+            'Save changes to "${path.split('/').last}" before closing?',
+            style: const TextStyle(color: IntelliJTheme.textMuted, fontSize: 12),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(ctx).pop();
+                _closeTabFinal(path, force: true);
+              },
+              child: const Text("Don't Save", style: TextStyle(color: Color(0xFFDB5860))),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Cancel', style: TextStyle(color: IntelliJTheme.textMuted)),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.of(ctx).pop();
+                await _sessionManager.saveActiveFile();
+                _closeTabFinal(path, force: true);
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      );
+    } else {
+      _closeTabFinal(path);
+    }
+  }
+
+  void _closeTabFinal(String path, {bool force = false}) {
+    _sessionManager.closeTab(path, force: force);
+    setState(() {
+      _openTabs.remove(path);
+      if (_openTabs.isNotEmpty) {
+        _activeFile = _sessionManager.activePath ?? _openTabs.last;
+        _openFile(_activeFile);
+      }
+    });
+  }
+
   void _openGlobalSearch(BuildContext context) {
     GlobalSearchModal.show(
       context,
@@ -225,22 +275,27 @@ pub fn revert(&self, op_id: i64) -> Result<(), StorageError> {
                                   verticalScroll: _sessionManager.activeTab?.verticalScroll,
                                   horizontalScroll: _sessionManager.activeTab?.horizontalScroll,
                                   onSelectTab: _openFile,
-                                  onCloseTab: (path) {
-                                    _sessionManager.closeTab(path);
-                                    setState(() {
-                                      _openTabs.remove(path);
-                                      if (_openTabs.isNotEmpty) {
-                                        _activeFile = _openTabs.last;
-                                        _openFile(_activeFile);
-                                      }
-                                    });
-                                  },
+                                  onCloseTab: (path) => _handleCloseTab(path),
                                   onCodeChanged: (newCode) => _codeContent = newCode,
                                   onSave: () => _sessionManager.saveActiveFile(),
                                   onUndo: _handleUndo,
                                   onRedo: _handleRedo,
                                   isTabDirty: (p) => _sessionManager.tabs[p]?.isDirty ?? false,
                                   apiClient: _client,
+                                  splitDirection: _sessionManager.splitDirection,
+                                  secondaryTab: _sessionManager.secondaryTab,
+                                  onSplitChange: (dir) => _sessionManager.splitPane(dir),
+                                  onCloseSplit: () => _sessionManager.closeSplit(),
+                                  onReorderTabs: (oldIndex, newIndex) {
+                                    _sessionManager.reorderTabs(oldIndex, newIndex);
+                                    setState(() {
+                                      _openTabs.clear();
+                                      _openTabs.addAll(_sessionManager.openPaths);
+                                    });
+                                  },
+                                  onCloseActiveTab: () => _handleCloseTab(_activeFile),
+                                  onSelectSecondaryTab: (path) => _sessionManager.selectSecondaryTab(path),
+                                  onRevertFile: (path) => _openFile(path),
                                 ),
                               ),
 

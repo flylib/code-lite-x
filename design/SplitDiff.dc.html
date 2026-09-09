@@ -1,0 +1,367 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap">
+  <style>
+    :root{
+      --bg-editor:#1E1F22; --bg-panel:#2B2D30; --bg-sub:#232428;
+      --bd:#393B40; --bd-sub:#2E3035;
+      --acc:#3574F0; --acc-y:#E5A84B; --hover:#35373C; --sel:rgba(53,116,240,.20);
+      --g-green:#59A869; --g-blue:#3574F0; --g-red:#DB5860;
+      --t-high:#DFE1E5; --t-pri:#BCBEC4; --t-sec:#9DA0A8; --t-mut:#707278; --t-gut:#606366;
+      --s-kw:#CF8E6D; --s-ty:#C886E5; --s-fn:#56A8F5; --s-str:#6AAB73; --s-cm:#7A7E85; --s-num:#2AACB8;
+      --ghost:#6E7681; --caret:#589DF6; --err:#F97A7A; --warn:#E5C07B;
+      --ui:-apple-system,"SF Pro Text",system-ui,"Segoe UI",sans-serif;
+      --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,monospace;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg-editor);font-family:var(--ui);
+         -webkit-font-smoothing:antialiased;color:var(--t-pri)}
+    a{color:var(--acc)} a:hover{color:#5A8DF5}
+    .ico{width:16px;height:16px;flex:none;stroke:currentColor;fill:none;
+         stroke-width:1.2;stroke-linecap:round;stroke-linejoin:round}
+    .ico.s18{width:18px;height:18px}
+    .ico.s14{width:14px;height:14px}
+    .ico.s12{width:12px;height:12px}
+    .row{display:flex;align-items:center}
+  </style>
+</helmet>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <symbol id="i-folder" viewBox="0 0 16 16"><path d="M1.8 4.2h4l1.2 1.4h7.2v6.6a1 1 0 0 1-1 1H2.8a1 1 0 0 1-1-1z"/></symbol>
+  <symbol id="i-chev-r" viewBox="0 0 16 16"><path d="M6.2 4.2 10 8l-3.8 3.8"/></symbol>
+  <symbol id="i-chev-d" viewBox="0 0 16 16"><path d="M4.2 6.2 8 10l3.8-3.8"/></symbol>
+  <symbol id="i-rust" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.4"/><path d="M5.6 10.6V5.4h2.6a1.4 1.4 0 0 1 0 2.8H5.6m2.2 0 2.4 2.4"/></symbol>
+  <symbol id="i-dart" viewBox="0 0 16 16"><path d="M2.6 8 8 2.6 13.4 8 8 13.4z"/><path d="M8 5.4v5.2"/></symbol>
+  <symbol id="i-toml" viewBox="0 0 16 16"><rect x="2.6" y="2.4" width="10.8" height="11.2" rx="1"/><path d="M5 6.2h6M5 8.6h4M5 11h5"/></symbol>
+  <symbol id="i-git" viewBox="0 0 16 16"><circle cx="4.4" cy="4" r="1.7"/><circle cx="4.4" cy="12" r="1.7"/><circle cx="11.6" cy="8" r="1.7"/><path d="M4.4 5.7v4.6M5.9 4.6h2.6a1.6 1.6 0 0 1 1.6 1.6v.3"/></symbol>
+  <symbol id="i-search" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.2"/><path d="m10.2 10.2 3.2 3.2"/></symbol>
+  <symbol id="i-run" viewBox="0 0 16 16"><path d="M5 3.4 12.2 8 5 12.6z" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-bug" viewBox="0 0 16 16"><rect x="5" y="5.4" width="6" height="6.4" rx="3"/><path d="M8 3.4v2M3.4 7.2h1.6M11 7.2h1.6M3.6 10.4h1.4M11 10.4h1.4M5.4 4.2 6.4 5.4M10.6 4.2 9.6 5.4"/></symbol>
+  <symbol id="i-more" viewBox="0 0 16 16"><circle cx="4" cy="8" r=".9" fill="currentColor" stroke="none"/><circle cx="8" cy="8" r=".9" fill="currentColor" stroke="none"/><circle cx="12" cy="8" r=".9" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 16 16"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.9v1.8M8 12.3v1.8M2.9 8H1.1M14.9 8h-1.8M4.4 4.4 3.1 3.1M12.9 12.9l-1.3-1.3M11.6 4.4l1.3-1.3M3.1 12.9l1.3-1.3"/></symbol>
+  <symbol id="i-user" viewBox="0 0 16 16"><circle cx="8" cy="6" r="2.4"/><path d="M3.4 13.2a4.8 4.8 0 0 1 9.2 0"/></symbol>
+  <symbol id="i-bell" viewBox="0 0 16 16"><path d="M4.4 11.2V7.4a3.6 3.6 0 0 1 7.2 0v3.8zM3.4 11.2h9.2M6.6 12.8a1.5 1.5 0 0 0 2.8 0"/></symbol>
+  <symbol id="i-close" viewBox="0 0 16 16"><path d="M4.6 4.6l6.8 6.8M11.4 4.6l-6.8 6.8"/></symbol>
+  <symbol id="i-minus" viewBox="0 0 16 16"><path d="M3.6 8h8.8"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 16 16"><path d="M8 3.6v8.8M3.6 8h8.8"/></symbol>
+  <symbol id="i-target" viewBox="0 0 16 16"><circle cx="8" cy="8" r="4.6"/><circle cx="8" cy="8" r="1.3"/><path d="M8 1.6v1.6M8 12.8v1.6M1.6 8h1.6M12.8 8h1.6"/></symbol>
+  <symbol id="i-collapse" viewBox="0 0 16 16"><path d="M5 6.4 8 3.6l3 2.8M5 9.6 8 12.4l3-2.8"/></symbol>
+  <symbol id="i-tree" viewBox="0 0 16 16"><rect x="2.2" y="2.4" width="11.6" height="11.2" rx="1"/><path d="M5.4 5.6h5.2M5.4 8h3.4M5.4 10.4h4.2"/></symbol>
+  <symbol id="i-commit" viewBox="0 0 16 16"><circle cx="8" cy="8" r="2.4"/><path d="M8 1.6v4M8 10.4v4"/></symbol>
+  <symbol id="i-branch" viewBox="0 0 16 16"><circle cx="4.6" cy="3.6" r="1.6"/><circle cx="11.4" cy="3.6" r="1.6"/><circle cx="4.6" cy="12.4" r="1.6"/><path d="M4.6 5.2v5.6M11.4 5.2v1.4a3 3 0 0 1-3 3H6.8"/></symbol>
+  <symbol id="i-term" viewBox="0 0 16 16"><rect x="2.2" y="3" width="11.6" height="10" rx="1"/><path d="M4.8 7l1.8 1.8-1.8 1.8M8.4 10.6h3"/></symbol>
+  <symbol id="i-sparkle" viewBox="0 0 16 16"><path d="M8 2.4l1.3 3.3L12.6 7 9.3 8.3 8 11.6 6.7 8.3 3.4 7l3.3-1.3z"/><path d="M12.4 11.2l.5 1.3 1.3.5-1.3.5-.5 1.3-.5-1.3-1.3-.5 1.3-.5z"/></symbol>
+  <symbol id="i-db" viewBox="0 0 16 16"><ellipse cx="8" cy="4.2" rx="4.8" ry="1.9"/><path d="M3.2 4.2v7.6c0 1 2.2 1.9 4.8 1.9s4.8-.9 4.8-1.9V4.2M3.2 8c0 1 2.2 1.9 4.8 1.9s4.8-.9 4.8-1.9"/></symbol>
+  <symbol id="i-graph" viewBox="0 0 16 16"><circle cx="4" cy="4.4" r="1.5"/><circle cx="12" cy="4.4" r="1.5"/><circle cx="8" cy="11.6" r="1.5"/><path d="M5.1 5.5 7 10.4M10.9 5.5 9 10.4M5.5 4.4h5"/></symbol>
+  <symbol id="i-check" viewBox="0 0 16 16"><path d="M3.4 8.4l3 3 6.2-7"/></symbol>
+  <symbol id="i-warn" viewBox="0 0 16 16"><path d="M8 2.8 14 13H2z"/><path d="M8 6.6v3M8 11.2v.6"/></symbol>
+  <symbol id="i-up" viewBox="0 0 16 16"><path d="M4.6 9.4 8 6l3.4 3.4"/></symbol>
+  <symbol id="i-down" viewBox="0 0 16 16"><path d="M4.6 6.6 8 10l3.4-3.4"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 16 16"><rect x="3.8" y="7" width="8.4" height="6.2" rx="1"/><path d="M5.8 7V5.4a2.2 2.2 0 0 1 4.4 0V7"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 16 16"><path d="M13 8a5 5 0 1 1-1.6-3.7M13 2.6v2.4h-2.4"/></symbol>
+  <symbol id="i-filter" viewBox="0 0 16 16"><path d="M2.6 3.6h10.8L9.4 8.4v4l-2.8-1.4V8.4z"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 16 16"><path d="M1.6 8S4 4.2 8 4.2 14.4 8 14.4 8 12 11.8 8 11.8 1.6 8 1.6 8z"/><circle cx="8" cy="8" r="1.7"/></symbol>
+  <symbol id="i-undo" viewBox="0 0 16 16"><path d="M3 8a5 5 0 1 0 1.6-3.7M3 2.6v2.4h2.4"/></symbol>
+</defs></svg>
+
+
+<div style="width:1440px;height:900px;display:grid;grid-template-rows:40px 1fr 22px;background:var(--bg-editor);overflow:hidden">
+
+  <!-- title bar -->
+  <div class="row" style="height:40px;border-bottom:1px solid var(--bd-sub);padding:0 12px;gap:8px">
+    <div class="row" style="gap:6px;padding-right:6px">
+      <span style="width:12px;height:12px;border-radius:50%;background:#EC6A5E;border:.8px solid #D15246"></span>
+      <span style="width:12px;height:12px;border-radius:50%;background:#F4BF4F;border:.8px solid #D7A13C"></span>
+      <span style="width:12px;height:12px;border-radius:50%;background:#62C554;border:.8px solid #48A93C"></span>
+    </div>
+    <div class="row" style="gap:6px;padding:3px 8px;background:var(--bg-panel);border:1px solid var(--bd);border-radius:5px">
+      <span style="padding:1px 3px;background:var(--acc);border-radius:3px;color:#fff;font-size:9px;font-weight:700">CL</span>
+      <span style="color:var(--t-high);font-size:12px;font-weight:600">code-lite-x</span>
+      <svg class="ico s12" style="color:var(--t-mut)"><use href="#i-chev-d"/></svg>
+    </div>
+    <div class="row" style="gap:5px;padding:3px 7px">
+      <svg class="ico s14" style="color:var(--g-green)"><use href="#i-branch"/></svg>
+      <span style="color:var(--t-high);font-size:11px;font-family:var(--mono)">main</span>
+    </div>
+    <div style="flex:1"></div>
+    <div class="row" style="gap:6px;padding:2px 8px;background:rgba(53,116,240,.14);border:1px solid rgba(53,116,240,.40);border-radius:5px">
+      <svg class="ico s12" style="color:var(--acc)"><use href="#i-collapse"/></svg>
+      <span style="font-size:11px;color:var(--t-high)">Split: 垂直</span>
+    </div>
+    <svg class="ico s18" style="color:var(--t-sec)"><use href="#i-search"/></svg>
+    <svg class="ico s18" style="color:var(--t-sec)"><use href="#i-gear"/></svg>
+  </div>
+
+  <div style="display:grid;grid-template-columns:44px 250px 1fr 250px;min-height:0">
+
+    <!-- activity stripe -->
+    <div style="border-right:1px solid var(--bd-sub);padding:8px 0;display:flex;flex-direction:column;align-items:center;gap:6px">
+      <div class="row" style="justify-content:center;width:32px;height:32px;border-radius:6px;background:var(--sel);color:var(--acc)"><svg class="ico s18"><use href="#i-tree"/></svg></div>
+      <div class="row" style="justify-content:center;width:32px;height:32px;color:var(--t-mut)"><svg class="ico s18"><use href="#i-commit"/></svg></div>
+      <div class="row" style="justify-content:center;width:32px;height:32px;color:var(--t-mut)"><svg class="ico s18"><use href="#i-branch"/></svg></div>
+      <div class="row" style="justify-content:center;width:32px;height:32px;color:var(--t-mut)"><svg class="ico s18"><use href="#i-graph"/></svg></div>
+      <div style="flex:1"></div>
+      <div class="row" style="justify-content:center;width:32px;height:32px;color:var(--t-mut)"><svg class="ico s18"><use href="#i-term"/></svg></div>
+    </div>
+
+    <!-- project tree (collapsed to changed files) -->
+    <div style="background:var(--bg-panel);border-right:1px solid var(--bd-sub);display:flex;flex-direction:column">
+      <div class="row" style="height:34px;padding:0 6px 0 12px;gap:6px">
+        <span style="color:var(--t-high);font-size:12px;font-weight:600">Commit</span>
+        <svg class="ico s12" style="color:var(--t-mut)"><use href="#i-chev-d"/></svg>
+        <div style="flex:1"></div>
+        <svg class="ico s14" style="color:var(--t-mut)"><use href="#i-collapse"/></svg>
+        <svg class="ico s14" style="color:var(--t-mut)"><use href="#i-more"/></svg>
+      </div>
+      <div style="font-size:12px">
+        <div class="row" style="height:22px;padding-left:8px;gap:5px">
+          <svg class="ico s12" style="color:var(--t-sec)"><use href="#i-chev-d"/></svg>
+          <span style="width:11px;height:11px;border:1px solid var(--acc);border-radius:2px;background:var(--acc);flex:none;display:flex;align-items:center;justify-content:center">
+            <svg viewBox="0 0 16 16" style="width:9px;height:9px;stroke:#fff;fill:none;stroke-width:2.2"><path d="M3.4 8.4l3 3 6.2-7"/></svg>
+          </span>
+          <span style="color:var(--t-high);font-weight:600">Changes</span>
+          <span style="color:var(--t-mut);font-size:10px">3 files</span>
+        </div>
+        <div class="row" style="height:22px;padding-left:34px;gap:5px;background:var(--sel);box-shadow:inset 2px 0 0 var(--acc)">
+          <svg class="ico s14" style="color:var(--s-kw)"><use href="#i-rust"/></svg>
+          <span style="color:var(--g-blue);flex:1">planner.rs</span>
+          <span style="color:var(--t-mut);font-size:10px;padding-right:8px">agent/src</span>
+        </div>
+        <div class="row" style="height:22px;padding-left:34px;gap:5px">
+          <svg class="ico s14" style="color:var(--s-kw)"><use href="#i-rust"/></svg>
+          <span style="color:var(--g-green);flex:1">fim.rs</span>
+          <span style="color:var(--t-mut);font-size:10px;padding-right:8px">agent/src</span>
+        </div>
+        <div class="row" style="height:22px;padding-left:34px;gap:5px">
+          <svg class="ico s14" style="color:var(--s-fn)"><use href="#i-dart"/></svg>
+          <span style="color:var(--g-blue);flex:1">editor_view_widget.dart</span>
+          <span style="color:var(--t-mut);font-size:10px;padding-right:8px">features</span>
+        </div>
+        <div style="height:10px"></div>
+        <div class="row" style="height:22px;padding-left:8px;gap:5px">
+          <svg class="ico s12" style="color:var(--t-sec)"><use href="#i-chev-r"/></svg>
+          <span style="width:11px;height:11px;border:1px solid var(--t-mut);border-radius:2px;flex:none"></span>
+          <span style="color:var(--t-pri)">Unversioned</span>
+          <span style="color:var(--t-mut);font-size:10px">2</span>
+        </div>
+      </div>
+      <div style="flex:1"></div>
+      <div style="padding:8px;border-top:1px solid var(--bd-sub)">
+        <div style="background:var(--bg-editor);border:1px solid var(--bd);border-radius:5px;padding:6px 8px;font-size:11px;color:var(--t-gut);min-height:52px">Commit message&hellip;</div>
+        <div class="row" style="margin-top:7px;gap:6px">
+          <div class="row" style="justify-content:center;flex:1;height:24px;background:var(--acc);border-radius:5px;font-size:11px;font-weight:600;color:#fff">Commit</div>
+          <div class="row" style="justify-content:center;padding:0 8px;height:24px;border:1px solid var(--bd);border-radius:5px;font-size:11px;color:var(--t-pri)">&amp; Push</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ split editor: two panes stacked vertically ══ -->
+    <div style="display:grid;grid-template-rows:1fr 4px 1fr;min-width:0;min-height:0">
+
+      <!-- ── pane A (focused) ── -->
+      <div style="display:flex;flex-direction:column;min-height:0;min-width:0">
+        <div class="row" style="height:34px;flex:none;background:var(--bg-panel);border-bottom:1px solid var(--bd-sub)">
+          <div class="row" style="height:100%;padding:0 12px;gap:6px;font-size:12px;background:var(--bg-editor);border-top:2px solid var(--acc);border-right:.5px solid var(--bd-sub)">
+            <svg class="ico s14" style="color:var(--s-kw)"><use href="#i-rust"/></svg>
+            <span style="color:var(--t-high)">planner.rs</span>
+            <span style="width:6px;height:6px;border-radius:50%;background:var(--acc-y)"></span>
+            <svg class="ico s12" style="color:var(--t-mut);margin-left:2px"><use href="#i-close"/></svg>
+          </div>
+          <div class="row" style="height:100%;padding:0 12px;gap:6px;font-size:12px;color:var(--t-mut);border-right:.5px solid var(--bd-sub)">
+            <svg class="ico s14" style="color:var(--s-kw)"><use href="#i-rust"/></svg><span>executor.rs</span>
+          </div>
+          <div style="flex:1"></div>
+          <div class="row" style="gap:8px;padding:0 12px;color:var(--acc)">
+            <svg class="ico s14"><use href="#i-collapse"/></svg>
+          </div>
+        </div>
+        <div class="row" style="height:24px;flex:none;padding:0 12px;gap:5px;background:var(--bg-sub);border-bottom:1px solid var(--bd-sub);font-size:11px;color:var(--t-mut)">
+          <span>crates</span><svg class="ico s12"><use href="#i-chev-r"/></svg>
+          <span>code-lite-agent/src</span><svg class="ico s12"><use href="#i-chev-r"/></svg>
+          <span style="color:var(--t-pri)">planner.rs</span>
+          <div style="flex:1"></div>
+          <span class="row" style="gap:4px;padding:0 5px;background:rgba(53,116,240,.16);border-radius:3px;color:var(--acc);font-size:10px">
+            <svg class="ico s12"><use href="#i-target"/></svg>焦点
+          </span>
+        </div>
+
+        <div style="flex:1;display:flex;min-height:0;position:relative;overflow:hidden">
+          <div style="width:48px;flex:none;padding:6px 0;text-align:right;font-family:var(--mono);font-size:11px;line-height:20px;color:var(--t-gut)">
+            <div>14</div><div>15</div><div>16</div><div>17</div><div>18</div><div>19</div><div>20</div><div>21</div><div>22</div><div>23</div><div>24</div>
+          </div>
+          <!-- git gutter stripe with hover target on modified block -->
+          <div style="width:3px;flex:none;padding:6px 0">
+            <div style="height:20px"></div>
+            <div style="height:60px;background:var(--g-blue)"></div>
+            <div style="height:40px"></div>
+            <div style="height:40px;background:var(--g-green)"></div>
+          </div>
+          <div style="flex:1;min-width:0;padding:6px 0 6px 10px;font-family:var(--mono);font-size:12px;line-height:20px;white-space:pre;overflow:hidden">
+<span style="color:var(--s-kw)">impl</span> <span style="color:var(--s-ty)">StepStatus</span> {
+    <span style="color:var(--s-kw)">pub fn</span> <span style="color:var(--s-fn)">as_str</span>(&amp;<span style="color:var(--s-kw)">self</span>) -&gt; &amp;<span style="color:var(--s-kw)">'static</span> <span style="color:var(--s-ty)">str</span> {
+        <span style="color:var(--s-kw)">match</span> <span style="color:var(--s-kw)">self</span> {
+            <span style="color:var(--s-ty)">Self</span>::<span style="color:var(--s-ty)">Pending</span> =&gt; <span style="color:var(--s-str)">"pending"</span>,
+            <span style="color:var(--s-ty)">Self</span>::<span style="color:var(--s-ty)">AwaitingApproval</span> =&gt; <span style="color:var(--s-str)">"awaiting_approval"</span>,
+            <span style="color:var(--s-ty)">Self</span>::<span style="color:var(--s-ty)">Running</span> =&gt; <span style="color:var(--s-str)">"running"</span>,
+            <span style="color:var(--s-ty)">Self</span>::<span style="color:var(--s-ty)">Failed</span> =&gt; <span style="color:var(--s-str)">"failed"</span>,
+            <span style="color:var(--s-ty)">Self</span>::<span style="color:var(--s-ty)">RolledBack</span> =&gt; <span style="color:var(--s-str)">"rolled_back"</span>,
+        }
+    }
+}</div>
+
+          <!-- ═══ Gutter 行内 Diff 浮层 (点击 Gutter 蓝条展开) ═══ -->
+          <div style="position:absolute;left:56px;top:78px;width:470px;background:var(--bg-panel);
+                      border:1px solid var(--bd);border-radius:6px;box-shadow:0 8px 26px rgba(0,0,0,.55);overflow:hidden;z-index:5">
+            <div class="row" style="height:26px;padding:0 6px 0 9px;gap:6px;background:var(--bg-sub);border-bottom:1px solid var(--bd-sub)">
+              <span style="width:8px;height:8px;border-radius:2px;background:var(--g-blue)"></span>
+              <span style="font-size:11px;color:var(--t-high);font-weight:600">已修改 3 行</span>
+              <span style="font-size:10px;color:var(--t-mut);font-family:var(--mono)">L17&ndash;19</span>
+              <div style="flex:1"></div>
+              <span class="row" style="gap:4px;padding:1px 6px;border:1px solid var(--bd);border-radius:4px;font-size:10px;color:var(--t-pri)">
+                <svg class="ico s12"><use href="#i-undo"/></svg>回滚本行
+              </span>
+              <svg class="ico s12" style="color:var(--t-mut);margin-left:4px"><use href="#i-up"/></svg>
+              <svg class="ico s12" style="color:var(--t-mut)"><use href="#i-down"/></svg>
+              <svg class="ico s12" style="color:var(--t-mut);margin-left:4px"><use href="#i-close"/></svg>
+            </div>
+            <div style="font-family:var(--mono);font-size:11px;line-height:18px;white-space:pre;padding:4px 0;background:var(--bg-editor)">
+<span style="display:block;background:rgba(219,88,96,.13);padding:0 9px;box-shadow:inset 2px 0 0 var(--g-red)">-            Self::Pending =&gt; "Pending",</span><span style="display:block;background:rgba(219,88,96,.13);padding:0 9px;box-shadow:inset 2px 0 0 var(--g-red)">-            Self::Running =&gt; "Running",</span><span style="display:block;background:rgba(89,168,105,.14);padding:0 9px;box-shadow:inset 2px 0 0 var(--g-green)">+            Self::Pending =&gt; "pending",</span><span style="display:block;background:rgba(89,168,105,.14);padding:0 9px;box-shadow:inset 2px 0 0 var(--g-green)">+            Self::AwaitingApproval =&gt; "awaiting_approval",</span><span style="display:block;background:rgba(89,168,105,.14);padding:0 9px;box-shadow:inset 2px 0 0 var(--g-green)">+            Self::Running =&gt; "running",</span></div>
+            <div class="row" style="height:24px;padding:0 9px;gap:10px;background:var(--bg-sub);border-top:1px solid var(--bd-sub);font-size:10px;color:var(--t-mut)">
+              <span class="row" style="gap:4px"><svg class="ico s12" style="color:var(--g-green)"><use href="#i-check"/></svg>rust-analyzer 无新增错误</span>
+              <div style="flex:1"></div>
+              <span style="font-family:var(--mono)">&#8984;&#8997;Z 回滚整块</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- splitter -->
+      <div style="background:var(--bd);position:relative">
+        <div style="position:absolute;left:50%;top:-1px;transform:translateX(-50%);width:34px;height:6px;background:var(--bd);border-radius:3px"></div>
+      </div>
+
+      <!-- ── pane B ── -->
+      <div style="display:flex;flex-direction:column;min-height:0;min-width:0">
+        <div class="row" style="height:34px;flex:none;background:var(--bg-panel);border-bottom:1px solid var(--bd-sub)">
+          <div class="row" style="height:100%;padding:0 12px;gap:6px;font-size:12px;background:var(--bg-editor);border-top:2px solid var(--bd);border-right:.5px solid var(--bd-sub)">
+            <svg class="ico s14" style="color:var(--s-fn)"><use href="#i-dart"/></svg>
+            <span style="color:var(--t-pri)">editor_view_widget.dart</span>
+            <span style="width:6px;height:6px;border-radius:50%;background:var(--acc-y)"></span>
+            <svg class="ico s12" style="color:var(--t-mut);margin-left:2px"><use href="#i-close"/></svg>
+          </div>
+          <div style="flex:1"></div>
+          <div class="row" style="gap:8px;padding:0 12px;color:var(--t-mut)"><svg class="ico s14"><use href="#i-more"/></svg></div>
+        </div>
+        <div class="row" style="height:24px;flex:none;padding:0 12px;gap:5px;background:var(--bg-sub);border-bottom:1px solid var(--bd-sub);font-size:11px;color:var(--t-mut)">
+          <span>apps/code_lite_ui/lib/features/editor</span><svg class="ico s12"><use href="#i-chev-r"/></svg>
+          <span style="color:var(--t-pri)">editor_view_widget.dart</span>
+          <div style="flex:1"></div>
+          <span style="font-family:var(--mono);font-size:10px">Dart 3.9</span>
+        </div>
+        <div style="flex:1;display:flex;min-height:0;position:relative;overflow:hidden">
+          <div style="width:48px;flex:none;padding:6px 0;text-align:right;font-family:var(--mono);font-size:11px;line-height:20px;color:var(--t-gut)">
+            <div>810</div><div>811</div><div>812</div><div>813</div><div>814</div><div>815</div><div>816</div><div>817</div><div>818</div><div>819</div><div>820</div>
+          </div>
+          <div style="width:3px;flex:none;padding:6px 0">
+            <div style="height:40px"></div>
+            <div style="height:80px;background:var(--g-green)"></div>
+          </div>
+          <div style="flex:1;min-width:0;padding:6px 0 6px 10px;font-family:var(--mono);font-size:12px;line-height:20px;white-space:pre;overflow:hidden">
+        <span style="color:var(--s-kw)">if</span> (_controller.ghostText != <span style="color:var(--s-kw)">null</span>)
+          <span style="color:var(--s-ty)">Positioned</span>(
+            left: (caretCol * _charWidth).<span style="color:var(--s-fn)">clamp</span>(<span style="color:var(--s-num)">0.0</span>, <span style="color:var(--s-num)">99999.0</span>),
+            top: <span style="color:var(--s-num)">2</span>,
+            child: <span style="color:var(--s-ty)">IgnorePointer</span>(
+              child: <span style="color:var(--s-ty)">Text</span>(
+                _controller.ghostText!,
+                style: <span style="color:var(--s-kw)">const</span> <span style="color:var(--s-ty)">TextStyle</span>(
+                  fontSize: <span style="color:var(--s-num)">12</span>,
+                  fontStyle: <span style="color:var(--s-ty)">FontStyle</span>.italic,
+                  color: <span style="color:var(--s-ty)">Color</span>(<span style="color:var(--s-num)">0xFF6E7681</span>),</div>
+          <div style="position:absolute;right:0;top:0;bottom:0;width:3px;background:var(--bg-sub)"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ right tool window: Cargo ══ -->
+    <div style="background:var(--bg-panel);border-left:1px solid var(--bd-sub);display:flex;flex-direction:column">
+      <div class="row" style="height:34px;padding:0 6px 0 12px;gap:6px;border-bottom:1px solid var(--bd-sub)">
+        <svg class="ico s14" style="color:var(--s-kw)"><use href="#i-rust"/></svg>
+        <span style="color:var(--t-high);font-size:12px;font-weight:600">Cargo</span>
+        <div style="flex:1"></div>
+        <svg class="ico s14" style="color:var(--t-mut)"><use href="#i-refresh"/></svg>
+        <svg class="ico s14" style="color:var(--t-mut)"><use href="#i-plus"/></svg>
+        <svg class="ico s14" style="color:var(--t-mut)"><use href="#i-minus"/></svg>
+      </div>
+      <div style="font-size:12px;padding-top:2px">
+        <div class="row" style="height:22px;padding-left:8px;gap:5px">
+          <svg class="ico s12" style="color:var(--t-sec)"><use href="#i-chev-d"/></svg>
+          <svg class="ico s14" style="color:var(--s-kw)"><use href="#i-rust"/></svg>
+          <span style="color:var(--t-high);font-weight:600">code-lite-x</span>
+          <span style="color:var(--t-mut);font-size:10px">workspace</span>
+        </div>
+        <div class="row" style="height:22px;padding-left:26px;gap:5px">
+          <svg class="ico s12" style="color:var(--t-sec)"><use href="#i-chev-d"/></svg>
+          <svg class="ico s14" style="color:var(--acc-y)"><use href="#i-folder"/></svg><span>Commands</span>
+        </div>
+        <div class="row" style="height:22px;padding-left:48px;gap:6px"><svg class="ico s12" style="color:var(--t-mut)"><use href="#i-run"/></svg><span>build</span></div>
+        <div class="row" style="height:22px;padding-left:48px;gap:6px;background:var(--sel);box-shadow:inset 2px 0 0 var(--acc)">
+          <svg class="ico s12" style="color:var(--g-green)"><use href="#i-run"/></svg><span style="color:var(--t-high)">test</span>
+          <div style="flex:1"></div><span style="color:var(--g-green);font-size:10px;font-family:var(--mono);padding-right:8px">63/63</span>
+        </div>
+        <div class="row" style="height:22px;padding-left:48px;gap:6px"><svg class="ico s12" style="color:var(--t-mut)"><use href="#i-run"/></svg><span>check</span></div>
+        <div class="row" style="height:22px;padding-left:48px;gap:6px"><svg class="ico s12" style="color:var(--t-mut)"><use href="#i-run"/></svg><span>clippy</span></div>
+        <div class="row" style="height:22px;padding-left:48px;gap:6px"><svg class="ico s12" style="color:var(--t-mut)"><use href="#i-run"/></svg><span>fmt</span></div>
+        <div class="row" style="height:22px;padding-left:26px;gap:5px">
+          <svg class="ico s12" style="color:var(--t-sec)"><use href="#i-chev-d"/></svg>
+          <svg class="ico s14" style="color:var(--acc-y)"><use href="#i-folder"/></svg><span>Members</span>
+          <span style="color:var(--t-mut);font-size:10px">8</span>
+        </div>
+        <div class="row" style="height:22px;padding-left:48px;gap:6px"><svg class="ico s12" style="color:var(--s-kw)"><use href="#i-rust"/></svg><span>code-lite-agent</span></div>
+        <div class="row" style="height:22px;padding-left:48px;gap:6px"><svg class="ico s12" style="color:var(--s-kw)"><use href="#i-rust"/></svg><span>code-lite-core</span></div>
+        <div class="row" style="height:22px;padding-left:48px;gap:6px"><svg class="ico s12" style="color:var(--s-kw)"><use href="#i-rust"/></svg><span>code-lite-ffi</span></div>
+        <div class="row" style="height:22px;padding-left:48px;gap:6px"><svg class="ico s12" style="color:var(--s-kw)"><use href="#i-rust"/></svg><span>code-lite-fs</span></div>
+        <div class="row" style="height:22px;padding-left:48px;gap:6px"><svg class="ico s12" style="color:var(--s-kw)"><use href="#i-rust"/></svg><span>code-lite-graph</span></div>
+        <div class="row" style="height:22px;padding-left:48px;gap:6px"><svg class="ico s12" style="color:var(--s-kw)"><use href="#i-rust"/></svg><span>code-lite-lsp</span></div>
+        <div class="row" style="height:22px;padding-left:48px;gap:6px"><svg class="ico s12" style="color:var(--s-kw)"><use href="#i-rust"/></svg><span>code-lite-storage</span></div>
+        <div class="row" style="height:22px;padding-left:26px;gap:5px">
+          <svg class="ico s12" style="color:var(--t-sec)"><use href="#i-chev-r"/></svg>
+          <svg class="ico s14" style="color:var(--t-mut)"><use href="#i-folder"/></svg><span>Dependencies</span>
+        </div>
+      </div>
+      <div style="flex:1"></div>
+      <div style="padding:8px;border-top:1px solid var(--bd-sub)">
+        <div class="row" style="gap:6px;padding:5px 8px;background:rgba(89,168,105,.10);border:1px solid rgba(89,168,105,.28);border-radius:5px">
+          <svg class="ico s12" style="color:var(--g-green)"><use href="#i-check"/></svg>
+          <span style="font-size:10px;color:var(--t-pri)">cargo test --offline</span>
+          <div style="flex:1"></div>
+          <span style="font-size:10px;color:var(--t-mut);font-family:var(--mono)">4.1s</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- status bar -->
+  <div class="row" style="height:22px;border-top:1px solid var(--bd-sub);padding:0 12px;gap:8px;font-size:10px;color:var(--t-mut)">
+    <svg class="ico s12"><use href="#i-tree"/></svg>
+    <span>code-lite-x</span><svg class="ico s12"><use href="#i-chev-r"/></svg>
+    <span style="color:var(--t-pri)">planner.rs</span>
+    <span style="color:var(--g-blue);margin-left:4px">&#9679; 3 处修改</span>
+    <div style="flex:1"></div>
+    <span style="font-family:var(--mono)">17:34</span>
+    <span style="font-family:var(--mono)">LF</span>
+    <span style="font-family:var(--mono)">UTF-8</span>
+    <span style="font-family:var(--mono)">4 spaces</span>
+    <svg class="ico s12" style="color:var(--g-green)"><use href="#i-branch"/></svg>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>
