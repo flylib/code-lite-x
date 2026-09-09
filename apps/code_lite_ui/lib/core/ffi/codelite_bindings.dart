@@ -165,6 +165,15 @@ typedef _SkillsListDart = Pointer<Char> Function(Pointer<Void> ctx);
 typedef _McpToolsListC = Pointer<Char> Function(Pointer<Void> ctx);
 typedef _McpToolsListDart = Pointer<Char> Function(Pointer<Void> ctx);
 
+typedef _UpdaterCheckC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> currentVersion, Pointer<Char> manifestJson, Pointer<Char> platform);
+typedef _UpdaterCheckDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> currentVersion, Pointer<Char> manifestJson, Pointer<Char> platform);
+
+typedef _UpdaterStageC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> stagingDir, Pointer<Char> fileName, Pointer<Char> content, Pointer<Char> expectedSha256);
+typedef _UpdaterStageDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> stagingDir, Pointer<Char> fileName, Pointer<Char> content, Pointer<Char> expectedSha256);
+
+typedef _UpdaterApplyC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> stagingDir, Pointer<Char> targetDir, Pointer<Char> filesJson, Pointer<Char> platform);
+typedef _UpdaterApplyDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> stagingDir, Pointer<Char> targetDir, Pointer<Char> filesJson, Pointer<Char> platform);
+
 /// Dart FFI bindings to Rust Core dynamic library (`libcodelite.dylib`).
 class CodeLiteBindings {
   static final CodeLiteBindings instance = CodeLiteBindings._();
@@ -244,6 +253,9 @@ class CodeLiteBindings {
   late final _MemoryRecordErrorDart _memoryRecordError;
   late final _SkillsListDart _skillsList;
   late final _McpToolsListDart _mcpToolsList;
+  late final _UpdaterCheckDart _updaterCheck;
+  late final _UpdaterStageDart _updaterStage;
+  late final _UpdaterApplyDart _updaterApply;
 
   Pointer<Void>? get contextPointer => _ctx;
 
@@ -322,6 +334,9 @@ class CodeLiteBindings {
       _memoryRecordError = _dylib!.lookupFunction<_MemoryRecordErrorC, _MemoryRecordErrorDart>('codelite_memory_record_error');
       _skillsList = _dylib!.lookupFunction<_SkillsListC, _SkillsListDart>('codelite_skills_list');
       _mcpToolsList = _dylib!.lookupFunction<_McpToolsListC, _McpToolsListDart>('codelite_mcp_tools_list');
+      _updaterCheck = _dylib!.lookupFunction<_UpdaterCheckC, _UpdaterCheckDart>('codelite_updater_check');
+      _updaterStage = _dylib!.lookupFunction<_UpdaterStageC, _UpdaterStageDart>('codelite_updater_stage');
+      _updaterApply = _dylib!.lookupFunction<_UpdaterApplyC, _UpdaterApplyDart>('codelite_updater_apply');
 
       final pathPtr = _toCString(workspacePath);
       _ctx = _init(pathPtr.pointer);
@@ -966,6 +981,55 @@ class CodeLiteBindings {
     final ptr = _mcpToolsList(_ctx!);
     final res = _parseJsonMap(_fromCString(ptr));
     return (res['tools'] as List<dynamic>?) ?? [];
+  }
+
+  Map<String, dynamic> updaterCheck(String currentVersion, String manifestJson, {String? platform}) {
+    if (!isAvailable) return {'status': 'error', 'error': 'FFI not available'};
+    final pVer = _toCString(currentVersion);
+    final pMan = _toCString(manifestJson);
+    final pPlat = _toCString(platform ?? (Platform.isMacOS ? 'macos' : (Platform.isLinux ? 'linux' : 'windows')));
+    try {
+      final ptr = _updaterCheck(_ctx!, pVer.pointer, pMan.pointer, pPlat.pointer);
+      return _parseJsonMap(_fromCString(ptr));
+    } finally {
+      _freeAllocatedString(pVer);
+      _freeAllocatedString(pMan);
+      _freeAllocatedString(pPlat);
+    }
+  }
+
+  Map<String, dynamic> updaterStage(String stagingDir, String fileName, String content, String expectedSha256) {
+    if (!isAvailable) return {'status': 'error', 'error': 'FFI not available'};
+    final pStage = _toCString(stagingDir);
+    final pFile = _toCString(fileName);
+    final pContent = _toCString(content);
+    final pSha = _toCString(expectedSha256);
+    try {
+      final ptr = _updaterStage(_ctx!, pStage.pointer, pFile.pointer, pContent.pointer, pSha.pointer);
+      return _parseJsonMap(_fromCString(ptr));
+    } finally {
+      _freeAllocatedString(pStage);
+      _freeAllocatedString(pFile);
+      _freeAllocatedString(pContent);
+      _freeAllocatedString(pSha);
+    }
+  }
+
+  Map<String, dynamic> updaterApply(String stagingDir, String targetDir, List<String> files, {String? platform}) {
+    if (!isAvailable) return {'status': 'error', 'error': 'FFI not available'};
+    final pStage = _toCString(stagingDir);
+    final pTarget = _toCString(targetDir);
+    final pFiles = _toCString(jsonEncode(files));
+    final pPlat = _toCString(platform ?? (Platform.isMacOS ? 'macos' : (Platform.isLinux ? 'linux' : 'windows')));
+    try {
+      final ptr = _updaterApply(_ctx!, pStage.pointer, pTarget.pointer, pFiles.pointer, pPlat.pointer);
+      return _parseJsonMap(_fromCString(ptr));
+    } finally {
+      _freeAllocatedString(pStage);
+      _freeAllocatedString(pTarget);
+      _freeAllocatedString(pFiles);
+      _freeAllocatedString(pPlat);
+    }
   }
 
   // ---------------------------------------------------------------------------

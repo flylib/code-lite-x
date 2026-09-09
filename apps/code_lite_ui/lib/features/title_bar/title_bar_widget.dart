@@ -7,6 +7,8 @@ class TitleBarWidget extends StatelessWidget {
   final VoidCallback onUndo;
   final VoidCallback onRedo;
   final VoidCallback? onSearch;
+  final VoidCallback? onCheckUpdate;
+  final String version;
 
   const TitleBarWidget({
     super.key,
@@ -15,6 +17,8 @@ class TitleBarWidget extends StatelessWidget {
     required this.onUndo,
     required this.onRedo,
     this.onSearch,
+    this.onCheckUpdate,
+    this.version = 'v0.1.0',
   });
 
   @override
@@ -38,6 +42,8 @@ class TitleBarWidget extends StatelessWidget {
                   _buildTrafficLights(),
                   const SizedBox(width: 12),
                   _buildProjectBadge(),
+                  const SizedBox(width: 8),
+                  _buildVersionBadge(),
                   const SizedBox(width: 8),
                   _buildBranchBadge(),
                   const SizedBox(width: 12),
@@ -123,6 +129,37 @@ class TitleBarWidget extends StatelessWidget {
           const SizedBox(width: 4),
           const Text('[Flutter + Rust]', style: TextStyle(color: IntelliJTheme.textMuted, fontSize: 10)),
         ],
+      ),
+    );
+  }
+
+  Widget _buildVersionBadge() {
+    return InkWell(
+      onTap: onCheckUpdate,
+      borderRadius: BorderRadius.circular(4),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+        decoration: BoxDecoration(
+          color: IntelliJTheme.panelBg,
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(color: IntelliJTheme.border),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.system_update_alt, size: 12, color: IntelliJTheme.accentBlue),
+            const SizedBox(width: 4),
+            Text(
+              version,
+              style: const TextStyle(
+                color: IntelliJTheme.textSecondary,
+                fontSize: 11,
+                fontFamily: 'monospace',
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -190,11 +190,61 @@ void main() {
         final mcpTools = ffi.listMcpTools();
         expect(mcpTools, isA<List>());
 
+        // Test Phase 11 Auto-Updater bindings (codelite_updater_check, updater_stage, updater_apply)
+        const updateManifest = '''
+{
+  "version": "0.1.1",
+  "release_date": "2026-09-10",
+  "release_notes": "Phase 11 updater release",
+  "platforms": {
+    "macos": {
+      "strategy": "app_bundle_delta",
+      "artifacts": [
+        {
+          "target_name": "CodeLiteX.app",
+          "target_path": "CodeLiteX.app",
+          "url": "https://example.com/CodeLiteX.dmg",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "size_bytes": 2048
+        }
+      ]
+    },
+    "linux": {
+      "strategy": "component_delta",
+      "artifacts": [
+        {
+          "target_name": "libcodelite.so",
+          "target_path": "lib/libcodelite.so",
+          "url": "https://example.com/linux.tar.gz",
+          "sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+          "size_bytes": 1024
+        }
+      ]
+    }
+  }
+}
+''';
+        final checkRes = ffi.updaterCheck('0.1.0', updateManifest, platform: 'linux');
+        expect(checkRes['status'], equals('ok'));
+        expect(checkRes['has_update'], isTrue);
+        expect(checkRes['latest_version'], equals('0.1.1'));
+        expect(checkRes['strategy'], equals('component_delta'));
+
+        const stageDir = '/tmp/test_stage_dart';
+        final stageRes = ffi.updaterStage(stageDir, 'abc.bin', 'abc', 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
+        expect(stageRes['status'], equals('ok'));
+        expect(stageRes['verified'], isTrue);
+
+        const targetDir = '/tmp/test_target_dart';
+        final applyRes = ffi.updaterApply(stageDir, targetDir, ['abc.bin'], platform: 'linux');
+        expect(applyRes['status'], equals('ok'));
+
         try {
           final f = File(testTargetFile);
           if (f.existsSync()) f.deleteSync();
         } catch (_) {}
       }
+
     });
 
     test('ApiClient connects seamlessly via FFI or fallback', () async {
@@ -302,6 +352,30 @@ void main() {
 
       final mcpList = await client.listMcpTools();
       expect(mcpList, isA<List>());
+
+      // Test ApiClient Phase 11 updater methods
+      final updateCheck = await client.checkForUpdates(currentVersion: '0.1.0', forcedPlatform: 'linux');
+      expect(updateCheck.containsKey('status'), isTrue);
+      expect(updateCheck['has_update'], isTrue);
+      expect(updateCheck['latest_version'], equals('0.1.1'));
+
+      final updateStage = await client.stageUpdateArtifact(
+        stagingDir: '/tmp/test_client_stage',
+        fileName: 'libcodelite.so',
+        content: 'CodeLiteX mock update payload',
+        expectedSha256: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+      );
+      expect(updateStage.containsKey('status'), isTrue);
+
+      final updateApply = await client.applyUpdate(
+        stagingDir: '/tmp/test_client_stage',
+        targetDir: '/tmp/test_client_target',
+        files: ['libcodelite.so'],
+        platform: 'linux',
+      );
+      expect(updateApply.containsKey('status'), isTrue);
+      expect(updateApply['status'], equals('ok'));
     });
   });
 }
+

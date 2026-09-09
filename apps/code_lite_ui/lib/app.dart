@@ -12,6 +12,8 @@ import 'features/project_explorer/project_explorer_widget.dart';
 import 'features/project_explorer/structure_widget.dart';
 import 'features/search/global_search_modal.dart';
 import 'features/title_bar/title_bar_widget.dart';
+import 'features/update/update_modal.dart';
+
 
 class CodeLiteApp extends StatefulWidget {
   const CodeLiteApp({super.key});
@@ -186,6 +188,14 @@ pub fn revert(&self, op_id: i64) -> Result<(), StorageError> {
     );
   }
 
+  void _openUpdateModal(BuildContext context) {
+    UpdateModal.show(
+      context,
+      client: _client,
+      currentVersion: '0.1.0',
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -197,6 +207,8 @@ pub fn revert(&self, op_id: i64) -> Result<(), StorageError> {
           bindings: <ShortcutActivator, VoidCallback>{
             const SingleActivator(LogicalKeyboardKey.keyF, meta: true, shift: true): () => _openGlobalSearch(context),
             const SingleActivator(LogicalKeyboardKey.keyF, control: true, shift: true): () => _openGlobalSearch(context),
+            const SingleActivator(LogicalKeyboardKey.keyU, meta: true): () => _openUpdateModal(context),
+            const SingleActivator(LogicalKeyboardKey.keyU, control: true): () => _openUpdateModal(context),
           },
           child: Focus(
             autofocus: true,
@@ -211,6 +223,7 @@ pub fn revert(&self, op_id: i64) -> Result<(), StorageError> {
                     onUndo: _handleUndo,
                     onRedo: _handleRedo,
                     onSearch: () => _openGlobalSearch(context),
+                    onCheckUpdate: () => _openUpdateModal(context),
                   ),
 
                   // 2. Main IDE Workspace Body

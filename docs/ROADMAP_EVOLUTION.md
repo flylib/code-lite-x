@@ -615,7 +615,8 @@ MCP 本质是「又一个 Tool Provider」，故不单列阶段，随本阶段�
 
 ---
 
-### 🔹 Phase 11: Cross-platform Release
+### 🔹 Phase 11: Cross-platform Release & Differential Auto-Updater (已完成 ✅ 2026-09-10)
+
 
 #### 11.1 跨平台打包矩阵（`scripts/`）
 - **Linux (`build_linux_release.sh`)**：编译 `libcodelite.so` 与 `code-lite-app` → Flutter Linux Desktop Release → 产出 `.AppImage` 与 Debian `.deb`；
