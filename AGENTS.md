@@ -64,13 +64,13 @@ CodeLiteX 是一款高性能、深度融合大模型智能驱动（LLM Engine）
 
 ### 全栈一键命令（根目录 `/Users/dev/rust/code-lite-x/`）
 ```bash
-# 1. 执行 Rust 全工作区离线单元测试与集成测试 (66 项测试全绿，含 5 项跨层集成测试)
+# 1. 执行 Rust 全工作区离线单元测试与集成测试 (必须 0 failed)
 export PATH="$HOME/.cargo/bin:$PATH" && cargo test --offline --workspace
 
 # 2. 编译 Rust Core C-ABI 动态链接库 (Debug 用于开发与 FFI 联调)
 export PATH="$HOME/.cargo/bin:$PATH" && cargo build --offline -p code-lite-ffi
 
-# 3. 运行 Flutter 客户端全套自动化测试 (FFI、JSON-RPC、搜索模态框、布局等 5 套套件)
+# 3. 运行 Flutter 客户端全套自动化测试 (必须 0 failed)
 cd apps/code_lite_ui && /Users/dev/development/flutter/bin/flutter test
 
 # 4. 一键打包 macOS 原生独立分发产物 (自动构建 Release 动态库与 Daemon 并收集至 dist/)
@@ -162,8 +162,9 @@ crates/
 ## 验证与发布规范
 
 1. **提交前自动化验证**：
-   - Rust 校验：运行 `cargo test --offline --workspace`，必须确认 **66/66 测试全绿**（61 项单元测试 + 5 项集成测试全覆盖）；
-   - Flutter 校验：运行 `flutter test`，必须确认 **19/19 项测试全绿**（5 套测试套件覆盖内核编辑、FFI、JSON-RPC、搜索与布局）。
+   - Rust 校验：运行 `cargo test --offline --workspace`，必须 **0 failed**；
+   - Flutter 校验：运行 `flutter test`，必须 **0 failed**；
+   - **不要在本文档写死测试数量。** 数量随功能增长而变,写死必然过期(曾写 66/19,实际已到 99/35),一律以本次运行的实际结果为准。
 2. **发布打包验收**：
    - 运行 `bash scripts/build_macos_release.sh`；
    - 检查 `dist/release/macos/` 下包含优化后的 `libcodelite.dylib` 与 `code-lite-app`，并在具备完整 Xcode 环境的主机上验证独立应用 `CodeLiteX.app` 的正常拉起。
