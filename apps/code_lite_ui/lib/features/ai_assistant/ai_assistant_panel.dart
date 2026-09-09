@@ -52,12 +52,46 @@ class _AiAssistantPanelState extends State<AiAssistantPanel> {
   String? _diffContent;
   int _diffOperationsCount = 0;
 
+  Map<String, dynamic>? _contextInsights;
+  bool _showInsights = false;
+  List<dynamic> _skillsList = [];
+  List<dynamic> _mcpToolsList = [];
+
   @override
   void initState() {
     super.initState();
     _client = widget.client ?? ApiClient();
     _loadPersistedMessages();
     _refreshApprovals();
+    _refreshContextInsights();
+  }
+
+  @override
+  void didUpdateWidget(AiAssistantPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.activeFile != widget.activeFile) {
+      _refreshContextInsights();
+    }
+  }
+
+  Future<void> _refreshContextInsights() async {
+    try {
+      final promptRes = await _client.buildTaskPrompt(
+        'active context query',
+        focusFile: widget.activeFile.isNotEmpty ? widget.activeFile : null,
+      );
+      final skills = await _client.listSkills();
+      final mcp = await _client.listMcpTools();
+      if (mounted) {
+        setState(() {
+          if (promptRes['status'] == 'ok' && promptRes['insights'] != null) {
+            _contextInsights = promptRes['insights'] as Map<String, dynamic>?;
+          }
+          _skillsList = skills;
+          _mcpToolsList = mcp;
+        });
+      }
+    } catch (_) {}
   }
 
   Future<void> _loadPersistedMessages() async {
@@ -603,6 +637,10 @@ class _AiAssistantPanelState extends State<AiAssistantPanel> {
               controller: _scrollController,
               padding: const EdgeInsets.all(10),
               children: [
+                // Context Engine Insights Card (Phase 10)
+                _buildContextInsightsCard(),
+                const SizedBox(height: 10),
+
                 // Context Chip Card
                 Container(
                   padding: const EdgeInsets.all(8),
@@ -742,11 +780,11 @@ class _AiAssistantPanelState extends State<AiAssistantPanel> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
+          const Row(
             children: [
-              const Icon(Icons.warning_amber_rounded, size: 14, color: IntelliJTheme.gitRed),
-              const SizedBox(width: 6),
-              const Expanded(
+              Icon(Icons.warning_amber_rounded, size: 14, color: IntelliJTheme.gitRed),
+              SizedBox(width: 6),
+              Expanded(
                 child: Text(
                   'APPROVAL REQUIRED (CRITICAL RISK)',
                   style: TextStyle(
@@ -872,7 +910,6 @@ class _AiAssistantPanelState extends State<AiAssistantPanel> {
 
   Widget _buildStepRow(Map<String, dynamic> step, int index, int currentIndex) {
     final status = step['status'] as String? ?? 'pending';
-    final tool = step['tool_name'] as String? ?? '';
     final risk = (step['risk_level'] as String? ?? 'low').toLowerCase();
 
     IconData icon;
@@ -1143,6 +1180,143 @@ class _AiAssistantPanelState extends State<AiAssistantPanel> {
         borderRadius: BorderRadius.circular(3),
       ),
       child: Text(label, style: TextStyle(color: color, fontSize: 9, fontFamily: 'monospace')),
+    );
+  }
+
+  Widget _buildContextInsightsCard() {
+    final ins = _contextInsights;
+    final insFiles = (ins?['instruction_files'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? ['AGENTS.md'];
+    final activeSkills = (ins?['active_skills'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? [];
+    final decCount = ins?['recalled_decisions'] as int? ?? 0;
+    final errCount = ins?['recalled_errors'] as int? ?? 0;
+    final hasCodeGraph = ins?['has_codegraph'] as bool? ?? false;
+    final hasLsp = ins?['has_lsp_diagnostics'] as bool? ?? false;
+
+    return Container(
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: IntelliJTheme.cardBg,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: const Color(0xFF3C3F41)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Expanded(
+                child: Row(
+                  children: [
+                    Icon(Icons.hub_outlined, size: 13, color: Color(0xFF6CB4F8)),
+                    SizedBox(width: 5),
+                    Flexible(
+                      child: Text(
+                        'CONTEXT ENGINE (PHASE 10)',
+                        style: TextStyle(
+                          color: Color(0xFF6CB4F8),
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.3,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              InkWell(
+                onTap: () {
+                  setState(() {
+                    _showInsights = !_showInsights;
+                  });
+                },
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        _showInsights ? 'Collapse' : 'Inspect',
+                        style: const TextStyle(
+                          color: IntelliJTheme.textSecondary,
+                          fontSize: 9,
+                        ),
+                      ),
+                      Icon(
+                        _showInsights ? Icons.expand_less : Icons.expand_more,
+                        size: 12,
+                        color: IntelliJTheme.textSecondary,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 4,
+            runSpacing: 4,
+            children: [
+              _buildChip(
+                '📘 ${insFiles.isNotEmpty ? insFiles.first : "Rules"}',
+                const Color(0xFF6CB4F8),
+              ),
+              _buildChip(
+                '⚡ ${_skillsList.length} skills',
+                const Color(0xFFE5C07B),
+              ),
+              _buildChip(
+                '🧠 ${decCount + errCount} memories',
+                const Color(0xFF98C379),
+              ),
+              _buildChip(
+                '🌐 CodeGraph: ${hasCodeGraph ? "AST" : "Idle"}',
+                const Color(0xFFC678DD),
+              ),
+              if (_mcpToolsList.isNotEmpty)
+                _buildChip(
+                  '🔌 ${_mcpToolsList.length} MCP',
+                  const Color(0xFF56B6C2),
+                ),
+            ],
+          ),
+          if (_showInsights) ...[
+            const SizedBox(height: 8),
+            const Divider(color: IntelliJTheme.borderSubtle, height: 1),
+            const SizedBox(height: 6),
+            const Text(
+              'PROMPT SYNTHESIS BREAKDOWN',
+              style: TextStyle(
+                color: IntelliJTheme.textMuted,
+                fontSize: 8.5,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '• Instructions: ${insFiles.join(', ')} (${ins?['instruction_bytes'] ?? 0} B)',
+              style: const TextStyle(color: IntelliJTheme.textSecondary, fontSize: 10, fontFamily: 'monospace'),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              '• Active Skills: ${activeSkills.isNotEmpty ? activeSkills.join(', ') : (_skillsList.map((s) => s['name'] ?? '').join(', '))}',
+              style: const TextStyle(color: IntelliJTheme.textSecondary, fontSize: 10, fontFamily: 'monospace'),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              '• Memory Recalled: $decCount decisions, $errCount error lessons',
+              style: const TextStyle(color: IntelliJTheme.textSecondary, fontSize: 10, fontFamily: 'monospace'),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              '• Realtime LSP: ${hasLsp ? "Diagnostics Attached" : "Clean"}',
+              style: const TextStyle(color: IntelliJTheme.textSecondary, fontSize: 10, fontFamily: 'monospace'),
+            ),
+          ],
+        ],
+      ),
     );
   }
 }

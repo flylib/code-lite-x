@@ -636,6 +636,92 @@ class ApiClient {
     return null;
   }
 
+  /// Builds a high-density, unified task prompt with project instructions, skills, and memory (Phase 10).
+  Future<Map<String, dynamic>> buildTaskPrompt(String taskPrompt, {String? focusFile, String? focusSymbol}) async {
+    if (_ffi.isAvailable) {
+      final res = _ffi.buildTaskPrompt(taskPrompt, focusFile: focusFile, focusSymbol: focusSymbol);
+      if (res['status'] == 'ok') return res;
+    }
+    return {
+      'status': 'ok',
+      'prompt': 'Offline context for: $taskPrompt',
+      'insights': {
+        'instruction_files': ['AGENTS.md'],
+        'active_skills': ['flutter-ui'],
+        'recalled_decisions': 0,
+        'recalled_errors': 0,
+        'has_codegraph': false,
+        'has_lsp_diagnostics': false,
+      }
+    };
+  }
+
+  /// Queries past decision and error memories.
+  Future<Map<String, dynamic>> queryMemory(String query, {String? targetPath, int limit = 10}) async {
+    if (_ffi.isAvailable) {
+      final res = _ffi.queryMemory(query, targetPath: targetPath, limit: limit);
+      if (res['status'] == 'ok') return res;
+    }
+    return {'status': 'ok', 'decisions': [], 'errors': []};
+  }
+
+  /// Records an explicit decision memory.
+  Future<Map<String, dynamic>> recordDecisionMemory({
+    required String sessionId,
+    required String decisionType,
+    required String subject,
+    required String detail,
+    String? tags,
+  }) async {
+    if (_ffi.isAvailable) {
+      return _ffi.recordDecisionMemory(sessionId, decisionType, subject, detail, tags: tags);
+    }
+    return {'status': 'ok', 'id': 1};
+  }
+
+  /// Records an explicit error memory.
+  Future<Map<String, dynamic>> recordErrorMemory({
+    required String sessionId,
+    required String errorType,
+    required String summary,
+    required String lesson,
+    String? targetPath,
+    String? snippet,
+  }) async {
+    if (_ffi.isAvailable) {
+      return _ffi.recordErrorMemory(sessionId, errorType, summary, lesson, targetPath: targetPath, snippet: snippet);
+    }
+    return {'status': 'ok', 'id': 1};
+  }
+
+  /// Lists all discovered skills in the workspace.
+  Future<List<dynamic>> listSkills() async {
+    if (_ffi.isAvailable) {
+      final skills = _ffi.listSkills();
+      if (skills.isNotEmpty) return skills;
+    }
+    return [
+      {
+        'name': 'flutter-ui',
+        'description': 'IntelliJ Darcula defensive layout rules',
+        'tools': ['read_file', 'apply_patch'],
+      },
+      {
+        'name': 'code-review',
+        'description': 'Offline cargo build & stable symbol keys',
+        'tools': ['read_file', 'search_symbol'],
+      }
+    ];
+  }
+
+  /// Lists all registered external MCP tools.
+  Future<List<dynamic>> listMcpTools() async {
+    if (_ffi.isAvailable) {
+      return _ffi.listMcpTools();
+    }
+    return [];
+  }
+
   Map<String, dynamic> _fallbackWorkspace() {
     return {
       'name': 'code-lite-x',

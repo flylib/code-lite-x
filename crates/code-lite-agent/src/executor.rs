@@ -6,6 +6,7 @@ use crate::planner::{Plan, StepStatus};
 use crate::tool_runtime::ToolRuntime;
 use code_lite_graph::CodeGraph;
 use code_lite_lsp::LspClient;
+use code_lite_storage::{MemoryStore, NewDecisionMemory, NewErrorMemory};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
@@ -42,6 +43,7 @@ pub struct PlanExecutor {
     graph: Option<Arc<dyn CodeGraph + Send + Sync>>,
     lsp: Option<Arc<LspClient>>,
     llm: Option<Arc<dyn LlmProvider>>,
+    memory_store: Option<MemoryStore>,
     max_self_heal_attempts: usize,
 }
 
@@ -59,6 +61,7 @@ impl PlanExecutor {
             graph,
             lsp,
             llm: None,
+            memory_store: None,
             max_self_heal_attempts: 3,
         }
     }
@@ -66,6 +69,15 @@ impl PlanExecutor {
     pub fn with_llm(mut self, llm: Arc<dyn LlmProvider>) -> Self {
         self.llm = Some(llm);
         self
+    }
+
+    pub fn with_memory_store(mut self, memory_store: MemoryStore) -> Self {
+        self.memory_store = Some(memory_store);
+        self
+    }
+
+    pub fn memory_store(&self) -> Option<&MemoryStore> {
+        self.memory_store.as_ref()
     }
 
     pub fn runtime(&self) -> &ToolRuntime {
@@ -111,10 +123,30 @@ impl PlanExecutor {
             ApprovalDecision::Denied { reason } => {
                 step.status = StepStatus::Failed;
                 step.error = Some(reason.clone());
+                if let Some(ref store) = self.memory_store {
+                    let path_tag = step.args.get("path").and_then(|v| v.as_str()).unwrap_or("");
+                    let _ = store.record_decision(&NewDecisionMemory {
+                        session_id: Some(plan.session_id.clone()),
+                        decision_type: "approval_rejected".into(),
+                        subject: step.tool_name.clone(),
+                        detail: format!("User denied approval for step `{}` on `{}`: {}", step.id, path_tag, reason),
+                        context_tags: Some(format!("approval,denied,{}", path_tag)),
+                    });
+                }
                 return Err(AgentError::ApprovalRejected(reason));
             }
             ApprovalDecision::Granted => {
                 step.status = StepStatus::Running;
+                if let Some(ref store) = self.memory_store {
+                    let path_tag = step.args.get("path").and_then(|v| v.as_str()).unwrap_or("");
+                    let _ = store.record_decision(&NewDecisionMemory {
+                        session_id: Some(plan.session_id.clone()),
+                        decision_type: "approval_granted".into(),
+                        subject: step.tool_name.clone(),
+                        detail: format!("Approval granted for step `{}` on `{}` with tool `{}`", step.id, path_tag, step.tool_name),
+                        context_tags: Some(format!("approval,granted,{}", path_tag)),
+                    });
+                }
             }
         }
 
@@ -253,6 +285,19 @@ impl PlanExecutor {
                                 "Self-healing exhausted. Automatically rolled back: {}",
                                 err_msg
                             ));
+                            if let Some(ref store) = self.memory_store {
+                                let _ = store.record_error(&NewErrorMemory {
+                                    session_id: Some(plan.session_id.clone()),
+                                    error_type: "rollback".into(),
+                                    target_path: Some(path.clone()),
+                                    error_summary: err_msg.clone(),
+                                    lesson_learned: format!(
+                                        "Self-healing exhausted after {} attempts on `{}`. Rolled back to avoid invalid syntax/diagnostics: {}",
+                                        self.max_self_heal_attempts, path, err_msg
+                                    ),
+                                    context_snippet: Some(content.chars().take(500).collect()),
+                                });
+                            }
                             return Ok(StepExecutionResult::FailedAndRolledBack {
                                 step_id: step.id.clone(),
                                 reason: err_msg,
@@ -293,6 +338,16 @@ impl PlanExecutor {
                 if !res.success {
                     step.status = StepStatus::Failed;
                     step.error = Some(res.stderr.clone());
+                    if let Some(ref store) = self.memory_store {
+                        let _ = store.record_error(&NewErrorMemory {
+                            session_id: Some(plan.session_id.clone()),
+                            error_type: "command_failure".into(),
+                            target_path: None,
+                            error_summary: res.stderr.clone(),
+                            lesson_learned: format!("Execution of `{}` failed: {}", cmd, res.stderr),
+                            context_snippet: Some(format!("cmd: {}, args: {:?}", cmd, args)),
+                        });
+                    }
                     return Err(crate::error::ToolError::ExecutionFailed(res.stderr).into());
                 }
                 res.stdout
@@ -349,6 +404,16 @@ impl PlanExecutor {
                 if let Some(op_id) = step.op_id {
                     self.runtime.rollback_step(op_id)?;
                     step.status = StepStatus::RolledBack;
+                    if let Some(ref store) = self.memory_store {
+                        let _ = store.record_error(&NewErrorMemory {
+                            session_id: Some(plan.session_id.clone()),
+                            error_type: "manual_step_rollback".into(),
+                            target_path: step.args.get("path").and_then(|v| v.as_str()).map(|s| s.to_string()),
+                            error_summary: format!("Step `{}` ({}) was manually rolled back", step.id, step.tool_name),
+                            lesson_learned: format!("Operation from step `{}` ({}) was reverted by rollback request", step.id, step.tool_name),
+                            context_snippet: Some(format!("Step args: {}", step.args)),
+                        });
+                    }
                     return Ok(true);
                 }
             }

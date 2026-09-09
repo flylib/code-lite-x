@@ -27,7 +27,7 @@
 | **Phase 7** | Editable Editor Kernel（可编辑编辑器内核） | Phase 6.0 | [已完成 ✅ 2026-09-09] |
 | **Phase 8** | IDE Core（LSP Supervisor / Ghost Text / Tabs·Split·Gutter） | Phase 6 | [已完成 ✅ 2026-09-10] |
 | **Phase 9** | Agent Runtime + Multi-file + Git Worktree | Phase 7 | [已完成 ✅ 2026-09-10] |
-| **Phase 10** | 检索/上下文层（项目指令 → Memory → Skill → MCP） | — | — |
+| **Phase 10** | 检索/上下文层（项目指令 → Memory → Skill → MCP） | — | [已完成 ✅ 2026-09-10] |
 | **Phase 11** | Cross-platform Release（全平台发布与增量更新） | Phase 9 | Phase 9 |
 | **Phase 12** | WASM Plugin Ecosystem（插件生态） | Phase 8 | Phase 8 |
 
@@ -524,7 +524,7 @@ Agent 修改 → 独立 Worktree → Build / Test → Review → Merge
 
 ---
 
-### 🔹 Phase 10: 检索 / 上下文层（本版唯一全新架构）
+### 🔹 Phase 10: 检索 / 上下文层（已完成 ✅ 2026-09-10）
 
 > **本阶段的核心洞察**：**Memory 检索与 Skill 选择是同一个操作 —— 按相关性注入上下文。**
 > 分开建设等于把检索层写两遍。故 Memory、Skill、MCP、项目指令文件同属本阶段，共用一套选择机器。

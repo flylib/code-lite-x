@@ -167,6 +167,29 @@ void main() {
           expect(wtDiscardRes.containsKey('status'), isTrue);
         }
 
+        // Phase 10: Context Engine, Instructions, Memory & Skills C-ABI
+        final promptBuild = ffi.buildTaskPrompt('Refactor math logic', focusFile: 'src/math.rs');
+        expect(promptBuild.containsKey('status'), isTrue);
+        expect(promptBuild['status'], equals('ok'));
+        expect(promptBuild.containsKey('prompt'), isTrue);
+        expect(promptBuild.containsKey('insights'), isTrue);
+
+        final recDec = ffi.recordDecisionMemory('test-sess', 'approval', 'Modify math.rs', 'Approved by user');
+        expect(recDec['status'], equals('ok'));
+
+        final recErr = ffi.recordErrorMemory('test-sess', 'syntax_error', 'Missing semicolon', 'Always check semicolons in Rust', targetPath: 'src/math.rs');
+        expect(recErr['status'], equals('ok'));
+
+        final memQuery = ffi.queryMemory('math', targetPath: 'src/math.rs');
+        expect(memQuery.containsKey('status'), isTrue);
+        expect(memQuery['status'], equals('ok'));
+
+        final skills = ffi.listSkills();
+        expect(skills, isA<List>());
+
+        final mcpTools = ffi.listMcpTools();
+        expect(mcpTools, isA<List>());
+
         try {
           final f = File(testTargetFile);
           if (f.existsSync()) f.deleteSync();
@@ -246,6 +269,39 @@ void main() {
         final wtDiscard = await client.worktreeDiscard('task-wt-client');
         expect(wtDiscard.containsKey('status'), isTrue);
       }
+
+      // Test ApiClient Phase 10 methods
+      final promptContext = await client.buildTaskPrompt('Implement neural search');
+      expect(promptContext.containsKey('status'), isTrue);
+      expect(promptContext['status'], equals('ok'));
+      expect(promptContext.containsKey('insights'), isTrue);
+
+      final recDecClient = await client.recordDecisionMemory(
+        sessionId: 'test-client-sess',
+        decisionType: 'approval',
+        subject: 'Allow database migration',
+        detail: 'User approved SQLite migration',
+      );
+      expect(recDecClient['status'], equals('ok'));
+
+      final recErrClient = await client.recordErrorMemory(
+        sessionId: 'test-client-sess',
+        errorType: 'command_failed',
+        summary: 'cargo check failed',
+        lesson: 'cargo must use --offline flag',
+      );
+      expect(recErrClient['status'], equals('ok'));
+
+      final memQueryClient = await client.queryMemory('offline');
+      expect(memQueryClient.containsKey('status'), isTrue);
+      expect(memQueryClient['status'], equals('ok'));
+
+      final skillsList = await client.listSkills();
+      expect(skillsList, isA<List>());
+      expect(skillsList.isNotEmpty, isTrue);
+
+      final mcpList = await client.listMcpTools();
+      expect(mcpList, isA<List>());
     });
   });
 }

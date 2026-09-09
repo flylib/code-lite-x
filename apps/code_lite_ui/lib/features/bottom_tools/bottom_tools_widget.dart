@@ -402,69 +402,6 @@ class _BottomToolsWidgetState extends State<BottomToolsWidget> {
     );
   }
 
-  Widget _buildCommitRow({
-    required Color graphColor,
-    required String desc,
-    required String author,
-    required String date,
-    bool isActive = false,
-  }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 6),
-      decoration: BoxDecoration(
-        color: isActive ? IntelliJTheme.accentBlue.withOpacity(0.18) : Colors.transparent,
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 8,
-            height: 8,
-            decoration: BoxDecoration(color: graphColor, shape: BoxShape.circle),
-          ),
-          Container(width: 14, height: 1.5, color: graphColor),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              desc,
-              style: TextStyle(
-                color: isActive ? IntelliJTheme.textHigh : IntelliJTheme.textPrimary,
-                fontSize: 11,
-                fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
-              ),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          const SizedBox(width: 8),
-          Flexible(
-            child: Text(
-              author,
-              style: const TextStyle(color: IntelliJTheme.textMuted, fontSize: 10),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          const SizedBox(width: 8),
-          Text(date, style: const TextStyle(color: IntelliJTheme.textMuted, fontSize: 10)),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildChangedFileItem(String path, {bool isAdd = false, bool isMod = false}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        children: [
-          Text(isAdd ? '+' : '•', style: TextStyle(color: isAdd ? IntelliJTheme.gitGreen : IntelliJTheme.gitBlue, fontSize: 11)),
-          const SizedBox(width: 4),
-          Expanded(
-            child: Text(path, style: const TextStyle(color: IntelliJTheme.textPrimary, fontSize: 10, fontFamily: 'monospace'), overflow: TextOverflow.ellipsis),
-          ),
-        ],
-      ),
-    );
-  }
-
   // 2. SQLite State & Rollback Panel
   Widget _buildSqlitePanel() {
     return Padding(

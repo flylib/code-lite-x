@@ -9,8 +9,6 @@ void main() {
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
     final client = ApiClient();
-    String? navigatedPath;
-    int? navigatedLine;
 
     await tester.pumpWidget(
       MaterialApp(
@@ -21,10 +19,7 @@ void main() {
                 GlobalSearchModal.show(
                   context,
                   client: client,
-                  onNavigate: (path, line) {
-                    navigatedPath = path;
-                    navigatedLine = line;
-                  },
+                  onNavigate: (_, __) {},
                 );
               },
               child: const Text('Open Search'),

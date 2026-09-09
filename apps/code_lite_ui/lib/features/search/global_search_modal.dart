@@ -44,7 +44,6 @@ class _GlobalSearchModalState extends State<GlobalSearchModal> {
   String? _statusMessage;
 
   List<Map<String, dynamic>> _matches = [];
-  int _replacedCount = 0;
 
   @override
   void initState() {
@@ -121,7 +120,6 @@ class _GlobalSearchModalState extends State<GlobalSearchModal> {
     final count = (res['replaced_count'] as int?) ?? 0;
 
     setState(() {
-      _replacedCount = count;
       _statusMessage = 'Successfully replaced $count occurrences across workspace';
     });
 

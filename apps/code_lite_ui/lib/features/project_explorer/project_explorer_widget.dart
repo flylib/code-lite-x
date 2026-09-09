@@ -40,11 +40,11 @@ class _ProjectExplorerWidgetState extends State<ProjectExplorerWidget> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Row(
+                const Row(
                   children: [
-                    const Text('Project', style: TextStyle(color: IntelliJTheme.textHigh, fontSize: 12, fontWeight: FontWeight.w600)),
-                    const SizedBox(width: 4),
-                    const Icon(Icons.arrow_drop_down, size: 16, color: IntelliJTheme.textMuted),
+                    Text('Project', style: TextStyle(color: IntelliJTheme.textHigh, fontSize: 12, fontWeight: FontWeight.w600)),
+                    SizedBox(width: 4),
+                    Icon(Icons.arrow_drop_down, size: 16, color: IntelliJTheme.textMuted),
                   ],
                 ),
                 Row(

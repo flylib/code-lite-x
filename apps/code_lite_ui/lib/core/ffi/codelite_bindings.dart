@@ -147,6 +147,24 @@ typedef _GitRevertFileDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<C
 typedef _JsonRpcCallC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> requestJson);
 typedef _JsonRpcCallDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> requestJson);
 
+typedef _ContextBuildTaskPromptC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> taskPrompt, Pointer<Char> focusFile, Pointer<Char> focusSymbol);
+typedef _ContextBuildTaskPromptDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> taskPrompt, Pointer<Char> focusFile, Pointer<Char> focusSymbol);
+
+typedef _MemoryQueryC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> query, Pointer<Char> targetPath, Int32 limit);
+typedef _MemoryQueryDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> query, Pointer<Char> targetPath, int limit);
+
+typedef _MemoryRecordDecisionC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> sessionId, Pointer<Char> decisionType, Pointer<Char> subject, Pointer<Char> detail, Pointer<Char> tags);
+typedef _MemoryRecordDecisionDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> sessionId, Pointer<Char> decisionType, Pointer<Char> subject, Pointer<Char> detail, Pointer<Char> tags);
+
+typedef _MemoryRecordErrorC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> sessionId, Pointer<Char> errorType, Pointer<Char> targetPath, Pointer<Char> summary, Pointer<Char> lesson, Pointer<Char> snippet);
+typedef _MemoryRecordErrorDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> sessionId, Pointer<Char> errorType, Pointer<Char> targetPath, Pointer<Char> summary, Pointer<Char> lesson, Pointer<Char> snippet);
+
+typedef _SkillsListC = Pointer<Char> Function(Pointer<Void> ctx);
+typedef _SkillsListDart = Pointer<Char> Function(Pointer<Void> ctx);
+
+typedef _McpToolsListC = Pointer<Char> Function(Pointer<Void> ctx);
+typedef _McpToolsListDart = Pointer<Char> Function(Pointer<Void> ctx);
+
 /// Dart FFI bindings to Rust Core dynamic library (`libcodelite.dylib`).
 class CodeLiteBindings {
   static final CodeLiteBindings instance = CodeLiteBindings._();
@@ -220,6 +238,12 @@ class CodeLiteBindings {
   late final _GitFileHunksDart _gitFileHunks;
   late final _GitRevertFileDart _gitRevertFile;
   late final _JsonRpcCallDart _jsonRpcCall;
+  late final _ContextBuildTaskPromptDart _contextBuildTaskPrompt;
+  late final _MemoryQueryDart _memoryQuery;
+  late final _MemoryRecordDecisionDart _memoryRecordDecision;
+  late final _MemoryRecordErrorDart _memoryRecordError;
+  late final _SkillsListDart _skillsList;
+  late final _McpToolsListDart _mcpToolsList;
 
   Pointer<Void>? get contextPointer => _ctx;
 
@@ -292,6 +316,12 @@ class CodeLiteBindings {
       _gitFileHunks = _dylib!.lookupFunction<_GitFileHunksC, _GitFileHunksDart>('codelite_git_file_diff_hunks');
       _gitRevertFile = _dylib!.lookupFunction<_GitRevertFileC, _GitRevertFileDart>('codelite_git_revert_file');
       _jsonRpcCall = _dylib!.lookupFunction<_JsonRpcCallC, _JsonRpcCallDart>('codelite_jsonrpc_call');
+      _contextBuildTaskPrompt = _dylib!.lookupFunction<_ContextBuildTaskPromptC, _ContextBuildTaskPromptDart>('codelite_context_build_task_prompt');
+      _memoryQuery = _dylib!.lookupFunction<_MemoryQueryC, _MemoryQueryDart>('codelite_memory_query');
+      _memoryRecordDecision = _dylib!.lookupFunction<_MemoryRecordDecisionC, _MemoryRecordDecisionDart>('codelite_memory_record_decision');
+      _memoryRecordError = _dylib!.lookupFunction<_MemoryRecordErrorC, _MemoryRecordErrorDart>('codelite_memory_record_error');
+      _skillsList = _dylib!.lookupFunction<_SkillsListC, _SkillsListDart>('codelite_skills_list');
+      _mcpToolsList = _dylib!.lookupFunction<_McpToolsListC, _McpToolsListDart>('codelite_mcp_tools_list');
 
       final pathPtr = _toCString(workspacePath);
       _ctx = _init(pathPtr.pointer);
@@ -812,6 +842,130 @@ class CodeLiteBindings {
     final ptr = _gitRevertFile(_ctx!, pathPtr.pointer);
     _freeAllocatedString(pathPtr);
     return _parseJsonMap(_fromCString(ptr));
+  }
+
+  // ---------------------------------------------------------------------------
+  // Context Engine & Memory (Phase 10)
+  // ---------------------------------------------------------------------------
+
+  Map<String, dynamic> buildTaskPrompt(String taskPrompt, {String? focusFile, String? focusSymbol}) {
+    if (!isAvailable) {
+      return {
+        'status': 'ok',
+        'prompt': 'Offline mock context for: $taskPrompt',
+        'insights': {
+          'instruction_files': ['AGENTS.md'],
+          'active_skills': [],
+          'recalled_decisions': 0,
+          'recalled_errors': 0,
+          'has_codegraph': false,
+          'has_lsp_diagnostics': false,
+        }
+      };
+    }
+    final pPrompt = _toCString(taskPrompt);
+    final pFile = focusFile != null ? _toCString(focusFile) : null;
+    final pSym = focusSymbol != null ? _toCString(focusSymbol) : null;
+
+    final ptr = _contextBuildTaskPrompt(
+      _ctx!,
+      pPrompt.pointer,
+      pFile != null ? pFile.pointer : nullptr,
+      pSym != null ? pSym.pointer : nullptr,
+    );
+
+    _freeAllocatedString(pPrompt);
+    if (pFile != null) _freeAllocatedString(pFile);
+    if (pSym != null) _freeAllocatedString(pSym);
+
+    return _parseJsonMap(_fromCString(ptr));
+  }
+
+  Map<String, dynamic> queryMemory(String query, {String? targetPath, int limit = 10}) {
+    if (!isAvailable) return {'status': 'error', 'decisions': [], 'errors': []};
+    final pQuery = _toCString(query);
+    final pPath = targetPath != null ? _toCString(targetPath) : null;
+
+    final ptr = _memoryQuery(
+      _ctx!,
+      pQuery.pointer,
+      pPath != null ? pPath.pointer : nullptr,
+      limit,
+    );
+
+    _freeAllocatedString(pQuery);
+    if (pPath != null) _freeAllocatedString(pPath);
+
+    return _parseJsonMap(_fromCString(ptr));
+  }
+
+  Map<String, dynamic> recordDecisionMemory(String sessionId, String decisionType, String subject, String detail, {String? tags}) {
+    if (!isAvailable) return {'status': 'error'};
+    final pSess = _toCString(sessionId);
+    final pType = _toCString(decisionType);
+    final pSubj = _toCString(subject);
+    final pDet = _toCString(detail);
+    final pTags = tags != null ? _toCString(tags) : null;
+
+    final ptr = _memoryRecordDecision(
+      _ctx!,
+      pSess.pointer,
+      pType.pointer,
+      pSubj.pointer,
+      pDet.pointer,
+      pTags != null ? pTags.pointer : nullptr,
+    );
+
+    _freeAllocatedString(pSess);
+    _freeAllocatedString(pType);
+    _freeAllocatedString(pSubj);
+    _freeAllocatedString(pDet);
+    if (pTags != null) _freeAllocatedString(pTags);
+
+    return _parseJsonMap(_fromCString(ptr));
+  }
+
+  Map<String, dynamic> recordErrorMemory(String sessionId, String errorType, String summary, String lesson, {String? targetPath, String? snippet}) {
+    if (!isAvailable) return {'status': 'error'};
+    final pSess = _toCString(sessionId);
+    final pType = _toCString(errorType);
+    final pSum = _toCString(summary);
+    final pLes = _toCString(lesson);
+    final pPath = targetPath != null ? _toCString(targetPath) : null;
+    final pSnip = snippet != null ? _toCString(snippet) : null;
+
+    final ptr = _memoryRecordError(
+      _ctx!,
+      pSess.pointer,
+      pType.pointer,
+      pPath != null ? pPath.pointer : nullptr,
+      pSum.pointer,
+      pLes.pointer,
+      pSnip != null ? pSnip.pointer : nullptr,
+    );
+
+    _freeAllocatedString(pSess);
+    _freeAllocatedString(pType);
+    _freeAllocatedString(pSum);
+    _freeAllocatedString(pLes);
+    if (pPath != null) _freeAllocatedString(pPath);
+    if (pSnip != null) _freeAllocatedString(pSnip);
+
+    return _parseJsonMap(_fromCString(ptr));
+  }
+
+  List<dynamic> listSkills() {
+    if (!isAvailable) return [];
+    final ptr = _skillsList(_ctx!);
+    final res = _parseJsonMap(_fromCString(ptr));
+    return (res['skills'] as List<dynamic>?) ?? [];
+  }
+
+  List<dynamic> listMcpTools() {
+    if (!isAvailable) return [];
+    final ptr = _mcpToolsList(_ctx!);
+    final res = _parseJsonMap(_fromCString(ptr));
+    return (res['tools'] as List<dynamic>?) ?? [];
   }
 
   // ---------------------------------------------------------------------------

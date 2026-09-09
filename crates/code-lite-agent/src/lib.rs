@@ -11,26 +11,32 @@ pub mod context_builder;
 pub mod error;
 pub mod executor;
 pub mod fim;
+pub mod instructions;
 pub mod llm;
+pub mod mcp;
 pub mod multi_file;
 pub mod observation;
 pub mod permission;
 pub mod planner;
+pub mod skill;
 pub mod tool_runtime;
 
-pub use context_builder::AgentContextBuilder;
+pub use context_builder::{AgentContextBuilder, ContextInsights};
 pub use error::{AgentError, ToolError};
 pub use executor::{PlanExecutor, StepExecutionResult};
 pub use fim::{FimContext, FimEngine};
+pub use instructions::{DiscoveredInstruction, InstructionScanner, ProjectInstructions};
 pub use llm::{
     BuiltinRuleProvider, ChatCompletion, ChatMessage, LlmProvider, LlmToolCall,
     LlmToolDefinition, OpenAiCompatibleProvider, OpenAiConfig, StreamToken,
     StructuredOutputSchema, ThinkingStreamParser,
 };
+pub use mcp::{McpRegistry, McpToolDefinition};
 pub use multi_file::{FilePatchTarget, MultiFilePlanSummary, MultiFilePlanner};
 pub use observation::Observation;
 pub use permission::{ApprovalDecision, ApprovalManager, PermissionPolicy, RiskLevel};
 pub use planner::{Plan, PlanStep, StepStatus, TaskPlanner};
+pub use skill::{Skill, SkillFrontmatter, SkillManager};
 pub use tool_runtime::{ExecutionResult, ToolRuntime};
 
 pub fn version() -> &'static str {

@@ -375,3 +375,137 @@ fn test_observation_feedback_and_replan() {
     let _ = fs::remove_dir_all(&workspace);
 }
 
+#[test]
+fn test_phase10_memory_recording_and_context_engine_flow() {
+    use code_lite_agent::context_builder::AgentContextBuilder;
+    use code_lite_agent::instructions::InstructionScanner;
+    use code_lite_agent::mcp::McpRegistry;
+    use code_lite_agent::skill::{Skill, SkillManager};
+    use code_lite_storage::MemoryStore;
+
+    let (workspace, db, session_id) = setup_test_env();
+
+    // 1. Create AGENTS.md and dangerous.rs in workspace
+    fs::write(
+        workspace.join("AGENTS.md"),
+        "# Project Instructions\n- Enforce offline cargo builds\n- Wrap Row text with Expanded\n",
+    )
+    .unwrap();
+    fs::write(
+        workspace.join("dangerous.rs"),
+        "// existing content\n",
+    )
+    .unwrap();
+
+    let session_store = SessionStore::new(db.clone());
+    session_store
+        .create_task("task-mem", &session_id, "Apply dangerous changes")
+        .unwrap();
+
+    // 2. Setup MemoryStore, Skills, and MCP
+    let memory_store = MemoryStore::new(db.clone());
+    let runtime = ToolRuntime::new(&workspace, &session_id, Some("task-mem"), db.clone());
+    let approval_store = ApprovalStore::new(db.clone());
+    let approval_mgr = ApprovalManager::new(approval_store.clone());
+
+    let executor = PlanExecutor::new(runtime, approval_mgr, None, None)
+        .with_memory_store(memory_store.clone());
+
+    // 3. Create steps: step_1 (apply_patch safe), step_2 (apply_patch dangerous)
+    let planner = TaskPlanner::new();
+    let step_1 = planner.create_step(
+        "step_1",
+        "Add helper function",
+        "apply_patch",
+        serde_json::json!({"path": "dangerous.rs", "content": "// helper\n"}),
+    );
+    let step_2 = planner.create_step(
+        "step_2",
+        "Delete database",
+        "apply_patch",
+        serde_json::json!({"path": "dangerous.rs", "content": "fn rm_rf() {}\n"}),
+    );
+
+    let mut plan = planner.plan_task(
+        &session_id,
+        "task-mem",
+        "Apply changes",
+        Some("dangerous.rs"),
+        None,
+        None,
+    );
+    plan.steps = vec![step_1, step_2];
+
+    // Step 1 is apply_patch -> Suspended -> Approve -> Completed
+    let s1 = executor.execute_next_step(&mut plan).unwrap();
+    let req1_id = match s1 {
+        StepExecutionResult::SuspendedForApproval { request_id, .. } => request_id,
+        other => panic!("Expected SuspendedForApproval for step 1, got {:?}", other),
+    };
+    approval_store.resolve_request(&req1_id, ApprovalStatus::Approved).unwrap();
+    let s1_done = executor.execute_next_step(&mut plan).unwrap();
+    assert!(matches!(s1_done, StepExecutionResult::Completed { .. }));
+
+    // Step 2 is apply_patch -> Suspended -> Deny -> Records DecisionMemory
+    let s2 = executor.execute_next_step(&mut plan).unwrap();
+    let req2_id = match s2 {
+        StepExecutionResult::SuspendedForApproval { request_id, .. } => request_id,
+        other => panic!("Expected SuspendedForApproval for step 2, got {:?}", other),
+    };
+
+    // Reject approval
+    approval_store
+        .resolve_request(&req2_id, ApprovalStatus::Rejected)
+        .unwrap();
+
+    // Step 2 execution rejected -> Records Decision Memory
+    let err_res = executor.execute_next_step(&mut plan);
+    assert!(err_res.is_err());
+
+    let decisions = memory_store.query_decisions("apply_patch", 5).unwrap();
+    assert_eq!(decisions.len(), 2); // 1 approval_granted, 1 approval_rejected
+
+    // 4. Test Step Rollback -> Records Error Memory
+    let rollback_ok = executor.rollback_step(&mut plan, "step_1").unwrap();
+    assert!(rollback_ok);
+
+    let errors = memory_store.query_errors("step_1", None, 5).unwrap();
+    assert_eq!(errors.len(), 1);
+    assert_eq!(errors[0].error_type, "manual_step_rollback");
+
+    // 5. Test Unified Context Engine Assembly
+    let instructions = InstructionScanner::scan(&workspace);
+    let skill = Skill {
+        name: "flutter-ui".into(),
+        description: "IntelliJ Darcula defensive layout rules".into(),
+        tools: vec!["apply_patch".into()],
+        instructions: "Always wrap text with Expanded.".into(),
+        file_path: workspace.join("SKILL.md"),
+    };
+    let skill_mgr = SkillManager::with_skills(vec![skill]);
+    let mut mcp_reg = McpRegistry::new();
+    mcp_reg.register("codegraph_search", "codegraph", "Search symbols", serde_json::json!({}));
+
+    let context_engine = AgentContextBuilder::new(None, None)
+        .with_instructions(instructions)
+        .with_memory_store(memory_store)
+        .with_skill_manager(skill_mgr)
+        .with_mcp_registry(mcp_reg);
+
+    let prompt = context_engine.build_task_context("Fix flutter layout in dangerous.rs", Some("dangerous.rs"), None);
+    assert!(prompt.contains("AGENTS.md"));
+    assert!(prompt.contains("Enforce offline cargo builds"));
+    assert!(prompt.contains("flutter-ui"));
+    assert!(prompt.contains("Historical Project Memory & Lessons Learned"));
+    assert!(prompt.contains("codegraph_search"));
+
+    let insights = context_engine.get_insights("Fix flutter layout in dangerous.rs", Some("dangerous.rs"), None);
+    assert_eq!(insights.instruction_files, vec!["AGENTS.md"]);
+    assert_eq!(insights.active_skills, vec!["flutter-ui"]);
+    assert!(insights.recalled_decisions >= 1);
+    assert!(insights.recalled_errors >= 1);
+
+    // Cleanup
+    let _ = fs::remove_dir_all(&workspace);
+}
+

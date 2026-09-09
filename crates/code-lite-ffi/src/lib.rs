@@ -39,6 +39,10 @@ pub struct CodeLiteContext {
     pub session_store: SessionStore,
     pub diagnostic_store: code_lite_storage::DiagnosticStore,
     pub approval_store: code_lite_storage::ApprovalStore,
+    pub memory_store: code_lite_storage::MemoryStore,
+    pub skill_manager: Mutex<code_lite_agent::SkillManager>,
+    pub mcp_registry: Mutex<code_lite_agent::McpRegistry>,
+    pub instructions: Mutex<code_lite_agent::ProjectInstructions>,
     pub lsp_client: Mutex<Option<std::sync::Arc<code_lite_lsp::LspClient>>>,
     pub lsp_supervisor: Mutex<Option<std::sync::Arc<code_lite_lsp::ProcessSupervisor>>>,
     pub active_plans: Mutex<HashMap<String, code_lite_agent::Plan>>,
@@ -117,6 +121,13 @@ pub unsafe extern "C" fn codelite_init(workspace_path: *const c_char) -> *mut Co
 
     let diagnostic_store = code_lite_storage::DiagnosticStore::new(db.clone());
     let approval_store = code_lite_storage::ApprovalStore::new(db.clone());
+    let memory_store = code_lite_storage::MemoryStore::new(db.clone());
+    let instructions = Mutex::new(code_lite_agent::InstructionScanner::scan(&root));
+    let skill_manager = Mutex::new(code_lite_agent::SkillManager::scan_workspace(&root));
+    let mut mcp = code_lite_agent::McpRegistry::new();
+    mcp.load_from_workspace(&root);
+    let mcp_registry = Mutex::new(mcp);
+
     let v_server = code_lite_lsp::VirtualLspServer::new()
         .with_diagnostic_store(diagnostic_store.clone());
     let supervisor = code_lite_lsp::ProcessSupervisor::new(&root, v_server.clone());
@@ -136,6 +147,10 @@ pub unsafe extern "C" fn codelite_init(workspace_path: *const c_char) -> *mut Co
         session_store,
         diagnostic_store,
         approval_store,
+        memory_store,
+        skill_manager,
+        mcp_registry,
+        instructions,
         lsp_client,
         lsp_supervisor,
         active_plans: Mutex::new(HashMap::new()),
@@ -2364,6 +2379,227 @@ pub unsafe extern "C" fn codelite_git_revert_file(
 }
 
 // ---------------------------------------------------------------------------
+// 12. Context Engine & Memory (Phase 10)
+// ---------------------------------------------------------------------------
+
+/// Builds a high-density, unified prompt context and insights for an AI task.
+#[no_mangle]
+pub unsafe extern "C" fn codelite_context_build_task_prompt(
+    ctx: *mut CodeLiteContext,
+    task_prompt: *const c_char,
+    focus_file: *const c_char,
+    focus_symbol: *const c_char,
+) -> *const c_char {
+    if ctx.is_null() {
+        return err_json("Context is null");
+    }
+    let ctx = &*ctx;
+
+    let prompt = c_str_to_str(task_prompt).unwrap_or("");
+    let file = c_str_to_str(focus_file);
+    let symbol = c_str_to_str(focus_symbol);
+
+    let lsp = ctx.lsp_client.lock().clone();
+    let instructions = ctx.instructions.lock().clone();
+    let skill_mgr = ctx.skill_manager.lock().clone();
+    let mcp_reg = ctx.mcp_registry.lock().clone();
+
+    let builder = code_lite_agent::AgentContextBuilder::new(None, lsp)
+        .with_instructions(instructions)
+        .with_memory_store(ctx.memory_store.clone())
+        .with_skill_manager(skill_mgr)
+        .with_mcp_registry(mcp_reg);
+
+    let full_prompt = builder.build_task_context(prompt, file, symbol);
+    let insights = builder.get_insights(prompt, file, symbol);
+
+    let res = serde_json::json!({
+        "status": "ok",
+        "prompt": full_prompt,
+        "insights": insights,
+    });
+    json_to_c_char(&res)
+}
+
+/// Queries both decision memories and error memories for a prompt query or file.
+#[no_mangle]
+pub unsafe extern "C" fn codelite_memory_query(
+    ctx: *mut CodeLiteContext,
+    query: *const c_char,
+    target_path: *const c_char,
+    limit: i32,
+) -> *const c_char {
+    if ctx.is_null() {
+        return err_json("Context is null");
+    }
+    let ctx = &*ctx;
+
+    let q = c_str_to_str(query).unwrap_or("");
+    let path = c_str_to_str(target_path);
+    let lim = if limit > 0 { limit as usize } else { 10 };
+
+    let decisions = ctx.memory_store.query_decisions(q, lim).unwrap_or_default();
+    let errors = ctx.memory_store.query_errors(q, path, lim).unwrap_or_default();
+
+    let res = serde_json::json!({
+        "status": "ok",
+        "decisions": decisions,
+        "errors": errors,
+    });
+    json_to_c_char(&res)
+}
+
+/// Records a decision memory into the persistent SQLite store.
+#[no_mangle]
+pub unsafe extern "C" fn codelite_memory_record_decision(
+    ctx: *mut CodeLiteContext,
+    session_id: *const c_char,
+    decision_type: *const c_char,
+    subject: *const c_char,
+    detail: *const c_char,
+    tags: *const c_char,
+) -> *const c_char {
+    if ctx.is_null() {
+        return err_json("Context is null");
+    }
+    let ctx = &*ctx;
+
+    let d_type = match c_str_to_str(decision_type) {
+        Some(s) => s.to_string(),
+        None => return err_json("decision_type is required"),
+    };
+    let subj = match c_str_to_str(subject) {
+        Some(s) => s.to_string(),
+        None => return err_json("subject is required"),
+    };
+    let det = match c_str_to_str(detail) {
+        Some(s) => s.to_string(),
+        None => return err_json("detail is required"),
+    };
+
+    let mem = code_lite_storage::NewDecisionMemory {
+        session_id: c_str_to_str(session_id).map(|s| s.to_string()),
+        decision_type: d_type,
+        subject: subj,
+        detail: det,
+        context_tags: c_str_to_str(tags).map(|s| s.to_string()),
+    };
+
+    match ctx.memory_store.record_decision(&mem) {
+        Ok(id) => {
+            let res = serde_json::json!({ "status": "ok", "id": id });
+            json_to_c_char(&res)
+        }
+        Err(e) => err_json(&e.to_string()),
+    }
+}
+
+/// Records an error memory into the persistent SQLite store.
+#[no_mangle]
+pub unsafe extern "C" fn codelite_memory_record_error(
+    ctx: *mut CodeLiteContext,
+    session_id: *const c_char,
+    error_type: *const c_char,
+    target_path: *const c_char,
+    summary: *const c_char,
+    lesson: *const c_char,
+    snippet: *const c_char,
+) -> *const c_char {
+    if ctx.is_null() {
+        return err_json("Context is null");
+    }
+    let ctx = &*ctx;
+
+    let e_type = match c_str_to_str(error_type) {
+        Some(s) => s.to_string(),
+        None => return err_json("error_type is required"),
+    };
+    let sum = match c_str_to_str(summary) {
+        Some(s) => s.to_string(),
+        None => return err_json("summary is required"),
+    };
+    let les = match c_str_to_str(lesson) {
+        Some(s) => s.to_string(),
+        None => return err_json("lesson is required"),
+    };
+
+    let mem = code_lite_storage::NewErrorMemory {
+        session_id: c_str_to_str(session_id).map(|s| s.to_string()),
+        error_type: e_type,
+        target_path: c_str_to_str(target_path).map(|s| s.to_string()),
+        error_summary: sum,
+        lesson_learned: les,
+        context_snippet: c_str_to_str(snippet).map(|s| s.to_string()),
+    };
+
+    match ctx.memory_store.record_error(&mem) {
+        Ok(id) => {
+            let res = serde_json::json!({ "status": "ok", "id": id });
+            json_to_c_char(&res)
+        }
+        Err(e) => err_json(&e.to_string()),
+    }
+}
+
+/// Lists all discovered skills in the workspace.
+#[no_mangle]
+pub unsafe extern "C" fn codelite_skills_list(ctx: *mut CodeLiteContext) -> *const c_char {
+    if ctx.is_null() {
+        return err_json("Context is null");
+    }
+    let ctx = &*ctx;
+
+    let mgr = ctx.skill_manager.lock();
+    let skills: Vec<_> = mgr
+        .skills()
+        .iter()
+        .map(|s| {
+            serde_json::json!({
+                "name": s.name,
+                "description": s.description,
+                "tools": s.tools,
+                "file_path": s.file_path.to_string_lossy(),
+            })
+        })
+        .collect();
+
+    let res = serde_json::json!({
+        "status": "ok",
+        "skills": skills,
+    });
+    json_to_c_char(&res)
+}
+
+/// Lists all registered external MCP tools.
+#[no_mangle]
+pub unsafe extern "C" fn codelite_mcp_tools_list(ctx: *mut CodeLiteContext) -> *const c_char {
+    if ctx.is_null() {
+        return err_json("Context is null");
+    }
+    let ctx = &*ctx;
+
+    let registry = ctx.mcp_registry.lock();
+    let tools: Vec<_> = registry
+        .list_tools()
+        .iter()
+        .map(|t| {
+            serde_json::json!({
+                "name": t.name,
+                "server_name": t.server_name,
+                "description": t.description,
+                "risk_level": format!("{:?}", t.risk_level),
+            })
+        })
+        .collect();
+
+    let res = serde_json::json!({
+        "status": "ok",
+        "tools": tools,
+    });
+    json_to_c_char(&res)
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -2874,6 +3110,92 @@ mod tests {
             assert!(git_str.contains("\"branch\":"));
             assert!(git_str.contains("\"changes\":["));
             codelite_string_free(git_ptr as *mut c_char);
+
+            codelite_destroy(ctx);
+            let _ = std::fs::remove_dir_all(&temp_dir);
+        }
+    }
+
+    #[test]
+    fn test_phase10_ffi_context_engine_and_memory() {
+        unsafe {
+            let temp_dir = std::env::temp_dir().join(format!(
+                "ffi_test_phase10_{}",
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_nanos()
+            ));
+            let _ = std::fs::create_dir_all(&temp_dir);
+            std::fs::write(
+                temp_dir.join("AGENTS.md"),
+                "# Project Instructions\n- Enforce offline tests\n",
+            )
+            .unwrap();
+
+            let root = CString::new(temp_dir.to_str().unwrap()).unwrap();
+            let ctx = codelite_init(root.as_ptr());
+            assert!(!ctx.is_null());
+
+            // 1. Record Decision Memory
+            let s_id = CString::new("sess-1").unwrap();
+            let d_type = CString::new("approval_rejected").unwrap();
+            let subj = CString::new("apply_patch").unwrap();
+            let detail = CString::new("User rejected unsafe deletion").unwrap();
+            let tags = CString::new("security,patch").unwrap();
+            let dec_ptr = codelite_memory_record_decision(
+                ctx,
+                s_id.as_ptr(),
+                d_type.as_ptr(),
+                subj.as_ptr(),
+                detail.as_ptr(),
+                tags.as_ptr(),
+            );
+            let dec_str = CStr::from_ptr(dec_ptr).to_str().unwrap();
+            assert!(dec_str.contains("\"status\":\"ok\""));
+            codelite_string_free(dec_ptr as *mut c_char);
+
+            // 2. Record Error Memory
+            let e_type = CString::new("rollback").unwrap();
+            let path = CString::new("src/main.rs").unwrap();
+            let sum = CString::new("Syntax error: mismatched closing brace").unwrap();
+            let les = CString::new("Check braces balance before applying patch").unwrap();
+            let snip = CString::new("fn main() {").unwrap();
+            let err_ptr = codelite_memory_record_error(
+                ctx,
+                s_id.as_ptr(),
+                e_type.as_ptr(),
+                path.as_ptr(),
+                sum.as_ptr(),
+                les.as_ptr(),
+                snip.as_ptr(),
+            );
+            let err_str = CStr::from_ptr(err_ptr).to_str().unwrap();
+            assert!(err_str.contains("\"status\":\"ok\""));
+            codelite_string_free(err_ptr as *mut c_char);
+
+            // 3. Query Memory
+            let q = CString::new("syntax").unwrap();
+            let q_ptr = codelite_memory_query(ctx, q.as_ptr(), path.as_ptr(), 5);
+            let q_str = CStr::from_ptr(q_ptr).to_str().unwrap();
+            assert!(q_str.contains("mismatched closing brace"));
+            codelite_string_free(q_ptr as *mut c_char);
+
+            // 4. Skills list
+            let skills_ptr = codelite_skills_list(ctx);
+            let skills_str = CStr::from_ptr(skills_ptr).to_str().unwrap();
+            assert!(skills_str.contains("\"status\":\"ok\""));
+            codelite_string_free(skills_ptr as *mut c_char);
+
+            // 5. Build Task Prompt & Insights
+            let task_p = CString::new("Fix syntax in main.rs").unwrap();
+            let sym = CString::new("main").unwrap();
+            let prompt_ptr = codelite_context_build_task_prompt(ctx, task_p.as_ptr(), path.as_ptr(), sym.as_ptr());
+            let prompt_str = CStr::from_ptr(prompt_ptr).to_str().unwrap();
+            assert!(prompt_str.contains("\"status\":\"ok\""));
+            assert!(prompt_str.contains("AGENTS.md"));
+            assert!(prompt_str.contains("\"insights\":{"));
+            codelite_string_free(prompt_ptr as *mut c_char);
 
             codelite_destroy(ctx);
             let _ = std::fs::remove_dir_all(&temp_dir);

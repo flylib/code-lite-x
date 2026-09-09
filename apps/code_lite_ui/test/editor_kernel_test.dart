@@ -652,5 +652,34 @@ void main() {
 
       expect(find.text('Refactor math helper'), findsOneWidget);
     });
+
+    testWidgets('AiAssistantPanel renders Context Engine card and toggles breakdown inspection', (WidgetTester tester) async {
+      await tester.binding.setSurfaceSize(const Size(1000, 700));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      final client = ApiClient();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: AiAssistantPanel(
+              activeFile: 'src/main.rs',
+              onClose: () {},
+              client: client,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('CONTEXT ENGINE (PHASE 10)'), findsOneWidget);
+      expect(find.text('Inspect'), findsOneWidget);
+
+      // Tap Inspect to expand
+      await tester.tap(find.text('Inspect'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Collapse'), findsOneWidget);
+      expect(find.text('PROMPT SYNTHESIS BREAKDOWN'), findsOneWidget);
+    });
   });
 }

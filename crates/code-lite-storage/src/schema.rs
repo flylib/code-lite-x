@@ -171,6 +171,33 @@ pub fn initialize_schema(conn: &Connection) -> Result<()> {
             created_at INTEGER NOT NULL
         );
         CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id);
+
+        -- 13. Decision Memory (Architecture choices, user approvals/rejections, manual interventions)
+        CREATE TABLE IF NOT EXISTS decision_memories (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id TEXT,
+            decision_type TEXT NOT NULL, -- e.g. 'approval_granted', 'approval_rejected', 'user_directive', 'architecture_choice'
+            subject TEXT NOT NULL,       -- tool name, file, or topic
+            detail TEXT NOT NULL,        -- rationale, user reason, or summary
+            context_tags TEXT,           -- comma-separated tags or JSON
+            created_at INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_decision_memories_type ON decision_memories(decision_type);
+        CREATE INDEX IF NOT EXISTS idx_decision_memories_subject ON decision_memories(subject);
+
+        -- 14. Error Memory (Lessons learned from failures, rollbacks, test failures, lsp errors)
+        CREATE TABLE IF NOT EXISTS error_memories (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id TEXT,
+            error_type TEXT NOT NULL,    -- e.g. 'lsp_diagnostic', 'rollback', 'command_failure', 'test_failure'
+            target_path TEXT,            -- file path or module affected
+            error_summary TEXT NOT NULL, -- the error message or symptom
+            lesson_learned TEXT NOT NULL,-- what went wrong / what not to do ("此路不通")
+            context_snippet TEXT,        -- code snippet or failed diff
+            created_at INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_error_memories_type ON error_memories(error_type);
+        CREATE INDEX IF NOT EXISTS idx_error_memories_path ON error_memories(target_path);
         "#,
     )?;
 
