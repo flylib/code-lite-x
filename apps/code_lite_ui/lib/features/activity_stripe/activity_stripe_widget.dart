@@ -1,131 +1,113 @@
 import 'package:flutter/material.dart';
+
+import '../../core/state/layout_store.dart';
 import '../../core/theme/intellij_theme.dart';
+import '../bottom_tools/bottom_tools_widget.dart';
+import 'stripe_button.dart';
 
-enum StripeTool { project, structure, git, codegraph, sqlite, terminal }
+export '../../core/state/layout_store.dart' show LeftTool;
 
+/// 左侧活动条。上半段切左侧工具窗,中段切底部工具窗,下半段是终端与设置。
+///
+/// 之前左侧工具窗和底部工具窗的按钮混在一个 enum 里,选中态语义也混着;
+/// 现在两组各自独立 —— 与 IntelliJ 一致,也和 design/Main.dc.html 对得上。
 class ActivityStripeWidget extends StatelessWidget {
-  final StripeTool activeTool;
-  final ValueChanged<StripeTool> onSelectTool;
-
   const ActivityStripeWidget({
     super.key,
-    required this.activeTool,
-    required this.onSelectTool,
+    required this.leftTool,
+    required this.isLeftOpen,
+    required this.bottomTab,
+    required this.isBottomOpen,
+    required this.onSelectLeftTool,
+    required this.onSelectBottomTab,
   });
+
+  final LeftTool leftTool;
+  final bool isLeftOpen;
+  final BottomToolTab bottomTab;
+  final bool isBottomOpen;
+  final ValueChanged<LeftTool> onSelectLeftTool;
+  final ValueChanged<BottomToolTab> onSelectBottomTab;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 44,
+      width: IntelliJMetrics.activityStripe,
       decoration: const BoxDecoration(
         color: IntelliJTheme.stripeBg,
         border: Border(right: BorderSide(color: IntelliJTheme.borderSubtle)),
       ),
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          // Top tools
-          Column(
-            children: [
-              _buildStripeIcon(
-                icon: Icons.folder_outlined,
-                tool: StripeTool.project,
-                tooltip: 'Project (Alt+1)',
-              ),
-              const SizedBox(height: 6),
-              _buildStripeIcon(
-                icon: Icons.account_tree_outlined,
-                tool: StripeTool.structure,
-                tooltip: 'Structure (Alt+7)',
-                badgeColor: IntelliJTheme.accentYellow,
-              ),
-              const SizedBox(height: 6),
-              _buildStripeIcon(
-                icon: Icons.commit,
-                tool: StripeTool.git,
-                tooltip: 'Git Log & Commit',
-              ),
-              const SizedBox(height: 6),
-              _buildStripeIcon(
-                icon: Icons.hub_outlined,
-                tool: StripeTool.codegraph,
-                tooltip: 'CodeGraph Topology',
-                badgeColor: IntelliJTheme.syntaxType,
-              ),
-              const SizedBox(height: 6),
-              _buildStripeIcon(
-                icon: Icons.storage_outlined,
-                tool: StripeTool.sqlite,
-                tooltip: 'SQLite State & Rollback',
-                badgeColor: IntelliJTheme.gitYellow,
-              ),
-            ],
+          StripeButton(
+            icon: Icons.folder_outlined,
+            tooltip: '项目 (⌘1)',
+            isActive: isLeftOpen && leftTool == LeftTool.project,
+            onTap: () => onSelectLeftTool(LeftTool.project),
+          ),
+          const SizedBox(height: 6),
+          StripeButton(
+            icon: Icons.account_tree_outlined,
+            tooltip: '结构 (⌘7)',
+            isActive: isLeftOpen && leftTool == LeftTool.structure,
+            onTap: () => onSelectLeftTool(LeftTool.structure),
           ),
 
-          // Bottom tools
-          Column(
-            children: [
-              _buildStripeIcon(
-                icon: Icons.terminal_outlined,
-                tool: StripeTool.terminal,
-                tooltip: 'Terminal (Alt+F12)',
-              ),
-              const SizedBox(height: 6),
-              IconButton(
-                icon: const Icon(Icons.tune, size: 18, color: IntelliJTheme.textMuted),
-                tooltip: 'Settings',
-                onPressed: () {},
-              ),
-            ],
+          const _StripeDivider(),
+
+          StripeButton(
+            icon: Icons.commit_outlined,
+            tooltip: 'Git 提交与日志',
+            isActive: isBottomOpen && bottomTab == BottomToolTab.git,
+            onTap: () => onSelectBottomTab(BottomToolTab.git),
+          ),
+          const SizedBox(height: 6),
+          StripeButton(
+            icon: Icons.hub_outlined,
+            tooltip: 'CodeGraph 调用图',
+            isActive: isBottomOpen && bottomTab == BottomToolTab.codegraph,
+            onTap: () => onSelectBottomTab(BottomToolTab.codegraph),
+          ),
+          const SizedBox(height: 6),
+          StripeButton(
+            icon: Icons.storage_outlined,
+            tooltip: '操作记录与回滚',
+            isActive: isBottomOpen && bottomTab == BottomToolTab.sqlite,
+            onTap: () => onSelectBottomTab(BottomToolTab.sqlite),
+          ),
+
+          const Spacer(),
+
+          StripeButton(
+            icon: Icons.terminal_outlined,
+            tooltip: '终端 (⌥F12)',
+            isActive: isBottomOpen && bottomTab == BottomToolTab.terminal,
+            onTap: () => onSelectBottomTab(BottomToolTab.terminal),
+          ),
+          const SizedBox(height: 6),
+          StripeButton(
+            icon: Icons.tune,
+            tooltip: '设置',
+            isActive: false,
+            onTap: () {},
           ),
         ],
       ),
     );
   }
+}
 
-  Widget _buildStripeIcon({
-    required IconData icon,
-    required StripeTool tool,
-    required String tooltip,
-    Color? badgeColor,
-  }) {
-    final isActive = activeTool == tool;
+class _StripeDivider extends StatelessWidget {
+  const _StripeDivider();
 
-    return Tooltip(
-      message: tooltip,
-      child: InkWell(
-        onTap: () => onSelectTool(tool),
-        borderRadius: BorderRadius.circular(6),
-        child: Container(
-          width: 32,
-          height: 32,
-          decoration: BoxDecoration(
-            color: isActive ? IntelliJTheme.accentBlue : Colors.transparent,
-            borderRadius: BorderRadius.circular(6),
-          ),
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              Icon(
-                icon,
-                size: 18,
-                color: isActive ? Colors.white : (badgeColor ?? IntelliJTheme.textPrimary),
-              ),
-              if (badgeColor != null && !isActive)
-                Positioned(
-                  top: 5,
-                  right: 5,
-                  child: Container(
-                    width: 4,
-                    height: 4,
-                    decoration: BoxDecoration(color: badgeColor, shape: BoxShape.circle),
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ),
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 18,
+      height: 1,
+      margin: const EdgeInsets.symmetric(vertical: 9),
+      color: IntelliJTheme.border,
     );
   }
 }

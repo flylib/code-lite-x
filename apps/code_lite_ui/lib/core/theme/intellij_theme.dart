@@ -44,6 +44,26 @@ class IntelliJTheme {
   static const Color syntaxComment = Color(0xFF7A7E85);
   static const Color syntaxNumber = Color(0xFF2AACB8);
 
+
+  // Agent step states (Phase 9 — StepStatus 的 7 态)
+  static const Color stepSuccess = gitGreen;
+  static const Color stepRunning = accentBlue;
+  static const Color stepAwaiting = accentYellow;
+  static const Color stepFailed = gitRed;
+  static const Color stepRolledBack = Color(0xFF8E6BC4);
+  static const Color stepPending = textMuted;
+
+  // Editor overlays (与 editor_view_widget 里的字面量对齐)
+  static const Color ghostText = Color(0xFF6E7681);
+  static const Color caret = Color(0xFF589DF6);
+  static const Color diagError = Color(0xFFF97A7A);
+  static const Color diagWarning = Color(0xFFE5C07B);
+
+  // Traffic lights
+  static const Color trafficRed = Color(0xFFEC6A5E);
+  static const Color trafficYellow = Color(0xFFF4BF4F);
+  static const Color trafficGreen = Color(0xFF62C554);
+
   // Global Flutter ThemeData
   static ThemeData get darkTheme {
     return ThemeData.dark(useMaterial3: true).copyWith(
@@ -59,4 +79,36 @@ class IntelliJTheme {
       ),
     );
   }
+}
+
+/// 面板与行距的固定几何。数值取自 design/ 下的六张设计稿,
+/// 此前散落在各 widget 里作字面量。
+class IntelliJMetrics {
+  const IntelliJMetrics._();
+
+  static const double titleBar = 40;
+  static const double projectTabs = 28;
+  static const double activityStripe = 44;
+  static const double stripeItem = 32;
+  static const double stripeIcon = 18;
+  static const double toolWindowHeader = 34;
+  static const double sidePanel = 250;
+  static const double tabStrip = 34;
+  static const double breadcrumb = 24;
+  static const double gutter = 48;
+  static const double gitStripe = 3;
+  static const double codeLine = 20;
+  static const double codeFontSize = 12;
+  static const double codeLineHeight = 1.4;
+  static const double charWidth = 7.2;
+  static const double aiPanel = 310;
+  static const double agentPanel = 420;
+  static const double cargoPanel = 250;
+  static const double contextSources = 300;
+  static const double contextDetail = 340;
+  static const double reviewFileList = 280;
+  static const double bottomTools = 220;
+  static const double statusBar = 22;
+  static const double dialogWidth = 620;
+  static const double treeRow = 22;
 }
