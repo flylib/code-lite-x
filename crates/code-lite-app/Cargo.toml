@@ -1,0 +1,15 @@
+[package]
+name = "code-lite-app"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+code-lite-core = { path = "../code-lite-core" }
+code-lite-storage = { path = "../code-lite-storage" }
+code-lite-fs = { path = "../code-lite-fs" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+parking_lot = { workspace = true }
+tiny_http = "0.12.0"

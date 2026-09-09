@@ -1,0 +1,11 @@
+/target
+**/*.rs.bk
+.codelite/
+*.db
+*.db-shm
+*.db-wal
+.DS_Store
+.dart_tool/
+dist/
+.codegraph/
+**/build/

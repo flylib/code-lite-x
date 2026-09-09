@@ -1,0 +1,21 @@
+[package]
+name = "code-lite-agent"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+code-lite-storage = { path = "../code-lite-storage" }
+code-lite-core = { path = "../code-lite-core" }
+code-lite-graph = { path = "../code-lite-graph" }
+code-lite-lsp = { path = "../code-lite-lsp" }
+thiserror = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+similar = { workspace = true }
+ureq = { workspace = true }
+
+[dev-dependencies]
+uuid = { workspace = true }
+

@@ -1,0 +1,18 @@
+[package]
+name = "code-lite-lsp"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+code-lite-core = { path = "../code-lite-core" }
+code-lite-storage = { path = "../code-lite-storage" }
+code-lite-graph = { path = "../code-lite-graph" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+parking_lot = { workspace = true }
+syn = { workspace = true }
+code-lite-rpc = { path = "../code-lite-rpc" }

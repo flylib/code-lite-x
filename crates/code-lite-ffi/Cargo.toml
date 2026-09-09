@@ -1,0 +1,23 @@
+[package]
+name = "code-lite-ffi"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[lib]
+name = "codelite"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+code-lite-core = { path = "../code-lite-core" }
+code-lite-storage = { path = "../code-lite-storage" }
+code-lite-fs = { path = "../code-lite-fs" }
+code-lite-agent = { path = "../code-lite-agent" }
+code-lite-graph = { path = "../code-lite-graph" }
+code-lite-lsp = { path = "../code-lite-lsp" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+parking_lot = { workspace = true }
+uuid = { workspace = true }
+code-lite-rpc = { path = "../code-lite-rpc" }

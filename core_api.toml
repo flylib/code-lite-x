@@ -1,0 +1,188 @@
+[schema]
+version = "1.0.0"
+title = "CodeLiteX Core API Contract"
+
+[[types]]
+name = "Range"
+description = "Text range within a file"
+fields = [
+    { name = "start_line", type = "int" },
+    { name = "start_col", type = "int" },
+    { name = "end_line", type = "int" },
+    { name = "end_col", type = "int" },
+]
+
+[[types]]
+name = "FileContent"
+description = "File buffer content and metadata"
+fields = [
+    { name = "path", type = "string" },
+    { name = "content", type = "string" },
+    { name = "line_count", type = "int" },
+    { name = "version", type = "int" },
+]
+
+[[types]]
+name = "FileEditResult"
+description = "Result of applying an edit to a file"
+fields = [
+    { name = "success", type = "bool" },
+    { name = "version", type = "int" },
+    { name = "diagnostics_count", type = "int" },
+]
+
+[[types]]
+name = "UndoRedoResult"
+description = "Result of undo or redo operation"
+fields = [
+    { name = "success", type = "bool" },
+    { name = "version", type = "int" },
+    { name = "content", type = "string" },
+]
+
+[[types]]
+name = "CompletionItem"
+description = "Code completion suggestion"
+fields = [
+    { name = "label", type = "string" },
+    { name = "kind", type = "string" },
+    { name = "detail", type = "string" },
+    { name = "insert_text", type = "string" },
+]
+
+[[types]]
+name = "CompletionList"
+description = "List of code completions"
+fields = [
+    { name = "items", type = "list[CompletionItem]" },
+]
+
+[[types]]
+name = "DiagnosticItem"
+description = "Code diagnostic item (error, warning, hint)"
+fields = [
+    { name = "line", type = "int" },
+    { name = "start_col", type = "int" },
+    { name = "end_col", type = "int" },
+    { name = "severity", type = "string" },
+    { name = "message", type = "string" },
+]
+
+[[types]]
+name = "DiagnosticList"
+description = "List of diagnostics for a file"
+fields = [
+    { name = "diagnostics", type = "list[DiagnosticItem]" },
+]
+
+[[types]]
+name = "StreamEvent"
+description = "Streaming event payload for agent or long-running tasks"
+fields = [
+    { name = "event_type", type = "string" },
+    { name = "payload", type = "string" },
+    { name = "is_done", type = "bool" },
+]
+
+[[types]]
+name = "GitFileChange"
+description = "Git status file modification"
+fields = [
+    { name = "path", type = "string" },
+    { name = "status", type = "string" },
+    { name = "staged", type = "bool" },
+]
+
+[[types]]
+name = "GitStatusResult"
+description = "Git working tree status"
+fields = [
+    { name = "branch", type = "string" },
+    { name = "is_clean", type = "bool" },
+    { name = "changes", type = "list[GitFileChange]" },
+]
+
+[[methods]]
+name = "file.open"
+description = "Open and read a file buffer"
+handler = "crate::handlers::file::handle_open"
+params = [
+    { name = "path", type = "string" },
+]
+returns = "FileContent"
+streaming = false
+
+[[methods]]
+name = "file.edit"
+description = "Apply a text edit to an open file"
+handler = "crate::handlers::file::handle_edit"
+params = [
+    { name = "path", type = "string" },
+    { name = "range", type = "Range" },
+    { name = "new_text", type = "string" },
+]
+returns = "FileEditResult"
+streaming = false
+
+[[methods]]
+name = "file.undo"
+description = "Undo the last operation on a file"
+handler = "crate::handlers::file::handle_undo"
+params = [
+    { name = "path", type = "string" },
+]
+returns = "UndoRedoResult"
+streaming = false
+
+[[methods]]
+name = "file.redo"
+description = "Redo the last reverted operation on a file"
+handler = "crate::handlers::file::handle_redo"
+params = [
+    { name = "path", type = "string" },
+]
+returns = "UndoRedoResult"
+streaming = false
+
+[[methods]]
+name = "lsp.completion"
+description = "Query code completions at cursor position"
+handler = "crate::handlers::lsp::handle_completion"
+params = [
+    { name = "path", type = "string" },
+    { name = "line", type = "int" },
+    { name = "character", type = "int" },
+]
+returns = "CompletionList"
+streaming = false
+
+[[methods]]
+name = "lsp.diagnostics"
+description = "Query active diagnostics for a file"
+handler = "crate::handlers::lsp::handle_diagnostics"
+params = [
+    { name = "path", type = "string" },
+]
+returns = "DiagnosticList"
+streaming = false
+
+[[methods]]
+name = "agent.send_prompt"
+description = "Send a prompt to the AI agent loop"
+handler = "crate::handlers::agent::handle_send_prompt"
+params = [
+    { name = "prompt", type = "string" },
+    { name = "stream", type = "bool" },
+]
+returns = "StreamEvent"
+streaming = true
+
+[[methods]]
+name = "git.status"
+description = "Query Git status of the workspace repository"
+handler = "crate::handlers::git::handle_status"
+params = [
+    { name = "workspace_path", type = "string" },
+]
+returns = "GitStatusResult"
+streaming = false
