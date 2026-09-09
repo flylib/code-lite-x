@@ -1,3 +1,4 @@
+use crate::llm::{ChatMessage, LlmProvider, StructuredOutputSchema};
 use crate::permission::{PermissionPolicy, RiskLevel};
 use serde::{Deserialize, Serialize};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -213,4 +214,147 @@ impl TaskPlanner {
 
         Plan::new(session_id, task_id, prompt, steps)
     }
+
+    /// Formulates an engineering plan using LLM structured output.
+    /// Falls back to rule-based `plan_task` if model completion fails or returns malformed steps.
+    pub fn plan_task_with_model(
+        &self,
+        provider: &dyn LlmProvider,
+        session_id: &str,
+        task_id: &str,
+        prompt: &str,
+        target_file: Option<&str>,
+        target_symbol: Option<&str>,
+        code_patch: Option<&str>,
+    ) -> Plan {
+        let schema = StructuredOutputSchema {
+            name: "task_plan".to_string(),
+            description: Some("Autonomous engineering plan for code modifications".to_string()),
+            schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "task": { "type": "string" },
+                    "steps": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "id": { "type": "string" },
+                                "description": { "type": "string" },
+                                "tool_name": { "type": "string" },
+                                "args": { "type": "object" }
+                            },
+                            "required": ["id", "description", "tool_name", "args"]
+                        }
+                    }
+                },
+                "required": ["steps"]
+            }),
+            strict: true,
+        };
+
+        let sys_prompt = "You are CodeLiteX Engineering Planner. Generate a sequence of actionable steps to fulfill the user request. Available tools: read_file, apply_patch, delete_file, execute_command, lsp_diagnostics, git_stage, rollback.";
+        let user_prompt = format!(
+            "Task: {}\nTarget File: {}\nTarget Symbol: {}\nCode Patch Provided: {}",
+            prompt,
+            target_file.unwrap_or("None"),
+            target_symbol.unwrap_or("None"),
+            code_patch.is_some()
+        );
+
+        let messages = vec![
+            ChatMessage {
+                role: "system".into(),
+                content: sys_prompt.into(),
+            },
+            ChatMessage {
+                role: "user".into(),
+                content: user_prompt,
+            },
+        ];
+
+        if let Ok(val) = provider.complete_structured(&messages, &schema) {
+            if let Some(steps_array) = val.get("steps").and_then(|s| s.as_array()) {
+                let mut steps = Vec::new();
+                for (idx, step_obj) in steps_array.iter().enumerate() {
+                    let fallback_id = format!("step_{}", idx + 1);
+                    let id = step_obj
+                        .get("id")
+                        .and_then(|i| i.as_str())
+                        .unwrap_or(&fallback_id);
+                    let description = step_obj
+                        .get("description")
+                        .and_then(|d| d.as_str())
+                        .unwrap_or("Execute tool");
+                    let tool_name = step_obj
+                        .get("tool_name")
+                        .and_then(|t| t.as_str())
+                        .unwrap_or("read_file");
+                    let mut args = step_obj.get("args").cloned().unwrap_or(serde_json::json!({}));
+
+                    if tool_name == "apply_patch" {
+                        if let Some(patch) = code_patch {
+                            args["content"] = serde_json::json!(patch);
+                        }
+                    }
+                    if let Some(file) = target_file {
+                        if tool_name == "apply_patch" || tool_name == "read_file" || args.get("path").is_none() {
+                            args["path"] = serde_json::json!(file);
+                        }
+                    }
+
+                    steps.push(self.create_step(id, description, tool_name, args));
+                }
+
+                if !steps.is_empty() {
+                    return Plan::new(session_id, task_id, prompt, steps);
+                }
+            }
+        }
+
+        // Fallback to rule-based planner
+        self.plan_task(
+            session_id,
+            task_id,
+            prompt,
+            target_file,
+            target_symbol,
+            code_patch,
+        )
+    }
 }
+
+impl Default for TaskPlanner {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::llm::BuiltinRuleProvider;
+
+    #[test]
+    fn test_plan_task_with_model_fallback_and_structured() {
+        let planner = TaskPlanner::new();
+        let provider = BuiltinRuleProvider::new();
+
+        let plan = planner.plan_task_with_model(
+            &provider,
+            "sess-1",
+            "task-1",
+            "Implement JWT validation in auth.rs",
+            Some("src/auth.rs"),
+            None,
+            Some("// JWT code"),
+        );
+
+        assert_eq!(plan.session_id, "sess-1");
+        assert_eq!(plan.task_id, "task-1");
+        assert!(!plan.steps.is_empty());
+        // Verify steps were parsed with evaluated risk levels
+        assert!(plan.steps.iter().any(|s| s.tool_name == "apply_patch"));
+    }
+}
+

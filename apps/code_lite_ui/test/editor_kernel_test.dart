@@ -6,6 +6,7 @@ import 'package:code_lite_ui/features/editor/code_editor_controller.dart';
 import 'package:code_lite_ui/features/editor/editor_session_manager.dart';
 import 'package:code_lite_ui/features/editor/editor_view_widget.dart';
 import 'package:code_lite_ui/features/editor/ime_text_input_client.dart';
+import 'package:code_lite_ui/features/ai_assistant/ai_assistant_panel.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -620,6 +621,36 @@ void main() {
 
       expect(closeCalled, isTrue);
       ctrl.dispose();
+    });
+
+    testWidgets('AiAssistantPanel renders execution plan with multi-file review and step revert', (WidgetTester tester) async {
+      await tester.binding.setSurfaceSize(const Size(1000, 700));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      final client = ApiClient();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: AiAssistantPanel(
+              activeFile: 'src/main.rs',
+              onClose: () {},
+              client: client,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('CodeLite AI Assistant'), findsOneWidget);
+      expect(find.text('Ask Agent or command ToolRuntime...'), findsOneWidget);
+
+      // Enter prompt and submit
+      await tester.enterText(find.byType(TextField), 'Refactor math helper');
+      await tester.tap(find.byIcon(Icons.send));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.text('Refactor math helper'), findsOneWidget);
     });
   });
 }

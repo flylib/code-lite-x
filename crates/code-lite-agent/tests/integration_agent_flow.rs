@@ -237,3 +237,141 @@ fn test_multi_step_atomic_session_rollback() {
     // Cleanup
     let _ = fs::remove_dir_all(&workspace);
 }
+
+#[test]
+fn test_step_level_fine_grained_rollback() {
+    let (workspace, db, session_id) = setup_test_env();
+
+    let file_a = workspace.join("file_a.txt");
+    let file_b = workspace.join("file_b.txt");
+    fs::write(&file_a, "Original A\n").unwrap();
+    fs::write(&file_b, "Original B\n").unwrap();
+
+    let session_store = SessionStore::new(db.clone());
+    session_store.create_task("task-step-roll", &session_id, "Step rollback task").unwrap();
+
+    let runtime = ToolRuntime::new(&workspace, &session_id, Some("task-step-roll"), db.clone());
+    let approval_store = ApprovalStore::new(db.clone());
+    let approval_mgr = ApprovalManager::new(approval_store.clone());
+
+    let executor = PlanExecutor::new(runtime, approval_mgr, None, None);
+
+    let planner = TaskPlanner::new();
+    let mut plan = planner.plan_task(
+        &session_id,
+        "task-step-roll",
+        "Modify both files",
+        None,
+        None,
+        None,
+    );
+
+    let step_1 = planner.create_step(
+        "step_1",
+        "Modify file A",
+        "apply_patch",
+        serde_json::json!({"path": "file_a.txt", "content": "Modified A\n"}),
+    );
+    let step_2 = planner.create_step(
+        "step_2",
+        "Modify file B",
+        "apply_patch",
+        serde_json::json!({"path": "file_b.txt", "content": "Modified B\n"}),
+    );
+    plan.steps = vec![step_1, step_2];
+
+    // Execute step 1 -> Suspended -> Approve -> Completed
+    let res1 = executor.execute_next_step(&mut plan).unwrap();
+    if let StepExecutionResult::SuspendedForApproval { request_id, .. } = res1 {
+        approval_store.resolve_request(&request_id, ApprovalStatus::Approved).unwrap();
+    }
+    let res1_done = executor.execute_next_step(&mut plan).unwrap();
+    assert!(matches!(res1_done, StepExecutionResult::Completed { .. }));
+    assert_eq!(fs::read_to_string(&file_a).unwrap(), "Modified A\n");
+
+    // Execute step 2 -> Suspended -> Approve -> Completed
+    let res2 = executor.execute_next_step(&mut plan).unwrap();
+    if let StepExecutionResult::SuspendedForApproval { request_id, .. } = res2 {
+        approval_store.resolve_request(&request_id, ApprovalStatus::Approved).unwrap();
+    }
+    let res2_done = executor.execute_next_step(&mut plan).unwrap();
+    assert!(matches!(res2_done, StepExecutionResult::Completed { .. }));
+    assert_eq!(fs::read_to_string(&file_b).unwrap(), "Modified B\n");
+
+    // Perform fine-grained rollback on step_1 only
+    let rolled = executor.rollback_step(&mut plan, "step_1").unwrap();
+    assert!(rolled, "Step 1 rollback must succeed");
+
+    // File A is restored to original, File B remains modified!
+    assert_eq!(fs::read_to_string(&file_a).unwrap(), "Original A\n");
+    assert_eq!(fs::read_to_string(&file_b).unwrap(), "Modified B\n");
+
+    assert_eq!(plan.steps[0].status, code_lite_agent::StepStatus::RolledBack);
+    assert_eq!(plan.steps[1].status, code_lite_agent::StepStatus::Success);
+
+    // Cleanup
+    let _ = fs::remove_dir_all(&workspace);
+}
+
+#[test]
+fn test_observation_feedback_and_replan() {
+    let (workspace, db, session_id) = setup_test_env();
+    let virtual_server = VirtualLspServer::new();
+    let lsp_client = Arc::new(LspClient::new_virtual(virtual_server));
+
+    let main_rs = workspace.join("src").join("main.rs");
+    fs::create_dir_all(workspace.join("src")).unwrap();
+    fs::write(&main_rs, "fn main() {}\n").unwrap();
+
+    let session_store = SessionStore::new(db.clone());
+    session_store.create_task("task-obs", &session_id, "Observation task").unwrap();
+
+    let runtime = ToolRuntime::new(&workspace, &session_id, Some("task-obs"), db.clone());
+    let approval_store = ApprovalStore::new(db.clone());
+    let approval_mgr = ApprovalManager::new(approval_store.clone());
+
+    let provider = Arc::new(code_lite_agent::BuiltinRuleProvider::new());
+    let executor = PlanExecutor::new(runtime, approval_mgr, None, Some(lsp_client))
+        .with_llm(provider);
+
+    let planner = TaskPlanner::new();
+    let mut plan = planner.plan_task(
+        &session_id,
+        "task-obs",
+        "Apply broken patch to main.rs",
+        Some("src/main.rs"),
+        None,
+        Some("fn broken() { let x = 42\n"), // missing closing brace -> syntax error
+    );
+
+    // Step 1: Read baseline content -> Completed
+    let step1 = executor.execute_next_step(&mut plan).unwrap();
+    assert!(matches!(step1, StepExecutionResult::Completed { .. }));
+
+    // Step 2: Apply broken patch -> SuspendedForApproval
+    let step2 = executor.execute_next_step(&mut plan).unwrap();
+    let req_id = match step2 {
+        StepExecutionResult::SuspendedForApproval { request_id, .. } => request_id,
+        other => panic!("Expected SuspendedForApproval, got {:?}", other),
+    };
+
+    // User approves
+    approval_store.resolve_request(&req_id, ApprovalStatus::Approved).unwrap();
+
+    // Re-execute step 2 -> LSP error triggers SelfHealingRetry with observation feedback!
+    let res = executor.execute_next_step(&mut plan).unwrap();
+    match res {
+        StepExecutionResult::SelfHealingRetry { step_id, attempt, error_message } => {
+            assert_eq!(step_id, "step_2");
+            assert_eq!(attempt, 1);
+            assert!(!error_message.is_empty());
+            // Verify observation was saved on step args for LLM feedback
+            assert!(plan.steps[1].args.get("_last_observation").is_some());
+        }
+        other => panic!("Expected SelfHealingRetry with observation feedback, got {:?}", other),
+    }
+
+    // Cleanup
+    let _ = fs::remove_dir_all(&workspace);
+}
+

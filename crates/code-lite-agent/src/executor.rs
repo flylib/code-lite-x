@@ -1,4 +1,6 @@
 use crate::error::AgentError;
+use crate::llm::{ChatMessage, LlmProvider};
+use crate::observation::Observation;
 use crate::permission::{ApprovalDecision, ApprovalManager, PermissionPolicy, RiskLevel};
 use crate::planner::{Plan, StepStatus};
 use crate::tool_runtime::ToolRuntime;
@@ -39,6 +41,7 @@ pub struct PlanExecutor {
     policy: PermissionPolicy,
     graph: Option<Arc<dyn CodeGraph + Send + Sync>>,
     lsp: Option<Arc<LspClient>>,
+    llm: Option<Arc<dyn LlmProvider>>,
     max_self_heal_attempts: usize,
 }
 
@@ -55,8 +58,14 @@ impl PlanExecutor {
             policy: PermissionPolicy::new(),
             graph,
             lsp,
+            llm: None,
             max_self_heal_attempts: 3,
         }
+    }
+
+    pub fn with_llm(mut self, llm: Arc<dyn LlmProvider>) -> Self {
+        self.llm = Some(llm);
+        self
     }
 
     pub fn runtime(&self) -> &ToolRuntime {
@@ -147,13 +156,15 @@ impl PlanExecutor {
                     .args
                     .get("path")
                     .and_then(|v| v.as_str())
-                    .unwrap_or_default();
+                    .unwrap_or_default()
+                    .to_string();
                 let content = step
                     .args
                     .get("content")
                     .and_then(|v| v.as_str())
-                    .unwrap_or_default();
-                let op_id = self.runtime.apply_patch(path, content)?;
+                    .unwrap_or_default()
+                    .to_string();
+                let op_id = self.runtime.apply_patch(&path, &content)?;
                 step_op_id = Some(op_id);
                 step.op_id = Some(op_id);
 
@@ -161,9 +172,9 @@ impl PlanExecutor {
                 if let Some(ref lsp) = self.lsp {
                     let uri = format!(
                         "file://{}",
-                        self.runtime.workspace_root.join(path).to_string_lossy()
+                        self.runtime.workspace_root.join(&path).to_string_lossy()
                     );
-                    let _ = lsp.did_change(&uri, 1, content);
+                    let _ = lsp.did_change(&uri, 1, &content);
                     let diags = lsp.get_diagnostics(&uri);
 
                     let errors: Vec<_> = diags
@@ -173,10 +184,17 @@ impl PlanExecutor {
 
                     if !errors.is_empty() {
                         let err_msg = errors
-                            .into_iter()
-                            .map(|e| e.message)
+                            .iter()
+                            .map(|e| e.message.clone())
                             .collect::<Vec<_>>()
                             .join("; ");
+
+                        let observation = Observation::new_failure(
+                            &step.id,
+                            "apply_patch",
+                            &err_msg,
+                            errors.clone(),
+                        );
 
                         // Check self-healing retry quota
                         let attempt = step
@@ -197,6 +215,31 @@ impl PlanExecutor {
                             step.error = Some(format!("LSP error: {}", err_msg));
                             step.args["_attempt"] = serde_json::json!(attempt);
                             step.args["_base_op_id"] = serde_json::json!(base_op_id);
+                            step.args["_last_observation"] =
+                                serde_json::to_value(&observation).unwrap_or_default();
+
+                            // Observation Feedback Loop: Request LLM to repair patch with diagnostic reflection
+                            if let Some(ref llm) = self.llm {
+                                let reflection = observation.format_for_reflection();
+                                let repair_prompt = format!(
+                                    "The patch applied to `{}` failed with the following diagnostics:\n{}\nOriginal attempted content:\n{}\nPlease fix all errors and output the corrected, complete valid code without explanations or markdown fences.",
+                                    path,
+                                    reflection,
+                                    content
+                                );
+                                let messages = vec![ChatMessage {
+                                    role: "user".into(),
+                                    content: repair_prompt,
+                                }];
+                                if let Ok(comp) = llm.complete(&messages, None) {
+                                    let cleaned =
+                                        crate::fim::FimEngine::clean_completion(&comp.content);
+                                    if !cleaned.trim().is_empty() {
+                                        step.args["content"] = serde_json::json!(cleaned);
+                                    }
+                                }
+                            }
+
                             return Ok(StepExecutionResult::SelfHealingRetry {
                                 step_id: step.id.clone(),
                                 attempt,
@@ -297,5 +340,19 @@ impl PlanExecutor {
             output: output_str,
             op_id: step_op_id,
         })
+    }
+
+    /// Rolls back a specific completed step by its step_id without reverting subsequent valid steps.
+    pub fn rollback_step(&self, plan: &mut Plan, step_id: &str) -> Result<bool, AgentError> {
+        for step in &mut plan.steps {
+            if step.id == step_id {
+                if let Some(op_id) = step.op_id {
+                    self.runtime.rollback_step(op_id)?;
+                    step.status = StepStatus::RolledBack;
+                    return Ok(true);
+                }
+            }
+        }
+        Ok(false)
     }
 }

@@ -66,6 +66,12 @@ typedef _AgentDiffReviewDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer
 typedef _AgentFimCompleteC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> filePath, Pointer<Char> prefix, Pointer<Char> suffix, Pointer<Char> language);
 typedef _AgentFimCompleteDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> filePath, Pointer<Char> prefix, Pointer<Char> suffix, Pointer<Char> language);
 
+typedef _AgentRollbackStepC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> planId, Pointer<Char> stepId);
+typedef _AgentRollbackStepDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> planId, Pointer<Char> stepId);
+
+typedef _WorktreeActionC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> taskId);
+typedef _WorktreeActionDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> taskId);
+
 typedef _StorageEventsC = Pointer<Char> Function(Pointer<Void> ctx);
 typedef _StorageEventsDart = Pointer<Char> Function(Pointer<Void> ctx);
 
@@ -175,6 +181,11 @@ class CodeLiteBindings {
   late final _AgentPendingApprovalsDart _agentPendingApprovals;
   late final _AgentDiffReviewDart _agentDiffReview;
   late final _AgentFimCompleteDart _agentFimComplete;
+  late final _AgentPlanTaskDart _agentPlanMultiFile;
+  late final _AgentRollbackStepDart _agentRollbackStep;
+  late final _WorktreeActionDart _worktreeCreate;
+  late final _WorktreeActionDart _worktreeMerge;
+  late final _WorktreeActionDart _worktreeDiscard;
   late final _StorageEventsDart _storageEvents;
   late final _GraphSymbolsDart _graphSymbols;
   late final _GraphFileDart _graphIndexFile;
@@ -242,6 +253,11 @@ class CodeLiteBindings {
       _agentPendingApprovals = _dylib!.lookupFunction<_AgentPendingApprovalsC, _AgentPendingApprovalsDart>('codelite_agent_get_pending_approvals');
       _agentDiffReview = _dylib!.lookupFunction<_AgentDiffReviewC, _AgentDiffReviewDart>('codelite_agent_get_diff_review');
       _agentFimComplete = _dylib!.lookupFunction<_AgentFimCompleteC, _AgentFimCompleteDart>('codelite_agent_fim_complete');
+      _agentPlanMultiFile = _dylib!.lookupFunction<_AgentPlanTaskC, _AgentPlanTaskDart>('codelite_agent_plan_multi_file');
+      _agentRollbackStep = _dylib!.lookupFunction<_AgentRollbackStepC, _AgentRollbackStepDart>('codelite_agent_rollback_step');
+      _worktreeCreate = _dylib!.lookupFunction<_WorktreeActionC, _WorktreeActionDart>('codelite_worktree_create');
+      _worktreeMerge = _dylib!.lookupFunction<_WorktreeActionC, _WorktreeActionDart>('codelite_worktree_merge');
+      _worktreeDiscard = _dylib!.lookupFunction<_WorktreeActionC, _WorktreeActionDart>('codelite_worktree_discard');
       _storageEvents = _dylib!.lookupFunction<_StorageEventsC, _StorageEventsDart>('codelite_storage_events');
       _graphSymbols = _dylib!.lookupFunction<_GraphSymbolsC, _GraphSymbolsDart>('codelite_graph_symbols');
       _graphIndexFile = _dylib!.lookupFunction<_GraphFileC, _GraphFileDart>('codelite_graph_index_file');
@@ -457,6 +473,50 @@ class CodeLiteBindings {
     final sessPtr = _toCString(sessionId);
     final ptr = _agentDiffReview(_ctx!, sessPtr.pointer);
     _freeAllocatedString(sessPtr);
+    return _parseJsonMap(_fromCString(ptr));
+  }
+
+  Map<String, dynamic> agentPlanMultiFile(String sessionId, Map<String, dynamic> params) {
+    if (!isAvailable) return {};
+    final sessPtr = _toCString(sessionId);
+    final paramsPtr = _toCString(jsonEncode(params));
+    final ptr = _agentPlanMultiFile(_ctx!, sessPtr.pointer, paramsPtr.pointer);
+    _freeAllocatedString(sessPtr);
+    _freeAllocatedString(paramsPtr);
+    return _parseJsonMap(_fromCString(ptr));
+  }
+
+  Map<String, dynamic> agentRollbackStep(String planId, String stepId) {
+    if (!isAvailable) return {};
+    final planPtr = _toCString(planId);
+    final stepPtr = _toCString(stepId);
+    final ptr = _agentRollbackStep(_ctx!, planPtr.pointer, stepPtr.pointer);
+    _freeAllocatedString(planPtr);
+    _freeAllocatedString(stepPtr);
+    return _parseJsonMap(_fromCString(ptr));
+  }
+
+  Map<String, dynamic> worktreeCreate(String taskId) {
+    if (!isAvailable) return {};
+    final taskPtr = _toCString(taskId);
+    final ptr = _worktreeCreate(_ctx!, taskPtr.pointer);
+    _freeAllocatedString(taskPtr);
+    return _parseJsonMap(_fromCString(ptr));
+  }
+
+  Map<String, dynamic> worktreeMerge(String taskId) {
+    if (!isAvailable) return {};
+    final taskPtr = _toCString(taskId);
+    final ptr = _worktreeMerge(_ctx!, taskPtr.pointer);
+    _freeAllocatedString(taskPtr);
+    return _parseJsonMap(_fromCString(ptr));
+  }
+
+  Map<String, dynamic> worktreeDiscard(String taskId) {
+    if (!isAvailable) return {};
+    final taskPtr = _toCString(taskId);
+    final ptr = _worktreeDiscard(_ctx!, taskPtr.pointer);
+    _freeAllocatedString(taskPtr);
     return _parseJsonMap(_fromCString(ptr));
   }
 

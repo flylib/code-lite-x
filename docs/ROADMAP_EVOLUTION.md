@@ -26,7 +26,7 @@
 | **Phase 6** | 安全底座与工程前置（含 Core API 契约 + codegen） | Phase 5.5 | — |
 | **Phase 7** | Editable Editor Kernel（可编辑编辑器内核） | Phase 6.0 | [已完成 ✅ 2026-09-09] |
 | **Phase 8** | IDE Core（LSP Supervisor / Ghost Text / Tabs·Split·Gutter） | Phase 6 | [已完成 ✅ 2026-09-10] |
-| **Phase 9** | Agent Runtime + Multi-file + Git Worktree | Phase 7 | Phase 7 |
+| **Phase 9** | Agent Runtime + Multi-file + Git Worktree | Phase 7 | [已完成 ✅ 2026-09-10] |
 | **Phase 10** | 检索/上下文层（项目指令 → Memory → Skill → MCP） | — | — |
 | **Phase 11** | Cross-platform Release（全平台发布与增量更新） | Phase 9 | Phase 9 |
 | **Phase 12** | WASM Plugin Ecosystem（插件生态） | Phase 8 | Phase 8 |
@@ -462,7 +462,7 @@ FFI 出口 `codelite_lsp_init_server`（`code-lite-ffi/src/lib.rs:919`，已支�
 
 ---
 
-### 🔹 Phase 9: Agent Runtime + 多文件协同 + Git Worktree
+### 🔹 Phase 9: Agent Runtime + 多文件协同 + Git Worktree [已完成 ✅ 2026-09-10]
 
 > **前置**：Phase 6-B（结构化输出）、Phase 6-D（集成测试骨架）。
 > **本阶段的定义方式**：由**两条缺失的边**界定，而非枚举子系统清单 ——

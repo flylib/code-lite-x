@@ -718,7 +718,9 @@ pub unsafe extern "C" fn codelite_agent_plan_task(
     let _ = ctx.session_store.create_task(&task_id, sess_id, prompt);
 
     let planner = code_lite_agent::TaskPlanner::new();
-    let plan = planner.plan_task(
+    let provider = code_lite_agent::BuiltinRuleProvider::new();
+    let plan = planner.plan_task_with_model(
+        &provider,
         sess_id,
         &task_id,
         prompt,
@@ -768,13 +770,14 @@ pub unsafe extern "C" fn codelite_agent_execute_next_step(
     let approval_mgr = code_lite_agent::ApprovalManager::new(ctx.approval_store.clone());
 
     let lsp_client_clone = ctx.lsp_client.lock().clone();
+    let provider = std::sync::Arc::new(code_lite_agent::BuiltinRuleProvider::new());
 
     let executor = code_lite_agent::PlanExecutor::new(
         runtime,
         approval_mgr,
         Some(std::sync::Arc::new(ctx.graph_engine.clone())),
         lsp_client_clone,
-    );
+    ).with_llm(provider);
 
     match executor.execute_next_step(plan) {
         Ok(res) => {
@@ -886,6 +889,228 @@ pub unsafe extern "C" fn codelite_agent_get_diff_review(
             json_to_c_char(&result)
         }
         Err(e) => err_json(&format!("Failed to fetch diff review: {}", e)),
+    }
+}
+
+/// Formulates a multi-file modification plan with topological dependency ordering.
+#[no_mangle]
+pub unsafe extern "C" fn codelite_agent_plan_multi_file(
+    ctx: *mut CodeLiteContext,
+    session_id: *const c_char,
+    params_json: *const c_char,
+) -> *const c_char {
+    if ctx.is_null() {
+        return err_json("Context is null");
+    }
+    let ctx = &*ctx;
+
+    let sess_id = match c_str_to_str(session_id) {
+        Some(s) if !s.is_empty() => s,
+        _ => "default-session",
+    };
+
+    let params_str = match c_str_to_str(params_json) {
+        Some(s) => s,
+        None => return err_json("Invalid params_json"),
+    };
+
+    let parsed: serde_json::Value = match serde_json::from_str(params_str) {
+        Ok(v) => v,
+        Err(e) => return err_json(&format!("JSON parse error: {}", e)),
+    };
+
+    let prompt = parsed.get("prompt").and_then(|v| v.as_str()).unwrap_or("");
+    let patches_val = parsed.get("patches").and_then(|v| v.as_array());
+
+    let mut patches = Vec::new();
+    if let Some(arr) = patches_val {
+        for item in arr {
+            let file_path = item.get("file_path").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let patch = item.get("patch").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let description = item.get("description").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            if !file_path.is_empty() {
+                patches.push(code_lite_agent::FilePatchTarget {
+                    file_path,
+                    patch,
+                    description,
+                });
+            }
+        }
+    }
+
+    let task_id = format!("task-{}", uuid::Uuid::new_v4());
+    let _ = ctx.session_store.create_session(sess_id, "Multi-file Agent Task");
+    let _ = ctx.session_store.create_task(&task_id, sess_id, prompt);
+
+    let planner = code_lite_agent::MultiFilePlanner::new();
+    let (plan, summary) = planner.plan_multi_file_task(
+        sess_id,
+        &task_id,
+        prompt,
+        patches,
+        &ctx.graph_engine,
+    );
+
+    let plan_id = plan.id.clone();
+    ctx.active_plans.lock().insert(plan_id, plan.clone());
+
+    let result = serde_json::json!({
+        "status": "ok",
+        "plan": plan,
+        "summary": summary,
+    });
+    json_to_c_char(&result)
+}
+
+/// Rolls back a single specific completed step within an active plan.
+#[no_mangle]
+pub unsafe extern "C" fn codelite_agent_rollback_step(
+    ctx: *mut CodeLiteContext,
+    plan_id: *const c_char,
+    step_id: *const c_char,
+) -> *const c_char {
+    if ctx.is_null() {
+        return err_json("Context is null");
+    }
+    let ctx = &*ctx;
+
+    let pid = match c_str_to_str(plan_id) {
+        Some(s) => s,
+        None => return err_json("Invalid plan_id"),
+    };
+    let sid = match c_str_to_str(step_id) {
+        Some(s) => s,
+        None => return err_json("Invalid step_id"),
+    };
+
+    let mut plans = ctx.active_plans.lock();
+    let plan = match plans.get_mut(pid) {
+        Some(p) => p,
+        None => return err_json(&format!("Plan '{}' not found", pid)),
+    };
+
+    let runtime = ToolRuntime::new(
+        &ctx.workspace_root,
+        &plan.session_id,
+        Some(&plan.task_id),
+        ctx.db.clone(),
+    );
+    let approval_mgr = code_lite_agent::ApprovalManager::new(ctx.approval_store.clone());
+    let executor = code_lite_agent::PlanExecutor::new(runtime, approval_mgr, None, None);
+
+    match executor.rollback_step(plan, sid) {
+        Ok(true) => {
+            let result = serde_json::json!({
+                "status": "ok",
+                "rolled_back": true,
+                "step_id": sid,
+                "plan": plan,
+            });
+            json_to_c_char(&result)
+        }
+        Ok(false) => err_json(&format!("Step '{}' not found or had no operation to revert", sid)),
+        Err(e) => err_json(&format!("Step rollback failed: {}", e)),
+    }
+}
+
+/// Creates an isolated Git Worktree sandbox for an agent task.
+#[no_mangle]
+pub unsafe extern "C" fn codelite_worktree_create(
+    ctx: *mut CodeLiteContext,
+    task_id: *const c_char,
+) -> *const c_char {
+    if ctx.is_null() {
+        return err_json("Context is null");
+    }
+    let ctx = &*ctx;
+
+    let tid = match c_str_to_str(task_id) {
+        Some(s) if !s.is_empty() => s,
+        _ => return err_json("Invalid task_id"),
+    };
+
+    let mgr = code_lite_fs::WorktreeManager::new(&ctx.workspace_root);
+    match mgr.create_worktree(tid) {
+        Ok(session) => {
+            let result = serde_json::json!({
+                "status": "ok",
+                "session": session,
+            });
+            json_to_c_char(&result)
+        }
+        Err(e) => err_json(&format!("Failed to create worktree: {}", e)),
+    }
+}
+
+/// Merges an isolated Git Worktree back into the main workspace and cleans up.
+#[no_mangle]
+pub unsafe extern "C" fn codelite_worktree_merge(
+    ctx: *mut CodeLiteContext,
+    task_id: *const c_char,
+) -> *const c_char {
+    if ctx.is_null() {
+        return err_json("Context is null");
+    }
+    let ctx = &*ctx;
+
+    let tid = match c_str_to_str(task_id) {
+        Some(s) if !s.is_empty() => s,
+        _ => return err_json("Invalid task_id"),
+    };
+
+    let mgr = code_lite_fs::WorktreeManager::new(&ctx.workspace_root);
+    let session = code_lite_fs::WorktreeSession {
+        task_id: tid.to_string(),
+        branch_name: format!("agent/{}", tid),
+        worktree_path: mgr.worktree_base().join(tid),
+    };
+
+    match mgr.merge_and_cleanup(&session) {
+        Ok(_) => {
+            let result = serde_json::json!({
+                "status": "ok",
+                "merged": true,
+                "task_id": tid,
+            });
+            json_to_c_char(&result)
+        }
+        Err(e) => err_json(&format!("Failed to merge worktree: {}", e)),
+    }
+}
+
+/// Discards an isolated Git Worktree sandbox without touching the main workspace.
+#[no_mangle]
+pub unsafe extern "C" fn codelite_worktree_discard(
+    ctx: *mut CodeLiteContext,
+    task_id: *const c_char,
+) -> *const c_char {
+    if ctx.is_null() {
+        return err_json("Context is null");
+    }
+    let ctx = &*ctx;
+
+    let tid = match c_str_to_str(task_id) {
+        Some(s) if !s.is_empty() => s,
+        _ => return err_json("Invalid task_id"),
+    };
+
+    let mgr = code_lite_fs::WorktreeManager::new(&ctx.workspace_root);
+    let session = code_lite_fs::WorktreeSession {
+        task_id: tid.to_string(),
+        branch_name: format!("agent/{}", tid),
+        worktree_path: mgr.worktree_base().join(tid),
+    };
+
+    match mgr.discard_worktree(&session) {
+        Ok(_) => {
+            let result = serde_json::json!({
+                "status": "ok",
+                "discarded": true,
+                "task_id": tid,
+            });
+            json_to_c_char(&result)
+        }
+        Err(e) => err_json(&format!("Failed to discard worktree: {}", e)),
     }
 }
 

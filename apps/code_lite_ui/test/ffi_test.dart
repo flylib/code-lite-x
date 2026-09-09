@@ -144,6 +144,29 @@ void main() {
         final gitDiff = ffi.getGitDiff();
         expect(gitDiff.containsKey('diff'), isTrue);
 
+        // Phase 9: Multi-file planning & Worktree C-ABI
+        final mfRes = ffi.agentPlanMultiFile('ffi-session', {
+          'prompt': 'Multi-file ffi test',
+          'patches': [
+            {'file_path': 'src/a.rs', 'patch': '// a', 'description': 'a'},
+            {'file_path': 'src/b.rs', 'patch': '// b', 'description': 'b'},
+          ]
+        });
+        expect(mfRes['status'], equals('ok'));
+        expect(mfRes.containsKey('plan'), isTrue);
+        expect(mfRes.containsKey('summary'), isTrue);
+
+        final mfPlanId = mfRes['plan']['id'] as String;
+        final rbRes = ffi.agentRollbackStep(mfPlanId, 'non-existent-step');
+        expect(rbRes.containsKey('status'), isTrue);
+
+        final wtCreateRes = ffi.worktreeCreate('test-wt-task-ffi');
+        expect(wtCreateRes.containsKey('status'), isTrue);
+        if (wtCreateRes['status'] == 'ok') {
+          final wtDiscardRes = ffi.worktreeDiscard('test-wt-task-ffi');
+          expect(wtDiscardRes.containsKey('status'), isTrue);
+        }
+
         try {
           final f = File(testTargetFile);
           if (f.existsSync()) f.deleteSync();
@@ -204,6 +227,25 @@ void main() {
 
       final gitDiffText = await client.getGitDiff();
       expect(gitDiffText.containsKey('diff'), isTrue);
+
+      // Test ApiClient Phase 9 methods
+      final mfPlan = await client.agentPlanMultiFile('Multi-file refactor', [
+        {'file_path': 'src/model.rs', 'patch': 'pub struct Model;', 'description': 'Define model'},
+        {'file_path': 'src/service.rs', 'patch': 'use crate::model::Model;', 'description': 'Use model'},
+      ]);
+      expect(mfPlan.containsKey('status'), isTrue);
+      expect(mfPlan['status'], equals('ok'));
+      expect(mfPlan.containsKey('plan'), isTrue);
+
+      final rbStep = await client.agentRollbackStep('plan-mock-mf', 'step_1');
+      expect(rbStep.containsKey('status'), isTrue);
+
+      final wtCreate = await client.worktreeCreate('task-wt-client');
+      expect(wtCreate.containsKey('status'), isTrue);
+      if (wtCreate['status'] == 'ok') {
+        final wtDiscard = await client.worktreeDiscard('task-wt-client');
+        expect(wtDiscard.containsKey('status'), isTrue);
+      }
     });
   });
 }

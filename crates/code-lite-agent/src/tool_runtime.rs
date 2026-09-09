@@ -354,6 +354,22 @@ impl ToolRuntime {
         Ok(count)
     }
 
+    /// Tool 6b: rollback_step
+    /// Reverts a single operation by its operation ID.
+    pub fn rollback_step(&self, op_id: i64) -> Result<(), ToolError> {
+        self.op_store.revert(op_id)?;
+
+        let _ = self.event_store.log(
+            Some(&self.session_id),
+            "tool:rollback_step",
+            &serde_json::json!({
+                "op_id": op_id,
+            }),
+        );
+
+        Ok(())
+    }
+
     /// Tool 7: delete_file
     /// Deletes a file and records an atomic undo snapshot in SQLite operations.
     pub fn delete_file(&self, relative_path: &str) -> Result<i64, ToolError> {

@@ -150,7 +150,7 @@ impl FimEngine {
     }
 
     /// Strips leading/trailing code fences or formatting noise from model outputs.
-    fn clean_completion(raw: &str) -> String {
+    pub fn clean_completion(raw: &str) -> String {
         let mut text = raw.trim();
 
         // Strip ```lang ... ```

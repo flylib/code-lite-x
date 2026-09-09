@@ -12,6 +12,8 @@ pub mod error;
 pub mod executor;
 pub mod fim;
 pub mod llm;
+pub mod multi_file;
+pub mod observation;
 pub mod permission;
 pub mod planner;
 pub mod tool_runtime;
@@ -25,6 +27,8 @@ pub use llm::{
     LlmToolDefinition, OpenAiCompatibleProvider, OpenAiConfig, StreamToken,
     StructuredOutputSchema, ThinkingStreamParser,
 };
+pub use multi_file::{FilePatchTarget, MultiFilePlanSummary, MultiFilePlanner};
+pub use observation::Observation;
 pub use permission::{ApprovalDecision, ApprovalManager, PermissionPolicy, RiskLevel};
 pub use planner::{Plan, PlanStep, StepStatus, TaskPlanner};
 pub use tool_runtime::{ExecutionResult, ToolRuntime};

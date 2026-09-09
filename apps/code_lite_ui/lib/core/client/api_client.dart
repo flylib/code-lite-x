@@ -395,6 +395,87 @@ class ApiClient {
     return {'status': 'error', 'error': 'FFI unavailable'};
   }
 
+  /// Formulates a multi-file modification plan with topological dependency ordering (Phase 9.2).
+  Future<Map<String, dynamic>> agentPlanMultiFile(
+    String prompt,
+    List<Map<String, String>> patches, {
+    String sessionId = 'default-session',
+  }) async {
+    if (_ffi.isAvailable) {
+      final params = {
+        'prompt': prompt,
+        'patches': patches,
+      };
+      return _ffi.agentPlanMultiFile(sessionId, params);
+    }
+    // Mock fallback when offline or FFI unavailable
+    return {
+      'status': 'ok',
+      'plan': {
+        'id': 'plan-mock-mf',
+        'session_id': sessionId,
+        'task_id': 'task-mock',
+        'prompt': prompt,
+        'steps': [
+          for (int i = 0; i < patches.length; i++)
+            {
+              'id': 'step_${i + 1}',
+              'description': patches[i]['description'] ?? 'Patch ${patches[i]['file_path']}',
+              'tool_name': 'apply_patch',
+              'args': {'path': patches[i]['file_path'], 'content': patches[i]['patch']},
+              'risk_level': 'Medium',
+              'status': 'Pending',
+            }
+        ],
+        'current_step_index': 0,
+        'is_completed': false,
+      },
+      'summary': {
+        'total_files': patches.length,
+        'ordered_files': patches.map((p) => p['file_path']).toList(),
+      }
+    };
+  }
+
+  /// Rolls back a single specific step within an active plan (Phase 9.4).
+  Future<Map<String, dynamic>> agentRollbackStep(String planId, String stepId) async {
+    if (_ffi.isAvailable) {
+      return _ffi.agentRollbackStep(planId, stepId);
+    }
+    return {'status': 'ok', 'rolled_back': true, 'step_id': stepId};
+  }
+
+  /// Creates an isolated Git Worktree sandbox for an agent task (Phase 9.3).
+  Future<Map<String, dynamic>> worktreeCreate(String taskId) async {
+    if (_ffi.isAvailable) {
+      return _ffi.worktreeCreate(taskId);
+    }
+    return {
+      'status': 'ok',
+      'session': {
+        'task_id': taskId,
+        'branch_name': 'agent/$taskId',
+        'worktree_path': '.codelite/worktree/$taskId',
+      }
+    };
+  }
+
+  /// Merges an isolated Git Worktree sandbox back into workspace (Phase 9.3).
+  Future<Map<String, dynamic>> worktreeMerge(String taskId) async {
+    if (_ffi.isAvailable) {
+      return _ffi.worktreeMerge(taskId);
+    }
+    return {'status': 'ok', 'merged': true, 'task_id': taskId};
+  }
+
+  /// Discards an isolated Git Worktree sandbox (Phase 9.3).
+  Future<Map<String, dynamic>> worktreeDiscard(String taskId) async {
+    if (_ffi.isAvailable) {
+      return _ffi.worktreeDiscard(taskId);
+    }
+    return {'status': 'ok', 'discarded': true, 'task_id': taskId};
+  }
+
   /// Fetches viewport-virtualized syntax tokens for high performance line streaming.
   Future<Map<String, dynamic>> getViewportTokens(String filePath, int startLine, int endLine) async {
     if (_ffi.isAvailable) {

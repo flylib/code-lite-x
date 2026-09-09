@@ -372,6 +372,159 @@ class _AiAssistantPanelState extends State<AiAssistantPanel> {
     );
   }
 
+  Future<void> _rollbackStep(String stepId) async {
+    if (_currentPlan == null) return;
+    final planId = _currentPlan!['id'] as String;
+    setState(() => _isLoading = true);
+    final res = await _client.agentRollbackStep(planId, stepId);
+    setState(() => _isLoading = false);
+
+    if (res['status'] == 'ok' && res['rolled_back'] == true) {
+      setState(() {
+        if (res['plan'] != null && res['plan'] is Map<String, dynamic>) {
+          _currentPlan = res['plan'] as Map<String, dynamic>;
+        } else {
+          final steps = (_currentPlan!['steps'] as List<dynamic>?) ?? [];
+          for (final s in steps) {
+            if (s is Map<String, dynamic> && s['id'] == stepId) {
+              s['status'] = 'rolled_back';
+            }
+          }
+        }
+        _messages.add(
+          _AiChatMessage(
+            sender: 'ToolRuntime',
+            text: '单步已精准回滚：步骤 $stepId 的操作已原子逆向撤销。',
+            isUser: false,
+            badge: 'Step Rollback',
+          ),
+        );
+      });
+      _refreshDiff();
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Rollback failed: ${res['error'] ?? 'Unknown error'}')),
+        );
+      }
+    }
+  }
+
+  void _showMultiFileReviewDialog() {
+    if (_currentPlan == null) return;
+    final steps = (_currentPlan!['steps'] as List<dynamic>?) ?? [];
+    final fileSteps = <Map<String, dynamic>>[];
+    for (final s in steps) {
+      if (s is Map<String, dynamic>) {
+        fileSteps.add(s);
+      }
+    }
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: IntelliJTheme.panelBg,
+        title: const Row(
+          children: [
+            Icon(Icons.account_tree, size: 16, color: IntelliJTheme.accentYellow),
+            SizedBox(width: 8),
+            Text(
+              'Multi-File Plan & Worktree Review',
+              style: TextStyle(color: IntelliJTheme.textHigh, fontSize: 13),
+            ),
+          ],
+        ),
+        content: SizedBox(
+          width: 550,
+          height: 380,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Topological Execution Order (Dependency Graph):',
+                style: TextStyle(color: IntelliJTheme.textSecondary, fontSize: 11, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              Expanded(
+                child: ListView.separated(
+                  itemCount: fileSteps.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 6),
+                  itemBuilder: (_, i) {
+                    final st = fileSteps[i];
+                    final args = st['args'] as Map<String, dynamic>? ?? {};
+                    final path = args['path'] as String? ?? 'workspace';
+                    final tool = st['tool_name'] as String? ?? '';
+                    return Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: IntelliJTheme.cardBg,
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: IntelliJTheme.border),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: IntelliJTheme.accentBlue.withOpacity(0.2),
+                                  borderRadius: BorderRadius.circular(2),
+                                ),
+                                child: Text(
+                                  '#${i + 1} $tool',
+                                  style: const TextStyle(color: IntelliJTheme.accentBlue, fontSize: 10, fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  path,
+                                  style: const TextStyle(color: IntelliJTheme.textHigh, fontSize: 11, fontFamily: 'monospace'),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            st['description'] as String? ?? '',
+                            style: const TextStyle(color: IntelliJTheme.textMuted, fontSize: 10),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              Navigator.of(ctx).pop();
+              final taskId = _currentPlan?['task_id'] as String? ?? 'task-wt';
+              final res = await _client.worktreeCreate(taskId);
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text(res['status'] == 'ok' ? 'Worktree sandbox initialized: agent/$taskId' : 'Worktree error')),
+                );
+              }
+            },
+            child: const Text('Create Worktree Sandbox', style: TextStyle(color: IntelliJTheme.accentBlue, fontSize: 11)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: IntelliJTheme.accentBlue),
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Close', style: TextStyle(color: Colors.white, fontSize: 11)),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -515,9 +668,12 @@ class _AiAssistantPanelState extends State<AiAssistantPanel> {
                           child: CircularProgressIndicator(strokeWidth: 2, color: IntelliJTheme.accentBlue),
                         ),
                         SizedBox(width: 8),
-                        Text(
-                          'Agent executing via ToolRuntime...',
-                          style: TextStyle(color: IntelliJTheme.textMuted, fontSize: 11),
+                        Expanded(
+                          child: Text(
+                            'Agent executing via ToolRuntime...',
+                            style: TextStyle(color: IntelliJTheme.textMuted, fontSize: 11),
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
                       ],
                     ),
@@ -586,16 +742,19 @@ class _AiAssistantPanelState extends State<AiAssistantPanel> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
+          Row(
             children: [
-              Icon(Icons.warning_amber_rounded, size: 14, color: IntelliJTheme.gitRed),
-              SizedBox(width: 6),
-              Text(
-                'APPROVAL REQUIRED (CRITICAL RISK)',
-                style: TextStyle(
-                  color: IntelliJTheme.gitRed,
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
+              const Icon(Icons.warning_amber_rounded, size: 14, color: IntelliJTheme.gitRed),
+              const SizedBox(width: 6),
+              const Expanded(
+                child: Text(
+                  'APPROVAL REQUIRED (CRITICAL RISK)',
+                  style: TextStyle(
+                    color: IntelliJTheme.gitRed,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],
@@ -657,26 +816,48 @@ class _AiAssistantPanelState extends State<AiAssistantPanel> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                'EXECUTION PLAN (${steps.length} STEPS)',
-                style: const TextStyle(
-                  color: IntelliJTheme.accentBlue,
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
+              Expanded(
+                child: Text(
+                  'EXECUTION PLAN (${steps.length} STEPS)',
+                  style: const TextStyle(
+                    color: IntelliJTheme.accentBlue,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
-              if (!isCompleted)
-                InkWell(
-                  onTap: _isLoading ? null : _executeNextStep,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: IntelliJTheme.accentBlue,
-                      borderRadius: BorderRadius.circular(3),
+              const SizedBox(width: 4),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  InkWell(
+                    onTap: _showMultiFileReviewDialog,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                      margin: const EdgeInsets.only(right: 4),
+                      decoration: BoxDecoration(
+                        color: IntelliJTheme.accentYellow.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(3),
+                        border: Border.all(color: IntelliJTheme.accentYellow.withOpacity(0.5)),
+                      ),
+                      child: const Text('Review', style: TextStyle(color: IntelliJTheme.accentYellow, fontSize: 9)),
                     ),
-                    child: const Text('Step >', style: TextStyle(color: Colors.white, fontSize: 10)),
                   ),
-                ),
+                  if (!isCompleted)
+                    InkWell(
+                      onTap: _isLoading ? null : _executeNextStep,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: IntelliJTheme.accentBlue,
+                          borderRadius: BorderRadius.circular(3),
+                        ),
+                        child: const Text('Step >', style: TextStyle(color: Colors.white, fontSize: 10)),
+                      ),
+                    ),
+                ],
+              ),
             ],
           ),
           const SizedBox(height: 6),
@@ -692,25 +873,29 @@ class _AiAssistantPanelState extends State<AiAssistantPanel> {
   Widget _buildStepRow(Map<String, dynamic> step, int index, int currentIndex) {
     final status = step['status'] as String? ?? 'pending';
     final tool = step['tool_name'] as String? ?? '';
-    final risk = step['risk_level'] as String? ?? 'low';
+    final risk = (step['risk_level'] as String? ?? 'low').toLowerCase();
 
     IconData icon;
     Color iconColor;
 
     switch (status) {
       case 'success':
+      case 'Completed':
         icon = Icons.check_circle;
         iconColor = IntelliJTheme.gitGreen;
         break;
       case 'running':
+      case 'Running':
         icon = Icons.sync;
         iconColor = IntelliJTheme.accentBlue;
         break;
       case 'awaiting_approval':
+      case 'SuspendedForApproval':
         icon = Icons.warning_rounded;
         iconColor = IntelliJTheme.accentYellow;
         break;
       case 'failed':
+      case 'Failed':
       case 'rolled_back':
         icon = Icons.error_rounded;
         iconColor = IntelliJTheme.gitRed;
@@ -731,6 +916,8 @@ class _AiAssistantPanelState extends State<AiAssistantPanel> {
       default:
         riskColor = IntelliJTheme.gitGreen;
     }
+
+    final isDone = status == 'success' || status == 'Completed';
 
     return Row(
       children: [
@@ -759,6 +946,24 @@ class _AiAssistantPanelState extends State<AiAssistantPanel> {
             style: TextStyle(color: riskColor, fontSize: 8, fontWeight: FontWeight.bold),
           ),
         ),
+        if (isDone && step['id'] != null) ...[
+          const SizedBox(width: 4),
+          InkWell(
+            onTap: _isLoading ? null : () => _rollbackStep(step['id'] as String),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+              decoration: BoxDecoration(
+                color: IntelliJTheme.gitRed.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(2),
+                border: Border.all(color: IntelliJTheme.gitRed.withOpacity(0.4)),
+              ),
+              child: const Text(
+                'REVERT',
+                style: TextStyle(color: IntelliJTheme.gitRed, fontSize: 8, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -798,17 +1003,30 @@ class _AiAssistantPanelState extends State<AiAssistantPanel> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Row(
-                  children: [
-                    Icon(Icons.auto_awesome, size: 12, color: Color(0xFF6CB4F8)),
-                    SizedBox(width: 4),
-                    Text(
-                      'CodeLite Assistant',
-                      style: TextStyle(color: IntelliJTheme.gitGreen, fontSize: 10, fontWeight: FontWeight.bold),
-                    ),
-                  ],
+                Expanded(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.auto_awesome, size: 12, color: Color(0xFF6CB4F8)),
+                      const SizedBox(width: 4),
+                      Flexible(
+                        child: Text(
+                          msg.sender.isNotEmpty ? msg.sender : 'CodeLite Assistant',
+                          style: const TextStyle(color: IntelliJTheme.gitGreen, fontSize: 10, fontWeight: FontWeight.bold),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-                Text(msg.isStreaming ? 'Streaming...' : 'Audited', style: TextStyle(color: msg.isStreaming ? IntelliJTheme.accentBlue : IntelliJTheme.gitGreen, fontSize: 9)),
+                const SizedBox(width: 4),
+                Text(
+                  msg.isStreaming ? 'Streaming...' : 'Audited',
+                  style: TextStyle(
+                    color: msg.isStreaming ? IntelliJTheme.accentBlue : IntelliJTheme.gitGreen,
+                    fontSize: 9,
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 6),
@@ -837,15 +1055,18 @@ class _AiAssistantPanelState extends State<AiAssistantPanel> {
                           children: [
                             const Icon(Icons.psychology, size: 12, color: IntelliJTheme.syntaxType),
                             const SizedBox(width: 6),
-                            Text(
-                              msg.isStreaming && msg.text.isEmpty ? 'Thinking in progress...' : 'Thinking Process',
-                              style: const TextStyle(
-                                color: IntelliJTheme.syntaxType,
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
+                            Expanded(
+                              child: Text(
+                                msg.isStreaming && msg.text.isEmpty ? 'Thinking in progress...' : 'Thinking Process',
+                                style: const TextStyle(
+                                  color: IntelliJTheme.syntaxType,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
-                            const Spacer(),
+                            const SizedBox(width: 4),
                             Icon(
                               msg.isThinkingExpanded ? Icons.expand_less : Icons.expand_more,
                               size: 14,
