@@ -427,7 +427,7 @@ Gutter 的「点击展开 Diff 浮层并 Revert 单行」，**全部建立在一
 
 ### 🔹 Phase 8: IDE Core（LSP Supervisor / Ghost Text / 多标签分屏）
 
-#### 8.1 LSP Supervisor（**范围已缩减** —— 底层已就绪）
+#### 8.1 LSP Supervisor [已完成 ✅ 2026-09-09]
 
 **已具备，勿重复实现**：`spawn_process`（`client.rs:58`）的子进程 stdio、`initialize`/`initialized` 握手、
 后台 reader 线程、`pending_requests` + `Condvar` 同步等待；`transport.rs` 的双向 framing（含 3 个测试）；

@@ -13,6 +13,7 @@ use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::sync::Arc;
 
+#[derive(Clone)]
 pub struct VirtualLspServer {
     /// In-memory open document cache (URI -> Content).
     documents: Arc<Mutex<HashMap<String, String>>>,
@@ -353,12 +354,72 @@ impl VirtualLspServer {
         self.compute_diagnostics(uri, content)
     }
 
+    /// Applies an incremental change (replacing a Range with new text) and recomputes diagnostics.
+    pub fn apply_incremental_change(&self, uri: &str, range: Range, new_text: &str) -> Vec<Diagnostic> {
+        let mut docs = self.documents.lock();
+        let current = docs.get(uri).cloned().unwrap_or_default();
+        let updated = replace_range_in_text(&current, range, new_text);
+        docs.insert(uri.to_string(), updated.clone());
+        drop(docs);
+        self.compute_diagnostics(uri, &updated)
+    }
+
+    pub fn get_document(&self, uri: &str) -> Option<String> {
+        self.documents.lock().get(uri).cloned()
+    }
+
     pub fn close_document(&self, uri: &str) {
         self.documents.lock().remove(uri);
         if let Some(store) = &self.diag_store {
             let _ = store.clear_file_diagnostics(uri);
         }
     }
+}
+
+/// Replaces a slice defined by Range (line, column) within content.
+pub fn replace_range_in_text(content: &str, range: Range, replacement: &str) -> String {
+    let mut current_line = 0u32;
+    let mut current_col = 0u32;
+    let mut start_byte = None;
+    let mut end_byte = None;
+
+    for (byte_idx, ch) in content.char_indices() {
+        if start_byte.is_none() && current_line == range.start.line && current_col == range.start.character {
+            start_byte = Some(byte_idx);
+        }
+        if end_byte.is_none() && current_line == range.end.line && current_col == range.end.character {
+            end_byte = Some(byte_idx);
+        }
+
+        if ch == '\n' {
+            if start_byte.is_none() && current_line == range.start.line && current_col <= range.start.character {
+                start_byte = Some(byte_idx);
+            }
+            if end_byte.is_none() && current_line == range.end.line && current_col <= range.end.character {
+                end_byte = Some(byte_idx);
+            }
+            current_line += 1;
+            current_col = 0;
+        } else {
+            current_col += 1;
+        }
+    }
+
+    if start_byte.is_none() && (current_line > range.start.line || (current_line == range.start.line && current_col >= range.start.character)) {
+        start_byte = Some(content.len());
+    }
+    if end_byte.is_none() && (current_line > range.end.line || (current_line == range.end.line && current_col >= range.end.character)) {
+        end_byte = Some(content.len());
+    }
+
+    let start = start_byte.unwrap_or(content.len()).min(content.len());
+    let end = end_byte.unwrap_or(content.len()).min(content.len()).max(start);
+
+    let mut result = String::with_capacity(start + replacement.len() + (content.len() - end));
+    result.push_str(&content[..start]);
+    result.push_str(replacement);
+    result.push_str(&content[end..]);
+    result
 }
 
 /// Extracts alphanumeric + '_' identifier under the target Position.
@@ -460,5 +521,24 @@ fn main() {
         assert_eq!(file_edits.len(), 2);
         assert_eq!(file_edits[0].new_text, "calculate");
         assert_eq!(file_edits[1].new_text, "calculate");
+    }
+
+    #[test]
+    fn test_incremental_document_update() {
+        let server = VirtualLspServer::new();
+        let code = "fn add(a: i32, b: i32) -> i32 {\n    a + b\n}";
+        let uri = "src/math.rs";
+        server.open_document(uri, code);
+
+        // Replace `a + b` (line 1, col 4 to 9) with `a * b`
+        let diags = server.apply_incremental_change(uri, Range::new(1, 4, 1, 9), "a * b");
+        assert!(diags.is_empty());
+        let current = server.get_document(uri).unwrap();
+        assert!(current.contains("a * b"));
+        assert!(!current.contains("a + b"));
+
+        // Introduce a syntax error incrementally: replace `*` with invalid token `@@@`
+        let diags_err = server.apply_incremental_change(uri, Range::new(1, 6, 1, 7), "@@@");
+        assert!(!diags_err.is_empty(), "Syntax error must be detected after incremental change");
     }
 }

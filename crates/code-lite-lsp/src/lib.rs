@@ -12,11 +12,13 @@
 
 pub mod client;
 pub mod protocol;
+pub mod supervisor;
 pub mod transport;
 pub mod virtual_server;
 
 pub use client::{DiagnosticsCallback, LspClient};
 pub use protocol::*;
+pub use supervisor::*;
 pub use transport::{FramedReader, FramedWriter};
 pub use virtual_server::VirtualLspServer;
 

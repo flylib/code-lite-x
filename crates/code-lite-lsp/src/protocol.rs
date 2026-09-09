@@ -191,11 +191,31 @@ pub struct DidOpenTextDocumentParams {
     pub text_document: TextDocumentItem,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct TextDocumentContentChangeEvent {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub range: Option<Range>,
+    #[serde(skip_serializing_if = "Option::is_none", rename = "rangeLength")]
+    pub range_length: Option<u32>,
     pub text: String,
+}
+
+impl TextDocumentContentChangeEvent {
+    pub fn full(text: impl Into<String>) -> Self {
+        Self {
+            range: None,
+            range_length: None,
+            text: text.into(),
+        }
+    }
+
+    pub fn incremental(range: Range, range_length: Option<u32>, text: impl Into<String>) -> Self {
+        Self {
+            range: Some(range),
+            range_length,
+            text: text.into(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -204,6 +224,100 @@ pub struct DidChangeTextDocumentParams {
     pub text_document: VersionedTextDocumentIdentifier,
     #[serde(rename = "contentChanges")]
     pub content_changes: Vec<TextDocumentContentChangeEvent>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(from = "u32", into = "u32")]
+pub enum TextDocumentSyncKind {
+    None = 0,
+    Full = 1,
+    Incremental = 2,
+}
+
+impl From<u32> for TextDocumentSyncKind {
+    fn from(val: u32) -> Self {
+        match val {
+            0 => Self::None,
+            1 => Self::Full,
+            2 => Self::Incremental,
+            _ => Self::Full,
+        }
+    }
+}
+
+impl From<TextDocumentSyncKind> for u32 {
+    fn from(k: TextDocumentSyncKind) -> Self {
+        k as u32
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum TextDocumentSyncCapability {
+    Kind(TextDocumentSyncKind),
+    Options(TextDocumentSyncOptions),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct TextDocumentSyncOptions {
+    #[serde(skip_serializing_if = "Option::is_none", rename = "openClose")]
+    pub open_close: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub change: Option<TextDocumentSyncKind>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct ServerCapabilities {
+    #[serde(skip_serializing_if = "Option::is_none", rename = "textDocumentSync")]
+    pub text_document_sync: Option<TextDocumentSyncCapability>,
+    #[serde(skip_serializing_if = "Option::is_none", rename = "hoverProvider")]
+    pub hover_provider: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none", rename = "completionProvider")]
+    pub completion_provider: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none", rename = "definitionProvider")]
+    pub definition_provider: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none", rename = "referencesProvider")]
+    pub references_provider: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none", rename = "renameProvider")]
+    pub rename_provider: Option<serde_json::Value>,
+}
+
+impl ServerCapabilities {
+    pub fn sync_kind(&self) -> TextDocumentSyncKind {
+        match &self.text_document_sync {
+            Some(TextDocumentSyncCapability::Kind(k)) => *k,
+            Some(TextDocumentSyncCapability::Options(opts)) => {
+                opts.change.unwrap_or(TextDocumentSyncKind::Full)
+            }
+            None => TextDocumentSyncKind::None,
+        }
+    }
+
+    pub fn supports_incremental_sync(&self) -> bool {
+        self.sync_kind() == TextDocumentSyncKind::Incremental
+    }
+
+    pub fn supports_rename(&self) -> bool {
+        match &self.rename_provider {
+            Some(serde_json::Value::Bool(b)) => *b,
+            Some(serde_json::Value::Object(_)) => true,
+            _ => false,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct InitializeResult {
+    pub capabilities: ServerCapabilities,
+    #[serde(skip_serializing_if = "Option::is_none", rename = "serverInfo")]
+    pub server_info: Option<ServerInfo>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ServerInfo {
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub version: Option<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -582,5 +696,55 @@ mod tests {
         let hover = Hover::markdown("```rust\nfn main()\n```", Some(Range::new(0, 0, 0, 7)));
         let md = hover.contents.to_markdown();
         assert!(md.contains("fn main()"));
+    }
+
+    #[test]
+    fn test_server_capabilities_parsing() {
+        // Test with integer textDocumentSync (e.g. 2 = Incremental)
+        let json_int = serde_json::json!({
+            "capabilities": {
+                "textDocumentSync": 2,
+                "renameProvider": true,
+                "hoverProvider": true
+            },
+            "serverInfo": {
+                "name": "rust-analyzer",
+                "version": "1.0.0"
+            }
+        });
+        let res: InitializeResult = serde_json::from_value(json_int).unwrap();
+        assert_eq!(res.capabilities.sync_kind(), TextDocumentSyncKind::Incremental);
+        assert!(res.capabilities.supports_incremental_sync());
+        assert!(res.capabilities.supports_rename());
+        assert_eq!(res.server_info.unwrap().name, "rust-analyzer");
+
+        // Test with object textDocumentSync
+        let json_obj = serde_json::json!({
+            "capabilities": {
+                "textDocumentSync": {
+                    "openClose": true,
+                    "change": 2
+                },
+                "renameProvider": { "prepareProvider": true }
+            }
+        });
+        let res_obj: InitializeResult = serde_json::from_value(json_obj).unwrap();
+        assert!(res_obj.capabilities.supports_incremental_sync());
+        assert!(res_obj.capabilities.supports_rename());
+    }
+
+    #[test]
+    fn test_incremental_change_event() {
+        let event = TextDocumentContentChangeEvent::incremental(
+            Range::new(1, 4, 1, 10),
+            Some(6),
+            "replacement",
+        );
+        assert_eq!(event.range, Some(Range::new(1, 4, 1, 10)));
+        assert_eq!(event.range_length, Some(6));
+        assert_eq!(event.text, "replacement");
+
+        let json = serde_json::to_string(&event).unwrap();
+        assert!(json.contains("\"rangeLength\":6"));
     }
 }

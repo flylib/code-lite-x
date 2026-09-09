@@ -40,6 +40,7 @@ pub struct CodeLiteContext {
     pub diagnostic_store: code_lite_storage::DiagnosticStore,
     pub approval_store: code_lite_storage::ApprovalStore,
     pub lsp_client: Mutex<Option<std::sync::Arc<code_lite_lsp::LspClient>>>,
+    pub lsp_supervisor: Mutex<Option<std::sync::Arc<code_lite_lsp::ProcessSupervisor>>>,
     pub active_plans: Mutex<HashMap<String, code_lite_agent::Plan>>,
     pub editors: Mutex<HashMap<String, Editor>>,
     pub llm_provider: std::sync::Arc<dyn LlmProvider>,
@@ -118,6 +119,8 @@ pub unsafe extern "C" fn codelite_init(workspace_path: *const c_char) -> *mut Co
     let approval_store = code_lite_storage::ApprovalStore::new(db.clone());
     let v_server = code_lite_lsp::VirtualLspServer::new()
         .with_diagnostic_store(diagnostic_store.clone());
+    let supervisor = code_lite_lsp::ProcessSupervisor::new(&root, v_server.clone());
+    let lsp_supervisor = Mutex::new(Some(std::sync::Arc::new(supervisor)));
     let lsp_client = Mutex::new(Some(std::sync::Arc::new(code_lite_lsp::LspClient::new_virtual(v_server))));
     let llm_provider: std::sync::Arc<dyn LlmProvider> =
         std::sync::Arc::new(BuiltinRuleProvider::new());
@@ -134,6 +137,7 @@ pub unsafe extern "C" fn codelite_init(workspace_path: *const c_char) -> *mut Co
         diagnostic_store,
         approval_store,
         lsp_client,
+        lsp_supervisor,
         active_plans: Mutex::new(HashMap::new()),
         editors: Mutex::new(HashMap::new()),
         llm_provider,
@@ -1078,6 +1082,10 @@ pub unsafe extern "C" fn codelite_lsp_init_server(
             };
             let args_slices: Vec<&str> = args_vec.iter().map(|s| s.as_str()).collect();
 
+            if let Some(supervisor) = ctx.lsp_supervisor.lock().as_ref() {
+                supervisor.set_server_config("rust", cmd, &args_slices);
+            }
+
             if let Ok(client) = code_lite_lsp::LspClient::spawn_process(cmd, &args_slices, &ctx.workspace_root) {
                 *ctx.lsp_client.lock() = Some(std::sync::Arc::new(client));
                 return true;
@@ -1111,6 +1119,14 @@ pub unsafe extern "C" fn codelite_lsp_did_open(
     let lang = c_str_to_str(language).unwrap_or("rust");
     let text = c_str_to_str(content).unwrap_or("");
 
+    let sup_guard = ctx.lsp_supervisor.lock();
+    if let Some(supervisor) = sup_guard.as_ref() {
+        match supervisor.did_open(path, lang, text) {
+            Ok(diags) => return json_to_c_char(&diags),
+            Err(e) => return err_json(&format!("LSP did_open error: {}", e)),
+        }
+    }
+
     let guard = ctx.lsp_client.lock();
     if let Some(client) = guard.as_ref() {
         match client.did_open(path, lang, text) {
@@ -1122,7 +1138,7 @@ pub unsafe extern "C" fn codelite_lsp_did_open(
     }
 }
 
-/// Notifies LSP of document changes, returning updated diagnostics.
+/// Notifies LSP of document changes (full replacement), returning updated diagnostics.
 #[no_mangle]
 pub unsafe extern "C" fn codelite_lsp_did_change(
     ctx: *mut CodeLiteContext,
@@ -1140,11 +1156,61 @@ pub unsafe extern "C" fn codelite_lsp_did_change(
     };
     let text = c_str_to_str(content).unwrap_or("");
 
+    let sup_guard = ctx.lsp_supervisor.lock();
+    if let Some(supervisor) = sup_guard.as_ref() {
+        match supervisor.did_change(path, version, text) {
+            Ok(diags) => return json_to_c_char(&diags),
+            Err(e) => return err_json(&format!("LSP did_change error: {}", e)),
+        }
+    }
+
     let guard = ctx.lsp_client.lock();
     if let Some(client) = guard.as_ref() {
         match client.did_change(path, version, text) {
             Ok(diags) => json_to_c_char(&diags),
             Err(e) => err_json(&format!("LSP did_change error: {}", e)),
+        }
+    } else {
+        err_json("LSP client not initialized")
+    }
+}
+
+/// Notifies LSP of incremental document changes (Range replacement), returning updated diagnostics.
+#[no_mangle]
+pub unsafe extern "C" fn codelite_lsp_did_change_incremental(
+    ctx: *mut CodeLiteContext,
+    file_path: *const c_char,
+    version: i32,
+    start_line: u32,
+    start_col: u32,
+    end_line: u32,
+    end_col: u32,
+    new_content: *const c_char,
+) -> *const c_char {
+    if ctx.is_null() {
+        return err_json("Context is null");
+    }
+    let ctx = &*ctx;
+    let path = match c_str_to_str(file_path) {
+        Some(s) => s,
+        None => return err_json("Invalid file_path"),
+    };
+    let text = c_str_to_str(new_content).unwrap_or("");
+    let range = code_lite_lsp::Range::new(start_line, start_col, end_line, end_col);
+
+    let sup_guard = ctx.lsp_supervisor.lock();
+    if let Some(supervisor) = sup_guard.as_ref() {
+        match supervisor.did_change_incremental(path, version, range, None, text) {
+            Ok(diags) => return json_to_c_char(&diags),
+            Err(e) => return err_json(&format!("LSP did_change_incremental error: {}", e)),
+        }
+    }
+
+    let guard = ctx.lsp_client.lock();
+    if let Some(client) = guard.as_ref() {
+        match client.did_change_incremental(path, version, range, None, text) {
+            Ok(diags) => json_to_c_char(&diags),
+            Err(e) => err_json(&format!("LSP did_change_incremental error: {}", e)),
         }
     } else {
         err_json("LSP client not initialized")
@@ -1165,6 +1231,14 @@ pub unsafe extern "C" fn codelite_lsp_get_diagnostics(
         Some(s) => s,
         None => return err_json("Invalid file_path"),
     };
+
+    let sup_guard = ctx.lsp_supervisor.lock();
+    if let Some(supervisor) = sup_guard.as_ref() {
+        let diags = supervisor.get_diagnostics(path);
+        if !diags.is_empty() {
+            return json_to_c_char(&diags);
+        }
+    }
 
     let guard = ctx.lsp_client.lock();
     if let Some(client) = guard.as_ref() {
@@ -1198,6 +1272,14 @@ pub unsafe extern "C" fn codelite_lsp_goto_definition(
         None => return err_json("Invalid file_path"),
     };
 
+    let sup_guard = ctx.lsp_supervisor.lock();
+    if let Some(supervisor) = sup_guard.as_ref() {
+        match supervisor.goto_definition(path, line, col) {
+            Ok(defs) => return json_to_c_char(&defs),
+            Err(e) => return err_json(&format!("Goto definition failed: {}", e)),
+        }
+    }
+
     let guard = ctx.lsp_client.lock();
     if let Some(client) = guard.as_ref() {
         match client.goto_definition(path, line, col) {
@@ -1227,6 +1309,14 @@ pub unsafe extern "C" fn codelite_lsp_find_references(
         None => return err_json("Invalid file_path"),
     };
 
+    let sup_guard = ctx.lsp_supervisor.lock();
+    if let Some(supervisor) = sup_guard.as_ref() {
+        match supervisor.find_references(path, line, col, include_decl) {
+            Ok(refs) => return json_to_c_char(&refs),
+            Err(e) => return err_json(&format!("Find references failed: {}", e)),
+        }
+    }
+
     let guard = ctx.lsp_client.lock();
     if let Some(client) = guard.as_ref() {
         match client.find_references(path, line, col, include_decl) {
@@ -1254,6 +1344,14 @@ pub unsafe extern "C" fn codelite_lsp_hover(
         Some(s) => s,
         None => return err_json("Invalid file_path"),
     };
+
+    let sup_guard = ctx.lsp_supervisor.lock();
+    if let Some(supervisor) = sup_guard.as_ref() {
+        match supervisor.hover(path, line, col) {
+            Ok(hover) => return json_to_c_char(&hover),
+            Err(e) => return err_json(&format!("Hover failed: {}", e)),
+        }
+    }
 
     let guard = ctx.lsp_client.lock();
     if let Some(client) = guard.as_ref() {
@@ -1283,6 +1381,14 @@ pub unsafe extern "C" fn codelite_lsp_completion(
         None => return err_json("Invalid file_path"),
     };
 
+    let sup_guard = ctx.lsp_supervisor.lock();
+    if let Some(supervisor) = sup_guard.as_ref() {
+        match supervisor.completion(path, line, col) {
+            Ok(items) => return json_to_c_char(&items),
+            Err(e) => return err_json(&format!("Completion failed: {}", e)),
+        }
+    }
+
     let guard = ctx.lsp_client.lock();
     if let Some(client) = guard.as_ref() {
         match client.completion(path, line, col) {
@@ -1294,7 +1400,7 @@ pub unsafe extern "C" fn codelite_lsp_completion(
     }
 }
 
-/// calc_values workspace-wide rename edits.
+/// Calculates workspace-wide rename edits.
 #[no_mangle]
 pub unsafe extern "C" fn codelite_lsp_rename(
     ctx: *mut CodeLiteContext,
@@ -1316,6 +1422,14 @@ pub unsafe extern "C" fn codelite_lsp_rename(
         None => return err_json("Invalid new_name"),
     };
 
+    let sup_guard = ctx.lsp_supervisor.lock();
+    if let Some(supervisor) = sup_guard.as_ref() {
+        match supervisor.rename(path, line, col, name) {
+            Ok(edit) => return json_to_c_char(&edit),
+            Err(e) => return err_json(&format!("Rename failed: {}", e)),
+        }
+    }
+
     let guard = ctx.lsp_client.lock();
     if let Some(client) = guard.as_ref() {
         match client.rename(path, line, col, name) {
@@ -1324,6 +1438,53 @@ pub unsafe extern "C" fn codelite_lsp_rename(
         }
     } else {
         err_json("LSP client not initialized")
+    }
+}
+
+/// Returns the server capabilities JSON for a given language.
+#[no_mangle]
+pub unsafe extern "C" fn codelite_lsp_server_capabilities(
+    ctx: *mut CodeLiteContext,
+    language: *const c_char,
+) -> *const c_char {
+    if ctx.is_null() {
+        return err_json("Context is null");
+    }
+    let ctx = &*ctx;
+    let lang = c_str_to_str(language).unwrap_or("rust");
+
+    let sup_guard = ctx.lsp_supervisor.lock();
+    if let Some(supervisor) = sup_guard.as_ref() {
+        if let Some(caps) = supervisor.server_capabilities(lang) {
+            return json_to_c_char(&caps);
+        }
+    }
+
+    let guard = ctx.lsp_client.lock();
+    if let Some(client) = guard.as_ref() {
+        if let Some(caps) = client.server_capabilities() {
+            return json_to_c_char(&caps);
+        }
+    }
+
+    err_json("Server capabilities unavailable")
+}
+
+/// Returns the supervisor status report JSON.
+#[no_mangle]
+pub unsafe extern "C" fn codelite_lsp_supervisor_status(
+    ctx: *mut CodeLiteContext,
+) -> *const c_char {
+    if ctx.is_null() {
+        return err_json("Context is null");
+    }
+    let ctx = &*ctx;
+    let sup_guard = ctx.lsp_supervisor.lock();
+    if let Some(supervisor) = sup_guard.as_ref() {
+        let status = supervisor.status();
+        json_to_c_char(&status)
+    } else {
+        err_json("Supervisor not initialized")
     }
 }
 
@@ -2027,6 +2188,32 @@ mod tests {
             let rename_str = CStr::from_ptr(rename_ptr).to_str().unwrap();
             assert!(rename_str.contains("calculate"));
             codelite_string_free(rename_ptr as *mut c_char);
+
+            // 7. Incremental Sync (Phase 8.1)
+            let inc_text = CString::new("100").unwrap();
+            let inc_diags_ptr = codelite_lsp_did_change_incremental(
+                ctx,
+                lsp_file.as_ptr(),
+                2,
+                0, 25, 0, 27,
+                inc_text.as_ptr(),
+            );
+            let inc_diags_str = CStr::from_ptr(inc_diags_ptr).to_str().unwrap();
+            assert_eq!(inc_diags_str, "[]");
+            codelite_string_free(inc_diags_ptr as *mut c_char);
+
+            // 8. Server Capabilities (Phase 8.1)
+            let caps_ptr = codelite_lsp_server_capabilities(ctx, lsp_lang.as_ptr());
+            let caps_str = CStr::from_ptr(caps_ptr).to_str().unwrap();
+            assert!(caps_str.contains("textDocumentSync"));
+            codelite_string_free(caps_ptr as *mut c_char);
+
+            // 9. Supervisor Status (Phase 8.1)
+            let status_ptr = codelite_lsp_supervisor_status(ctx);
+            let status_str = CStr::from_ptr(status_ptr).to_str().unwrap();
+            assert!(status_str.contains("tracked_documents_count"));
+            assert!(status_str.contains("rust"));
+            codelite_string_free(status_ptr as *mut c_char);
 
             // Phase 3: Agent Planning, Closed Loop Execution & Three-Tier Permissions
             let plan_sess = CString::new("agent-ffi-sess").unwrap();

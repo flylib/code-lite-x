@@ -36,6 +36,7 @@ pub struct LspClient {
     diagnostics_cache: Arc<RwLock<HashMap<String, Vec<Diagnostic>>>>,
     diagnostics_listener: Arc<RwLock<Option<DiagnosticsCallback>>>,
     is_running: Arc<AtomicBool>,
+    server_capabilities: Arc<RwLock<Option<ServerCapabilities>>>,
 }
 
 impl LspClient {
@@ -51,6 +52,14 @@ impl LspClient {
             diagnostics_cache: Arc::new(RwLock::new(HashMap::new())),
             diagnostics_listener: Arc::new(RwLock::new(None)),
             is_running: Arc::new(AtomicBool::new(true)),
+            server_capabilities: Arc::new(RwLock::new(Some(ServerCapabilities {
+                text_document_sync: Some(TextDocumentSyncCapability::Kind(TextDocumentSyncKind::Incremental)),
+                hover_provider: Some(serde_json::json!(true)),
+                completion_provider: Some(serde_json::json!({ "resolveProvider": false })),
+                definition_provider: Some(serde_json::json!(true)),
+                references_provider: Some(serde_json::json!(true)),
+                rename_provider: Some(serde_json::json!({ "prepareProvider": true })),
+            }))),
         }
     }
 
@@ -116,6 +125,7 @@ impl LspClient {
             diagnostics_cache: diags_cache,
             diagnostics_listener: diags_listener,
             is_running: running,
+            server_capabilities: Arc::new(RwLock::new(None)),
         };
 
         // Send LSP initialize handshake
@@ -124,6 +134,12 @@ impl LspClient {
             "rootUri": format!("file://{}", root_path.to_string_lossy()),
             "capabilities": {
                 "textDocument": {
+                    "synchronization": {
+                        "dynamicRegistration": true,
+                        "willSave": true,
+                        "willSaveWaitUntil": true,
+                        "didSave": true
+                    },
                     "publishDiagnostics": { "relatedInformation": true },
                     "definition": { "dynamicRegistration": true },
                     "references": { "dynamicRegistration": true },
@@ -134,10 +150,53 @@ impl LspClient {
             }
         });
 
-        let _ = client.send_request("initialize", Some(init_params));
+        if let Ok(init_resp) = client.send_request("initialize", Some(init_params)) {
+            if let Ok(init_res) = serde_json::from_value::<InitializeResult>(init_resp) {
+                *client.server_capabilities.write() = Some(init_res.capabilities);
+            }
+        }
         let _ = client.send_notification("initialized", Some(serde_json::json!({})));
 
         Ok(client)
+    }
+
+    /// Checks whether the underlying LSP backend is still healthy and running.
+    pub fn is_alive(&self) -> bool {
+        if !self.is_running.load(Ordering::Relaxed) {
+            return false;
+        }
+        match &self.backend {
+            Backend::Virtual(_) => true,
+            Backend::Process { _child, .. } => {
+                match _child.lock().try_wait() {
+                    Ok(None) => true,
+                    _ => false,
+                }
+            }
+        }
+    }
+
+    /// Returns the negotiated ServerCapabilities if initialize succeeded.
+    pub fn server_capabilities(&self) -> Option<ServerCapabilities> {
+        self.server_capabilities.read().clone()
+    }
+
+    /// Returns whether the server explicitly supports incremental document sync.
+    pub fn supports_incremental_sync(&self) -> bool {
+        self.server_capabilities
+            .read()
+            .as_ref()
+            .map(|c| c.supports_incremental_sync())
+            .unwrap_or(false)
+    }
+
+    /// Returns whether the server supports workspace rename.
+    pub fn supports_rename(&self) -> bool {
+        self.server_capabilities
+            .read()
+            .as_ref()
+            .map(|c| c.supports_rename())
+            .unwrap_or(false)
     }
 
     // -----------------------------------------------------------------------
@@ -312,6 +371,7 @@ impl LspClient {
         }
     }
 
+    /// Full document synchronization.
     pub fn did_change(&self, uri: &str, version: i32, text: &str) -> Result<Vec<Diagnostic>> {
         match &self.backend {
             Backend::Virtual(server) => {
@@ -328,10 +388,43 @@ impl LspClient {
                         uri: uri.to_string(),
                         version,
                     },
-                    content_changes: vec![TextDocumentContentChangeEvent {
-                        range: None,
-                        text: text.to_string(),
-                    }],
+                    content_changes: vec![TextDocumentContentChangeEvent::full(text)],
+                };
+                self.send_notification("textDocument/didChange", Some(serde_json::to_value(params)?))?;
+                Ok(self.get_diagnostics(uri))
+            }
+        }
+    }
+
+    /// Incremental document synchronization.
+    pub fn did_change_incremental(
+        &self,
+        uri: &str,
+        version: i32,
+        range: Range,
+        range_length: Option<u32>,
+        new_text: &str,
+    ) -> Result<Vec<Diagnostic>> {
+        match &self.backend {
+            Backend::Virtual(server) => {
+                let diags = server.apply_incremental_change(uri, range, new_text);
+                self.diagnostics_cache.write().insert(uri.to_string(), diags.clone());
+                if let Some(listener) = self.diagnostics_listener.read().as_ref() {
+                    listener(uri, &diags);
+                }
+                Ok(diags)
+            }
+            Backend::Process { .. } => {
+                let params = DidChangeTextDocumentParams {
+                    text_document: VersionedTextDocumentIdentifier {
+                        uri: uri.to_string(),
+                        version,
+                    },
+                    content_changes: vec![TextDocumentContentChangeEvent::incremental(
+                        range,
+                        range_length,
+                        new_text,
+                    )],
                 };
                 self.send_notification("textDocument/didChange", Some(serde_json::to_value(params)?))?;
                 Ok(self.get_diagnostics(uri))
@@ -340,8 +433,16 @@ impl LspClient {
     }
 
     pub fn did_close(&self, uri: &str) {
-        if let Backend::Virtual(server) = &self.backend {
-            server.close_document(uri);
+        match &self.backend {
+            Backend::Virtual(server) => {
+                server.close_document(uri);
+            }
+            Backend::Process { .. } => {
+                let params = serde_json::json!({
+                    "textDocument": { "uri": uri }
+                });
+                let _ = self.send_notification("textDocument/didClose", Some(params));
+            }
         }
         self.diagnostics_cache.write().remove(uri);
     }
