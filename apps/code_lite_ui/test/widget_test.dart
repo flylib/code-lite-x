@@ -23,33 +23,36 @@ void main() {
     expect(find.text('Git Log: HEAD'), findsOneWidget);
     expect(find.text('SQLite State & Rollback'), findsOneWidget);
 
-    // Verify AI Agent drawer
-    expect(find.text('CodeLite AI Assistant'), findsOneWidget);
+    // The right column starts closed — no tool window should pay FFI cost on boot.
+    expect(find.text('CodeLite AI Assistant'), findsNothing);
+    expect(find.text('Cargo'), findsNothing);
   });
 
-  testWidgets('right activity stripe swaps the right tool window', (WidgetTester tester) async {
+  testWidgets('right activity stripe opens, swaps and collapses tool windows', (WidgetTester tester) async {
     await tester.binding.setSurfaceSize(const Size(1280, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
     await tester.pumpWidget(const CodeLiteApp());
     await tester.pump();
 
-    // The assistant is the default right tool window.
+    // Nothing is docked on the right until asked for.
+    expect(find.text('Cargo'), findsNothing);
+    expect(find.text('CodeLite AI Assistant'), findsNothing);
+
+    await tester.tap(find.byTooltip('Cargo'));
+    await tester.pump();
+    expect(find.text('Cargo'), findsOneWidget);
+
+    // Picking another tool replaces it rather than stacking a second panel.
+    await tester.tap(find.byTooltip('助手'));
+    await tester.pump();
     expect(find.text('CodeLite AI Assistant'), findsOneWidget);
     expect(find.text('Cargo'), findsNothing);
 
-    // Selecting Cargo replaces it rather than stacking another panel.
-    await tester.tap(find.byTooltip('Cargo'));
+    // Selecting the open tool again collapses the column.
+    await tester.tap(find.byTooltip('助手'));
     await tester.pump();
-
-    expect(find.text('Cargo'), findsOneWidget);
     expect(find.text('CodeLite AI Assistant'), findsNothing);
-
-    // Selecting the same tool again collapses the column.
-    await tester.tap(find.byTooltip('Cargo'));
-    await tester.pump();
-
-    expect(find.text('Cargo'), findsNothing);
   });
 
   testWidgets('left activity stripe collapses the project panel on re-tap', (WidgetTester tester) async {

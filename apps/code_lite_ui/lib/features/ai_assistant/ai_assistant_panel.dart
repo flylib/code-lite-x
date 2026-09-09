@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../../core/client/api_client.dart';
@@ -57,21 +58,34 @@ class _AiAssistantPanelState extends State<AiAssistantPanel> {
   List<dynamic> _skillsList = [];
   List<dynamic> _mcpToolsList = [];
 
+  Timer? _insightsDebounce;
+
   @override
   void initState() {
     super.initState();
     _client = widget.client ?? ApiClient();
     _loadPersistedMessages();
     _refreshApprovals();
-    _refreshContextInsights();
+    // Context Insights 默认折叠,不在挂载时拉取 —— 见 _scheduleInsightsRefresh。
   }
 
   @override
   void didUpdateWidget(AiAssistantPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.activeFile != widget.activeFile) {
-      _refreshContextInsights();
+      _scheduleInsightsRefresh();
     }
+  }
+
+  /// Context Insights 要走三次 FFI 往返(buildTaskPrompt + listSkills + listMcpTools),
+  /// 其中 buildTaskPrompt 还要拼指令文件全文。切文件是编辑器里最高频的操作之一,
+  /// 所以这里只在该区域真的展开时才拉,并且防抖 —— 快速连续切文件只发最后一次。
+  void _scheduleInsightsRefresh() {
+    _insightsDebounce?.cancel();
+    if (!_showInsights) return;
+    _insightsDebounce = Timer(const Duration(milliseconds: 400), () {
+      if (mounted) _refreshContextInsights();
+    });
   }
 
   Future<void> _refreshContextInsights() async {
@@ -140,6 +154,7 @@ class _AiAssistantPanelState extends State<AiAssistantPanel> {
 
   @override
   void dispose() {
+    _insightsDebounce?.cancel();
     _controller.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -1230,6 +1245,10 @@ class _AiAssistantPanelState extends State<AiAssistantPanel> {
                   setState(() {
                     _showInsights = !_showInsights;
                   });
+                  // 展开时才去取数据,且仅在还没有数据时取。
+                  if (_showInsights && _contextInsights == null) {
+                    _refreshContextInsights();
+                  }
                 },
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),

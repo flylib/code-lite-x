@@ -15,7 +15,9 @@ enum RightTool { none, cargo, assistant }
 /// 布局变化和编辑变化各自通知各自的订阅者。
 class LayoutStore extends ChangeNotifier {
   LeftTool _leftTool = LeftTool.project;
-  RightTool _rightTool = RightTool.assistant;
+  // 默认不打开右栏:助手面板挂载时会做 FFI 往返,启动阶段不该为一个
+  // 用户还没要求看的面板付这个代价。用户点右活动条再开。
+  RightTool _rightTool = RightTool.none;
   BottomToolTab _bottomTab = BottomToolTab.git;
   bool _isLeftOpen = true;
   bool _isBottomOpen = true;
