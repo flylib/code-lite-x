@@ -1,6 +1,9 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import '../ffi/codelite_bindings.dart';
+// web 没有 dart:ffi —— 条件导入让 web 拿到桩(isAvailable 恒 false),
+// 原生拿到真实的 FFI 绑定。两者类名与签名一致。
+import '../ffi/codelite_bindings_stub.dart'
+    if (dart.library.ffi) '../ffi/codelite_bindings.dart';
 
 /// Unified Client connecting Flutter UI to the Rust Core.
 /// Prioritizes direct C-ABI FFI (`libcodelite.dylib`) and falls back to HTTP IPC (`code-lite-app`).
