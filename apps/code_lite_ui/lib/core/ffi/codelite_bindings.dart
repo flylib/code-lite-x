@@ -174,6 +174,21 @@ typedef _UpdaterStageDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Ch
 typedef _UpdaterApplyC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> stagingDir, Pointer<Char> targetDir, Pointer<Char> filesJson, Pointer<Char> platform);
 typedef _UpdaterApplyDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> stagingDir, Pointer<Char> targetDir, Pointer<Char> filesJson, Pointer<Char> platform);
 
+typedef _PluginLoadC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> manifestJson, Pointer<Uint8> wasmBytesPtr, Size wasmBytesLen);
+typedef _PluginLoadDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> manifestJson, Pointer<Uint8> wasmBytesPtr, int wasmBytesLen);
+
+typedef _PluginListC = Pointer<Char> Function(Pointer<Void> ctx);
+typedef _PluginListDart = Pointer<Char> Function(Pointer<Void> ctx);
+
+typedef _PluginToggleC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> pluginId, Bool enable);
+typedef _PluginToggleDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> pluginId, bool enable);
+
+typedef _PluginExecuteToolC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> pluginId, Pointer<Char> toolName, Pointer<Char> argsJson);
+typedef _PluginExecuteToolDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> pluginId, Pointer<Char> toolName, Pointer<Char> argsJson);
+
+typedef _PluginUnloadC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> pluginId);
+typedef _PluginUnloadDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> pluginId);
+
 /// Dart FFI bindings to Rust Core dynamic library (`libcodelite.dylib`).
 class CodeLiteBindings {
   static final CodeLiteBindings instance = CodeLiteBindings._();
@@ -256,6 +271,11 @@ class CodeLiteBindings {
   late final _UpdaterCheckDart _updaterCheck;
   late final _UpdaterStageDart _updaterStage;
   late final _UpdaterApplyDart _updaterApply;
+  late final _PluginLoadDart _pluginLoad;
+  late final _PluginListDart _pluginList;
+  late final _PluginToggleDart _pluginToggle;
+  late final _PluginExecuteToolDart _pluginExecuteTool;
+  late final _PluginUnloadDart _pluginUnload;
 
   Pointer<Void>? get contextPointer => _ctx;
 
@@ -337,6 +357,11 @@ class CodeLiteBindings {
       _updaterCheck = _dylib!.lookupFunction<_UpdaterCheckC, _UpdaterCheckDart>('codelite_updater_check');
       _updaterStage = _dylib!.lookupFunction<_UpdaterStageC, _UpdaterStageDart>('codelite_updater_stage');
       _updaterApply = _dylib!.lookupFunction<_UpdaterApplyC, _UpdaterApplyDart>('codelite_updater_apply');
+      _pluginLoad = _dylib!.lookupFunction<_PluginLoadC, _PluginLoadDart>('codelite_plugin_load');
+      _pluginList = _dylib!.lookupFunction<_PluginListC, _PluginListDart>('codelite_plugin_list');
+      _pluginToggle = _dylib!.lookupFunction<_PluginToggleC, _PluginToggleDart>('codelite_plugin_toggle');
+      _pluginExecuteTool = _dylib!.lookupFunction<_PluginExecuteToolC, _PluginExecuteToolDart>('codelite_plugin_execute_tool');
+      _pluginUnload = _dylib!.lookupFunction<_PluginUnloadC, _PluginUnloadDart>('codelite_plugin_unload');
 
       final pathPtr = _toCString(workspacePath);
       _ctx = _init(pathPtr.pointer);
@@ -1029,6 +1054,67 @@ class CodeLiteBindings {
       _freeAllocatedString(pTarget);
       _freeAllocatedString(pFiles);
       _freeAllocatedString(pPlat);
+    }
+  }
+
+  Map<String, dynamic> pluginLoad(String manifestJson, List<int> wasmBytes) {
+    if (!isAvailable) return {'status': 'error', 'error': 'FFI not available'};
+    final pMan = _toCString(manifestJson);
+    final bytesLen = wasmBytes.length;
+    final ptr = _stringAlloc(bytesLen);
+    final bytePtr = ptr.cast<Uint8>();
+    for (int i = 0; i < bytesLen; i++) {
+      bytePtr[i] = wasmBytes[i];
+    }
+    try {
+      final resPtr = _pluginLoad(_ctx!, pMan.pointer, bytePtr, bytesLen);
+      return _parseJsonMap(_fromCString(resPtr));
+    } finally {
+      _bufferFree(ptr, bytesLen);
+      _freeAllocatedString(pMan);
+    }
+  }
+
+  Map<String, dynamic> pluginList() {
+    if (!isAvailable) return {'status': 'error', 'error': 'FFI not available'};
+    final ptr = _pluginList(_ctx!);
+    return _parseJsonMap(_fromCString(ptr));
+  }
+
+  Map<String, dynamic> pluginToggle(String pluginId, bool enable) {
+    if (!isAvailable) return {'status': 'error', 'error': 'FFI not available'};
+    final pId = _toCString(pluginId);
+    try {
+      final ptr = _pluginToggle(_ctx!, pId.pointer, enable);
+      return _parseJsonMap(_fromCString(ptr));
+    } finally {
+      _freeAllocatedString(pId);
+    }
+  }
+
+  Map<String, dynamic> pluginExecuteTool(String pluginId, String toolName, Map<String, dynamic> args) {
+    if (!isAvailable) return {'status': 'error', 'error': 'FFI not available'};
+    final pId = _toCString(pluginId);
+    final pTool = _toCString(toolName);
+    final pArgs = _toCString(jsonEncode(args));
+    try {
+      final ptr = _pluginExecuteTool(_ctx!, pId.pointer, pTool.pointer, pArgs.pointer);
+      return _parseJsonMap(_fromCString(ptr));
+    } finally {
+      _freeAllocatedString(pId);
+      _freeAllocatedString(pTool);
+      _freeAllocatedString(pArgs);
+    }
+  }
+
+  Map<String, dynamic> pluginUnload(String pluginId) {
+    if (!isAvailable) return {'status': 'error', 'error': 'FFI not available'};
+    final pId = _toCString(pluginId);
+    try {
+      final ptr = _pluginUnload(_ctx!, pId.pointer);
+      return _parseJsonMap(_fromCString(ptr));
+    } finally {
+      _freeAllocatedString(pId);
     }
   }
 

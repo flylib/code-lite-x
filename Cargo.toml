@@ -10,8 +10,10 @@ members = [
     "crates/code-lite-graph",
     "crates/code-lite-lsp",
     "crates/code-lite-rpc",
+    "crates/code-lite-plugin",
     "crates/xtask",
 ]
+
 
 [workspace.package]
 version = "0.1.0"

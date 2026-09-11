@@ -239,6 +239,30 @@ void main() {
         final applyRes = ffi.updaterApply(stageDir, targetDir, ['abc.bin'], platform: 'linux');
         expect(applyRes['status'], equals('ok'));
 
+        // Test Phase 12 WASM Plugin bindings (codelite_plugin_list, toggle, execute_tool, load, unload)
+        final pList = ffi.pluginList();
+        expect(pList['status'], equals('ok'));
+        expect(pList['plugins'], isA<List>());
+
+        final pExec = ffi.pluginExecuteTool('codelite.sql_inspector', 'inspect_sql', {'query': 'SELECT * FROM test;'});
+        expect(pExec['status'], equals('ok'));
+        expect(pExec['result']['is_destructive'], isFalse);
+
+        final pToggle = ffi.pluginToggle('codelite.sql_inspector', false);
+        expect(pToggle['status'], equals('ok'));
+
+        final pToggleOn = ffi.pluginToggle('codelite.sql_inspector', true);
+        expect(pToggleOn['status'], equals('ok'));
+
+        final pLoad = ffi.pluginLoad(
+          '{"id":"demo.wasm","name":"Demo","version":"0.1.0","author":"A","description":"D","entrypoint":"e","permissions":[],"provided_tools":[]}',
+          [0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00],
+        );
+        expect(pLoad['status'], equals('ok'));
+
+        final pUnload = ffi.pluginUnload('demo.wasm');
+        expect(pUnload['status'], equals('ok'));
+
         try {
           final f = File(testTargetFile);
           if (f.existsSync()) f.deleteSync();
@@ -375,6 +399,54 @@ void main() {
       );
       expect(updateApply.containsKey('status'), isTrue);
       expect(updateApply['status'], equals('ok'));
+
+      // Test ApiClient Phase 12 WASM Plugin methods
+      final plugins = await client.listPlugins();
+      expect(plugins, isA<List>());
+      expect(plugins.isNotEmpty, isTrue);
+
+      final sqlPlugin = plugins.firstWhere((p) => p['id'] == 'codelite.sql_inspector');
+      expect(sqlPlugin['name'], equals('SQL Inspector'));
+
+      final toggleRes = await client.togglePlugin('codelite.sql_inspector', false);
+      expect(toggleRes['status'], equals('ok'));
+
+      final toggleBackRes = await client.togglePlugin('codelite.sql_inspector', true);
+      expect(toggleBackRes['status'], equals('ok'));
+
+      final execToolRes = await client.executePluginTool(
+        pluginId: 'codelite.sql_inspector',
+        toolName: 'inspect_sql',
+        args: {'query': 'SELECT id FROM users WHERE active = 1;'},
+      );
+      expect(execToolRes['status'], equals('ok'));
+      expect(execToolRes['result']['is_destructive'], isFalse);
+
+      final execDropRes = await client.executePluginTool(
+        pluginId: 'codelite.sql_inspector',
+        toolName: 'inspect_sql',
+        args: {'query': 'DROP TABLE users;'},
+      );
+      expect(execDropRes['status'], equals('ok'));
+      expect(execDropRes['result']['is_destructive'], isTrue);
+
+      final loadWasmRes = await client.loadPlugin(
+        manifest: {
+          'id': 'test.dummy_wasm',
+          'name': 'Dummy WASM',
+          'version': '1.0.0',
+          'author': 'Test',
+          'description': 'Test',
+          'entrypoint': 'dummy.wasm',
+          'permissions': ['log'],
+          'provided_tools': [],
+        },
+        wasmBytes: [0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00],
+      );
+      expect(loadWasmRes['status'], equals('ok'));
+
+      final unloadRes = await client.unloadPlugin('test.dummy_wasm');
+      expect(unloadRes['status'], equals('ok'));
     });
   });
 }

@@ -20,6 +20,7 @@ class ActivityStripeWidget extends StatelessWidget {
     required this.isBottomOpen,
     required this.onSelectLeftTool,
     required this.onSelectBottomTab,
+    this.onOpenPlugins,
   });
 
   final LeftTool leftTool;
@@ -28,6 +29,7 @@ class ActivityStripeWidget extends StatelessWidget {
   final bool isBottomOpen;
   final ValueChanged<LeftTool> onSelectLeftTool;
   final ValueChanged<BottomToolTab> onSelectBottomTab;
+  final VoidCallback? onOpenPlugins;
 
   @override
   Widget build(BuildContext context) {
@@ -75,6 +77,13 @@ class ActivityStripeWidget extends StatelessWidget {
             tooltip: '操作记录与回滚',
             isActive: isBottomOpen && bottomTab == BottomToolTab.sqlite,
             onTap: () => onSelectBottomTab(BottomToolTab.sqlite),
+          ),
+          const SizedBox(height: 6),
+          StripeButton(
+            icon: Icons.extension_outlined,
+            tooltip: '插件中心 (⌘⇧X)',
+            isActive: false,
+            onTap: onOpenPlugins ?? () {},
           ),
 
           const Spacer(),

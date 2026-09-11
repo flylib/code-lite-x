@@ -49,6 +49,7 @@ pub struct CodeLiteContext {
     pub editors: Mutex<HashMap<String, Editor>>,
     pub llm_provider: std::sync::Arc<dyn LlmProvider>,
     pub stream_events: Mutex<Vec<StreamEvent>>,
+    pub plugin_registry: std::sync::Arc<code_lite_plugin::PluginRegistry>,
 }
 
 // ---------------------------------------------------------------------------
@@ -136,6 +137,7 @@ pub unsafe extern "C" fn codelite_init(workspace_path: *const c_char) -> *mut Co
     let llm_provider: std::sync::Arc<dyn LlmProvider> =
         std::sync::Arc::new(BuiltinRuleProvider::new());
     let stream_events = Mutex::new(Vec::new());
+    let plugin_registry = std::sync::Arc::new(code_lite_plugin::PluginRegistry::new());
 
     let ctx = Box::new(CodeLiteContext {
         workspace_root: root,
@@ -157,6 +159,7 @@ pub unsafe extern "C" fn codelite_init(workspace_path: *const c_char) -> *mut Co
         editors: Mutex::new(HashMap::new()),
         llm_provider,
         stream_events,
+        plugin_registry,
     });
 
     Box::into_raw(ctx)
@@ -2730,6 +2733,168 @@ pub unsafe extern "C" fn codelite_updater_apply(
 }
 
 // ---------------------------------------------------------------------------
+// 17. WASM Plugin Ecosystem & Sandboxed Runtime (Phase 12)
+// ---------------------------------------------------------------------------
+
+/// Loads a WebAssembly plugin with its manifest JSON and raw bytecode.
+#[no_mangle]
+pub unsafe extern "C" fn codelite_plugin_load(
+    ctx: *mut CodeLiteContext,
+    manifest_json: *const c_char,
+    wasm_bytes_ptr: *const u8,
+    wasm_bytes_len: usize,
+) -> *const c_char {
+    if ctx.is_null() {
+        return err_json("Context is null");
+    }
+    let ctx = &*ctx;
+
+    let man_str = match c_str_to_str(manifest_json) {
+        Some(s) => s,
+        None => return err_json("manifest_json is required"),
+    };
+
+    let manifest: code_lite_plugin::PluginManifest = match serde_json::from_str(man_str) {
+        Ok(m) => m,
+        Err(e) => return err_json(&format!("Invalid manifest JSON: {}", e)),
+    };
+
+    if wasm_bytes_ptr.is_null() || wasm_bytes_len == 0 {
+        return err_json("wasm bytecode is required");
+    }
+
+    let wasm_bytes = std::slice::from_raw_parts(wasm_bytes_ptr, wasm_bytes_len);
+    match ctx.plugin_registry.load_wasm_plugin(manifest, wasm_bytes) {
+        Ok(info) => {
+            let res = serde_json::json!({
+                "status": "ok",
+                "plugin": info,
+            });
+            json_to_c_char(&res)
+        }
+        Err(e) => err_json(&format!("Failed to load plugin: {}", e)),
+    }
+}
+
+/// Lists all loaded plugins (including built-ins and user plugins).
+#[no_mangle]
+pub unsafe extern "C" fn codelite_plugin_list(
+    ctx: *mut CodeLiteContext,
+) -> *const c_char {
+    if ctx.is_null() {
+        return err_json("Context is null");
+    }
+    let ctx = &*ctx;
+
+    let plugins = ctx.plugin_registry.list_plugins();
+    let res = serde_json::json!({
+        "status": "ok",
+        "plugins": plugins,
+    });
+    json_to_c_char(&res)
+}
+
+/// Toggles a plugin's status (enable / disable).
+#[no_mangle]
+pub unsafe extern "C" fn codelite_plugin_toggle(
+    ctx: *mut CodeLiteContext,
+    plugin_id: *const c_char,
+    enable: bool,
+) -> *const c_char {
+    if ctx.is_null() {
+        return err_json("Context is null");
+    }
+    let ctx = &*ctx;
+
+    let id = match c_str_to_str(plugin_id) {
+        Some(s) => s,
+        None => return err_json("plugin_id is required"),
+    };
+
+    match ctx.plugin_registry.toggle_plugin(id, enable) {
+        Ok(info) => {
+            let res = serde_json::json!({
+                "status": "ok",
+                "plugin": info,
+            });
+            json_to_c_char(&res)
+        }
+        Err(e) => err_json(&format!("Failed to toggle plugin: {}", e)),
+    }
+}
+
+/// Executes a tool registered by an active plugin in the sandboxed runtime.
+#[no_mangle]
+pub unsafe extern "C" fn codelite_plugin_execute_tool(
+    ctx: *mut CodeLiteContext,
+    plugin_id: *const c_char,
+    tool_name: *const c_char,
+    args_json: *const c_char,
+) -> *const c_char {
+    if ctx.is_null() {
+        return err_json("Context is null");
+    }
+    let ctx = &*ctx;
+
+    let pid = match c_str_to_str(plugin_id) {
+        Some(s) => s,
+        None => return err_json("plugin_id is required"),
+    };
+    let tname = match c_str_to_str(tool_name) {
+        Some(s) => s,
+        None => return err_json("tool_name is required"),
+    };
+
+    let args: serde_json::Value = match c_str_to_str(args_json) {
+        Some(s) if !s.trim().is_empty() => match serde_json::from_str(s) {
+            Ok(v) => v,
+            Err(e) => return err_json(&format!("Invalid args_json: {}", e)),
+        },
+        _ => serde_json::json!({}),
+    };
+
+    let host = code_lite_plugin::StandardHostApi::new(&ctx.workspace_root);
+    match ctx.plugin_registry.execute_tool(pid, tname, args, &host) {
+        Ok(result) => {
+            let res = serde_json::json!({
+                "status": "ok",
+                "result": result,
+            });
+            json_to_c_char(&res)
+        }
+        Err(e) => err_json(&format!("Plugin execution failed: {}", e)),
+    }
+}
+
+/// Unloads a plugin by its ID.
+#[no_mangle]
+pub unsafe extern "C" fn codelite_plugin_unload(
+    ctx: *mut CodeLiteContext,
+    plugin_id: *const c_char,
+) -> *const c_char {
+    if ctx.is_null() {
+        return err_json("Context is null");
+    }
+    let ctx = &*ctx;
+
+    let id = match c_str_to_str(plugin_id) {
+        Some(s) => s,
+        None => return err_json("plugin_id is required"),
+    };
+
+    match ctx.plugin_registry.unload_plugin(id) {
+        Ok(_) => {
+            let res = serde_json::json!({
+                "status": "ok",
+                "unloaded": id,
+            });
+            json_to_c_char(&res)
+        }
+        Err(e) => err_json(&format!("Failed to unload plugin: {}", e)),
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -3413,4 +3578,93 @@ mod tests {
             let _ = std::fs::remove_dir_all(&temp_dir);
         }
     }
+
+    #[test]
+    fn test_phase12_ffi_plugin_flow() {
+        unsafe {
+            let temp_dir = std::env::temp_dir().join(format!("codelite_ffi_plugin_{}", uuid::Uuid::new_v4()));
+            let _ = std::fs::create_dir_all(&temp_dir);
+            let root_c = CString::new(temp_dir.to_str().unwrap()).unwrap();
+            let ctx = codelite_init(root_c.as_ptr());
+            assert!(!ctx.is_null());
+
+            // 1. List plugins - should contain built-ins codelite.sql_inspector and codelite.custom_linter
+            let list_ptr = codelite_plugin_list(ctx);
+            let list_str = CStr::from_ptr(list_ptr).to_str().unwrap();
+            assert!(list_str.contains("\"status\":\"ok\""));
+            assert!(list_str.contains("codelite.sql_inspector"));
+            assert!(list_str.contains("codelite.custom_linter"));
+            codelite_string_free(list_ptr as *mut c_char);
+
+            // 2. Execute inspect_sql on non-destructive query
+            let p_sql = CString::new("codelite.sql_inspector").unwrap();
+            let t_inspect = CString::new("inspect_sql").unwrap();
+            let args_safe = CString::new(r#"{"query": "SELECT id, name FROM users WHERE active = 1;"}"#).unwrap();
+            let exec_ptr = codelite_plugin_execute_tool(ctx, p_sql.as_ptr(), t_inspect.as_ptr(), args_safe.as_ptr());
+            let exec_str = CStr::from_ptr(exec_ptr).to_str().unwrap();
+            assert!(exec_str.contains("\"status\":\"ok\""));
+            assert!(exec_str.contains("\"is_destructive\":false"));
+            codelite_string_free(exec_ptr as *mut c_char);
+
+            // 3. Execute inspect_sql on destructive DROP query
+            let args_drop = CString::new(r#"{"query": "DROP TABLE users;"}"#).unwrap();
+            let exec_drop_ptr = codelite_plugin_execute_tool(ctx, p_sql.as_ptr(), t_inspect.as_ptr(), args_drop.as_ptr());
+            let exec_drop_str = CStr::from_ptr(exec_drop_ptr).to_str().unwrap();
+            assert!(exec_drop_str.contains("\"status\":\"ok\""));
+            assert!(exec_drop_str.contains("\"is_destructive\":true"));
+            codelite_string_free(exec_drop_ptr as *mut c_char);
+
+            // 4. Toggle plugin off and verify execution is rejected
+            let toggle_off_ptr = codelite_plugin_toggle(ctx, p_sql.as_ptr(), false);
+            let toggle_off_str = CStr::from_ptr(toggle_off_ptr).to_str().unwrap();
+            assert!(toggle_off_str.contains("\"status\":\"ok\""));
+            assert!(toggle_off_str.contains("\"disabled\""));
+            codelite_string_free(toggle_off_ptr as *mut c_char);
+
+            let exec_disabled_ptr = codelite_plugin_execute_tool(ctx, p_sql.as_ptr(), t_inspect.as_ptr(), args_safe.as_ptr());
+            let exec_disabled_str = CStr::from_ptr(exec_disabled_ptr).to_str().unwrap();
+            assert!(exec_disabled_str.contains("\"status\":\"error\""));
+            assert!(exec_disabled_str.contains("Plugin 'codelite.sql_inspector' is currently disabled"));
+            codelite_string_free(exec_disabled_ptr as *mut c_char);
+
+            // 5. Toggle plugin back on
+            let toggle_on_ptr = codelite_plugin_toggle(ctx, p_sql.as_ptr(), true);
+            let toggle_on_str = CStr::from_ptr(toggle_on_ptr).to_str().unwrap();
+            assert!(toggle_on_str.contains("\"status\":\"ok\""));
+            assert!(toggle_on_str.contains("\"enabled\""));
+            codelite_string_free(toggle_on_ptr as *mut c_char);
+
+            // 6. Load WASM module
+            let manifest_str = serde_json::json!({
+                "id": "my-wasm-plugin",
+                "name": "My WASM Plugin",
+                "version": "1.0.0",
+                "author": "CodeLiteX",
+                "description": "Dynamic WASM plugin test",
+                "entrypoint": "plugin.wasm",
+                "permissions": ["read_buffer", "log"],
+                "provided_tools": []
+            }).to_string();
+            let manifest_c = CString::new(manifest_str).unwrap();
+            let wasm_bytes = [0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00];
+
+            let load_ptr = codelite_plugin_load(ctx, manifest_c.as_ptr(), wasm_bytes.as_ptr(), wasm_bytes.len());
+            let load_str = CStr::from_ptr(load_ptr).to_str().unwrap();
+            assert!(load_str.contains("\"status\":\"ok\""));
+            assert!(load_str.contains("my-wasm-plugin"));
+            codelite_string_free(load_ptr as *mut c_char);
+
+            // 7. Unload plugin
+            let p_wasm = CString::new("my-wasm-plugin").unwrap();
+            let unload_ptr = codelite_plugin_unload(ctx, p_wasm.as_ptr());
+            let unload_str = CStr::from_ptr(unload_ptr).to_str().unwrap();
+            assert!(unload_str.contains("\"status\":\"ok\""));
+            assert!(unload_str.contains("my-wasm-plugin"));
+            codelite_string_free(unload_ptr as *mut c_char);
+
+            codelite_destroy(ctx);
+            let _ = std::fs::remove_dir_all(&temp_dir);
+        }
+    }
 }
+

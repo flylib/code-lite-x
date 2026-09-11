@@ -163,6 +163,7 @@ dependencies = [
  "code-lite-fs",
  "code-lite-graph",
  "code-lite-lsp",
+ "code-lite-plugin",
  "code-lite-rpc",
  "code-lite-storage",
  "parking_lot",
@@ -211,6 +212,17 @@ dependencies = [
  "serde",
  "serde_json",
  "syn 2.0.119",
+ "thiserror",
+]
+
+[[package]]
+name = "code-lite-plugin"
+version = "0.1.0"
+dependencies = [
+ "code-lite-storage",
+ "parking_lot",
+ "serde",
+ "serde_json",
  "thiserror",
 ]
 

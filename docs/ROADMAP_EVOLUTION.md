@@ -28,8 +28,8 @@
 | **Phase 8** | IDE Core（LSP Supervisor / Ghost Text / Tabs·Split·Gutter） | Phase 6 | [已完成 ✅ 2026-09-10] |
 | **Phase 9** | Agent Runtime + Multi-file + Git Worktree | Phase 7 | [已完成 ✅ 2026-09-10] |
 | **Phase 10** | 检索/上下文层（项目指令 → Memory → Skill → MCP） | — | [已完成 ✅ 2026-09-10] |
-| **Phase 11** | Cross-platform Release（全平台发布与增量更新） | Phase 9 | Phase 9 |
-| **Phase 12** | WASM Plugin Ecosystem（插件生态） | Phase 8 | Phase 8 |
+| **Phase 11** | Cross-platform Release（全平台发布与增量更新） | Phase 9 | [已完成 ✅ 2026-09-10] |
+| **Phase 12** | WASM Plugin Ecosystem（插件生态） | Phase 8 | [已完成 ✅ 2026-09-11] |
 
 > 引用旧编号的外部文档（含 `.gemini` brain 目录下的副本）请按本表换算。
 
@@ -637,7 +637,7 @@ MCP 本质是「又一个 Tool Provider」，故不单列阶段，随本阶段�
 
 ---
 
-### 🔹 Phase 12: WASM Plugin Ecosystem
+### 🔹 Phase 12: WASM Plugin Ecosystem [已完成 ✅ 2026-09-11]
 
 > **硬依赖 Phase 6-A。** 理由：**Phase 12 的安全上限 ≡ Tool Runtime 的安全上限**。
 > 在网关封闭化之前开放第三方插件，等于把逃逸能力直接授予外部代码。

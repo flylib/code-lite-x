@@ -19,6 +19,7 @@ import 'features/search/global_search_modal.dart';
 import 'features/status_bar/status_bar_widget.dart';
 import 'features/title_bar/title_bar_widget.dart';
 import 'features/update/update_modal.dart';
+import 'features/plugins/plugins_modal.dart';
 
 /// 应用根:建 store,挂 scope,之后不再持有可变 UI 状态。
 ///
@@ -97,6 +98,8 @@ class _Workbench extends StatelessWidget {
         const SingleActivator(LogicalKeyboardKey.keyF, control: true, shift: true): () => _openSearch(context),
         const SingleActivator(LogicalKeyboardKey.keyU, meta: true): () => _openUpdates(context),
         const SingleActivator(LogicalKeyboardKey.keyU, control: true): () => _openUpdates(context),
+        const SingleActivator(LogicalKeyboardKey.keyX, meta: true, shift: true): () => _openPlugins(context),
+        const SingleActivator(LogicalKeyboardKey.keyX, control: true, shift: true): () => _openPlugins(context),
       },
       child: Focus(
         autofocus: true,
@@ -130,6 +133,7 @@ class _Workbench extends StatelessWidget {
                         isBottomOpen: layout.isBottomOpen,
                         onSelectLeftTool: layout.selectLeftTool,
                         onSelectBottomTab: layout.selectBottomTab,
+                        onOpenPlugins: () => _openPlugins(context),
                       ),
                     ),
 
@@ -242,6 +246,10 @@ class _Workbench extends StatelessWidget {
 
   void _openUpdates(BuildContext context) {
     UpdateModal.show(context, client: client, currentVersion: '0.1.0');
+  }
+
+  void _openPlugins(BuildContext context) {
+    PluginsModal.show(context, client: client);
   }
 
   Future<void> _revertTask(BuildContext context) async {

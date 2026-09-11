@@ -143,4 +143,14 @@ class CodeLiteBindings {
   Map<String, dynamic> worktreeDiscard(String taskId) => {};
 
   Map<String, dynamic> worktreeMerge(String taskId) => {};
+
+  Map<String, dynamic> pluginLoad(String manifestJson, List<int> wasmBytes) => {'status': 'error', 'error': 'FFI not available'};
+
+  Map<String, dynamic> pluginList() => {'status': 'ok', 'plugins': []};
+
+  Map<String, dynamic> pluginToggle(String pluginId, bool enable) => {'status': 'error', 'error': 'FFI not available'};
+
+  Map<String, dynamic> pluginExecuteTool(String pluginId, String toolName, Map<String, dynamic> args) => {'status': 'error', 'error': 'FFI not available'};
+
+  Map<String, dynamic> pluginUnload(String pluginId) => {'status': 'error', 'error': 'FFI not available'};
 }
