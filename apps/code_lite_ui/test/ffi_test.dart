@@ -448,6 +448,34 @@ void main() {
       final unloadRes = await client.unloadPlugin('test.dummy_wasm');
       expect(unloadRes['status'], equals('ok'));
     });
+
+    // File → Open 会多次切换工作区根。曾经二次 initialize 给 late final 函数指针
+    // 重复赋值,抛 LateInitializationError 后 FFI 整体掉线,第二个项目永远打不开。
+    test('reinitialize switches workspace root repeatedly without dropping FFI', () {
+      final ffi = CodeLiteBindings.instance;
+      if (!ffi.initialize('.')) return; // 没编出 dylib 时跳过
+
+      final a = Directory.systemTemp.createTempSync('clx_ws_a_');
+      final b = Directory.systemTemp.createTempSync('clx_ws_b_');
+      addTearDown(() {
+        ffi.reinitialize('.');
+        a.deleteSync(recursive: true);
+        b.deleteSync(recursive: true);
+      });
+      File('${a.path}/only_in_a.txt').writeAsStringSync('a');
+      File('${b.path}/only_in_b.txt').writeAsStringSync('b');
+
+      for (final dir in [a, b, a]) {
+        expect(ffi.reinitialize(dir.path), isTrue, reason: 'reinitialize(${dir.path})');
+        expect(ffi.isAvailable, isTrue);
+        final tree = ffi.scanWorkspace(maxDepth: 1);
+        final names = ((tree['children'] as List?) ?? const [])
+            .map((c) => (c as Map)['name'])
+            .toList();
+        final marker = dir == a ? 'only_in_a.txt' : 'only_in_b.txt';
+        expect(names, contains(marker));
+      }
+    });
   });
 }
 

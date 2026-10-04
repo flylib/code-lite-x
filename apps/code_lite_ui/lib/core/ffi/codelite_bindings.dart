@@ -197,6 +197,7 @@ class CodeLiteBindings {
   DynamicLibrary? _dylib;
   Pointer<Void>? _ctx;
   bool _initialized = false;
+  bool _symbolsBound = false;
 
   bool get isAvailable => _dylib != null && _ctx != null && _ctx!.address != 0;
 
@@ -284,84 +285,14 @@ class CodeLiteBindings {
     if (_initialized) return isAvailable;
 
     try {
-      _dylib = _loadLibrary();
-      if (_dylib == null) return false;
-
-      _init = _dylib!.lookupFunction<_InitC, _InitDart>('codelite_init');
-      _destroy = _dylib!.lookupFunction<_DestroyC, _DestroyDart>('codelite_destroy');
-      _version = _dylib!.lookupFunction<_VersionC, _VersionDart>('codelite_version');
-      _stringAlloc = _dylib!.lookupFunction<_StringAllocC, _StringAllocDart>('codelite_string_alloc');
-      _stringFree = _dylib!.lookupFunction<_StringFreeC, _StringFreeDart>('codelite_string_free');
-      _bufferFree = _dylib!.lookupFunction<_BufferFreeC, _BufferFreeDart>('codelite_buffer_free');
-      _workspaceScan = _dylib!.lookupFunction<_WorkspaceScanC, _WorkspaceScanDart>('codelite_workspace_scan');
-      _fileOpen = _dylib!.lookupFunction<_FileOpenC, _FileOpenDart>('codelite_file_open');
-      _fileEdit = _dylib!.lookupFunction<_FileEditC, _FileEditDart>('codelite_file_edit');
-      _undo = _dylib!.lookupFunction<_UndoRedoC, _UndoRedoDart>('codelite_undo');
-      _redo = _dylib!.lookupFunction<_UndoRedoC, _UndoRedoDart>('codelite_redo');
-      _fileSave = _dylib!.lookupFunction<_FileSaveC, _FileSaveDart>('codelite_file_save');
-      _fileCursorSet = _dylib!.lookupFunction<_FileCursorSetC, _FileCursorSetDart>('codelite_file_cursor_set');
-      _agentPrompt = _dylib!.lookupFunction<_AgentPromptC, _AgentPromptDart>('codelite_agent_send_prompt');
-      _agentRollback = _dylib!.lookupFunction<_AgentRollbackC, _AgentRollbackDart>('codelite_agent_rollback');
-      _agentRestore = _dylib!.lookupFunction<_AgentRestoreC, _AgentRestoreDart>('codelite_agent_restore_start');
-      _agentPlanTask = _dylib!.lookupFunction<_AgentPlanTaskC, _AgentPlanTaskDart>('codelite_agent_plan_task');
-      _agentExecStep = _dylib!.lookupFunction<_AgentExecStepC, _AgentExecStepDart>('codelite_agent_execute_next_step');
-      _agentApprove = _dylib!.lookupFunction<_AgentApproveC, _AgentApproveDart>('codelite_agent_approve_step');
-      _agentPendingApprovals = _dylib!.lookupFunction<_AgentPendingApprovalsC, _AgentPendingApprovalsDart>('codelite_agent_get_pending_approvals');
-      _agentDiffReview = _dylib!.lookupFunction<_AgentDiffReviewC, _AgentDiffReviewDart>('codelite_agent_get_diff_review');
-      _agentFimComplete = _dylib!.lookupFunction<_AgentFimCompleteC, _AgentFimCompleteDart>('codelite_agent_fim_complete');
-      _agentPlanMultiFile = _dylib!.lookupFunction<_AgentPlanTaskC, _AgentPlanTaskDart>('codelite_agent_plan_multi_file');
-      _agentRollbackStep = _dylib!.lookupFunction<_AgentRollbackStepC, _AgentRollbackStepDart>('codelite_agent_rollback_step');
-      _worktreeCreate = _dylib!.lookupFunction<_WorktreeActionC, _WorktreeActionDart>('codelite_worktree_create');
-      _worktreeMerge = _dylib!.lookupFunction<_WorktreeActionC, _WorktreeActionDart>('codelite_worktree_merge');
-      _worktreeDiscard = _dylib!.lookupFunction<_WorktreeActionC, _WorktreeActionDart>('codelite_worktree_discard');
-      _storageEvents = _dylib!.lookupFunction<_StorageEventsC, _StorageEventsDart>('codelite_storage_events');
-      _graphSymbols = _dylib!.lookupFunction<_GraphSymbolsC, _GraphSymbolsDart>('codelite_graph_symbols');
-      _graphIndexFile = _dylib!.lookupFunction<_GraphFileC, _GraphFileDart>('codelite_graph_index_file');
-      _graphQueryOutline = _dylib!.lookupFunction<_GraphFileC, _GraphFileDart>('codelite_graph_query_outline');
-      _graphFindDefinition = _dylib!.lookupFunction<_GraphQueryC, _GraphQueryDart>('codelite_graph_find_definition');
-      _graphFindReferences = _dylib!.lookupFunction<_GraphQueryC, _GraphQueryDart>('codelite_graph_find_references');
-      _graphGetContext = _dylib!.lookupFunction<_GraphQueryC, _GraphQueryDart>('codelite_graph_get_context');
-      _graphFindCallers = _dylib!.lookupFunction<_GraphQueryC, _GraphQueryDart>('codelite_graph_find_callers');
-      _graphFindCallees = _dylib!.lookupFunction<_GraphQueryC, _GraphQueryDart>('codelite_graph_find_callees');
-      _lspInitServer = _dylib!.lookupFunction<_LspInitServerC, _LspInitServerDart>('codelite_lsp_init_server');
-      _lspDidOpen = _dylib!.lookupFunction<_LspDidOpenC, _LspDidOpenDart>('codelite_lsp_did_open');
-      _lspDidChange = _dylib!.lookupFunction<_LspDidChangeC, _LspDidChangeDart>('codelite_lsp_did_change');
-      _lspGetDiagnostics = _dylib!.lookupFunction<_LspGetDiagsC, _LspGetDiagsDart>('codelite_lsp_get_diagnostics');
-      _lspGotoDefinition = _dylib!.lookupFunction<_LspPosQueryC, _LspPosQueryDart>('codelite_lsp_goto_definition');
-      _lspFindReferences = _dylib!.lookupFunction<_LspFindRefsC, _LspFindRefsDart>('codelite_lsp_find_references');
-      _lspHover = _dylib!.lookupFunction<_LspPosQueryC, _LspPosQueryDart>('codelite_lsp_hover');
-      _lspCompletion = _dylib!.lookupFunction<_LspPosQueryC, _LspPosQueryDart>('codelite_lsp_completion');
-      _lspRename = _dylib!.lookupFunction<_LspRenameC, _LspRenameDart>('codelite_lsp_rename');
-      _getViewportTokens = _dylib!.lookupFunction<_GetViewportTokensC, _GetViewportTokensDart>('codelite_get_viewport_tokens');
-      _searchWorkspace = _dylib!.lookupFunction<_SearchWorkspaceC, _SearchWorkspaceDart>('codelite_search_workspace');
-      _replaceWorkspace = _dylib!.lookupFunction<_ReplaceWorkspaceC, _ReplaceWorkspaceDart>('codelite_replace_workspace');
-      _terminalExec = _dylib!.lookupFunction<_TerminalExecC, _TerminalExecDart>('codelite_terminal_exec');
-      _agentPromptStream = _dylib!.lookupFunction<_AgentPromptStreamC, _AgentPromptStreamDart>('codelite_agent_send_prompt_stream');
-      _agentPollStream = _dylib!.lookupFunction<_AgentPollStreamC, _AgentPollStreamDart>('codelite_agent_poll_stream_events');
-      _sessionListMessages = _dylib!.lookupFunction<_SessionMessagesC, _SessionMessagesDart>('codelite_session_list_messages');
-      _sessionClearMessages = _dylib!.lookupFunction<_SessionMessagesC, _SessionMessagesDart>('codelite_session_clear_messages');
-      _gitStatus = _dylib!.lookupFunction<_GitStatusC, _GitStatusDart>('codelite_git_status');
-      _gitDiff = _dylib!.lookupFunction<_GitDiffC, _GitDiffDart>('codelite_git_diff');
-      _gitStage = _dylib!.lookupFunction<_GitStageC, _GitStageDart>('codelite_git_stage');
-      _gitUnstage = _dylib!.lookupFunction<_GitStageC, _GitStageDart>('codelite_git_unstage');
-      _gitCommit = _dylib!.lookupFunction<_GitCommitC, _GitCommitDart>('codelite_git_commit');
-      _gitFileHunks = _dylib!.lookupFunction<_GitFileHunksC, _GitFileHunksDart>('codelite_git_file_diff_hunks');
-      _gitRevertFile = _dylib!.lookupFunction<_GitRevertFileC, _GitRevertFileDart>('codelite_git_revert_file');
-      _jsonRpcCall = _dylib!.lookupFunction<_JsonRpcCallC, _JsonRpcCallDart>('codelite_jsonrpc_call');
-      _contextBuildTaskPrompt = _dylib!.lookupFunction<_ContextBuildTaskPromptC, _ContextBuildTaskPromptDart>('codelite_context_build_task_prompt');
-      _memoryQuery = _dylib!.lookupFunction<_MemoryQueryC, _MemoryQueryDart>('codelite_memory_query');
-      _memoryRecordDecision = _dylib!.lookupFunction<_MemoryRecordDecisionC, _MemoryRecordDecisionDart>('codelite_memory_record_decision');
-      _memoryRecordError = _dylib!.lookupFunction<_MemoryRecordErrorC, _MemoryRecordErrorDart>('codelite_memory_record_error');
-      _skillsList = _dylib!.lookupFunction<_SkillsListC, _SkillsListDart>('codelite_skills_list');
-      _mcpToolsList = _dylib!.lookupFunction<_McpToolsListC, _McpToolsListDart>('codelite_mcp_tools_list');
-      _updaterCheck = _dylib!.lookupFunction<_UpdaterCheckC, _UpdaterCheckDart>('codelite_updater_check');
-      _updaterStage = _dylib!.lookupFunction<_UpdaterStageC, _UpdaterStageDart>('codelite_updater_stage');
-      _updaterApply = _dylib!.lookupFunction<_UpdaterApplyC, _UpdaterApplyDart>('codelite_updater_apply');
-      _pluginLoad = _dylib!.lookupFunction<_PluginLoadC, _PluginLoadDart>('codelite_plugin_load');
-      _pluginList = _dylib!.lookupFunction<_PluginListC, _PluginListDart>('codelite_plugin_list');
-      _pluginToggle = _dylib!.lookupFunction<_PluginToggleC, _PluginToggleDart>('codelite_plugin_toggle');
-      _pluginExecuteTool = _dylib!.lookupFunction<_PluginExecuteToolC, _PluginExecuteToolDart>('codelite_plugin_execute_tool');
-      _pluginUnload = _dylib!.lookupFunction<_PluginUnloadC, _PluginUnloadDart>('codelite_plugin_unload');
+      // 库与符号只绑定一次:这些是 late final,二次赋值会抛 LateInitializationError。
+      // reinitialize 走到这里时直接复用,只重建下面的 Rust 上下文。
+      if (!_symbolsBound) {
+        _dylib = _loadLibrary();
+        if (_dylib == null) return false;
+        _bindSymbols();
+        _symbolsBound = true;
+      }
 
       final pathPtr = _toCString(workspacePath);
       _ctx = _init(pathPtr.pointer);
@@ -370,11 +301,89 @@ class CodeLiteBindings {
       _initialized = _ctx != null && _ctx!.address != 0;
       return _initialized;
     } catch (e) {
-      _dylib = null;
+      if (!_symbolsBound) _dylib = null;
       _ctx = null;
       _initialized = false;
       return false;
     }
+  }
+
+  void _bindSymbols() {
+    _init = _dylib!.lookupFunction<_InitC, _InitDart>('codelite_init');
+    _destroy = _dylib!.lookupFunction<_DestroyC, _DestroyDart>('codelite_destroy');
+    _version = _dylib!.lookupFunction<_VersionC, _VersionDart>('codelite_version');
+    _stringAlloc = _dylib!.lookupFunction<_StringAllocC, _StringAllocDart>('codelite_string_alloc');
+    _stringFree = _dylib!.lookupFunction<_StringFreeC, _StringFreeDart>('codelite_string_free');
+    _bufferFree = _dylib!.lookupFunction<_BufferFreeC, _BufferFreeDart>('codelite_buffer_free');
+    _workspaceScan = _dylib!.lookupFunction<_WorkspaceScanC, _WorkspaceScanDart>('codelite_workspace_scan');
+    _fileOpen = _dylib!.lookupFunction<_FileOpenC, _FileOpenDart>('codelite_file_open');
+    _fileEdit = _dylib!.lookupFunction<_FileEditC, _FileEditDart>('codelite_file_edit');
+    _undo = _dylib!.lookupFunction<_UndoRedoC, _UndoRedoDart>('codelite_undo');
+    _redo = _dylib!.lookupFunction<_UndoRedoC, _UndoRedoDart>('codelite_redo');
+    _fileSave = _dylib!.lookupFunction<_FileSaveC, _FileSaveDart>('codelite_file_save');
+    _fileCursorSet = _dylib!.lookupFunction<_FileCursorSetC, _FileCursorSetDart>('codelite_file_cursor_set');
+    _agentPrompt = _dylib!.lookupFunction<_AgentPromptC, _AgentPromptDart>('codelite_agent_send_prompt');
+    _agentRollback = _dylib!.lookupFunction<_AgentRollbackC, _AgentRollbackDart>('codelite_agent_rollback');
+    _agentRestore = _dylib!.lookupFunction<_AgentRestoreC, _AgentRestoreDart>('codelite_agent_restore_start');
+    _agentPlanTask = _dylib!.lookupFunction<_AgentPlanTaskC, _AgentPlanTaskDart>('codelite_agent_plan_task');
+    _agentExecStep = _dylib!.lookupFunction<_AgentExecStepC, _AgentExecStepDart>('codelite_agent_execute_next_step');
+    _agentApprove = _dylib!.lookupFunction<_AgentApproveC, _AgentApproveDart>('codelite_agent_approve_step');
+    _agentPendingApprovals = _dylib!.lookupFunction<_AgentPendingApprovalsC, _AgentPendingApprovalsDart>('codelite_agent_get_pending_approvals');
+    _agentDiffReview = _dylib!.lookupFunction<_AgentDiffReviewC, _AgentDiffReviewDart>('codelite_agent_get_diff_review');
+    _agentFimComplete = _dylib!.lookupFunction<_AgentFimCompleteC, _AgentFimCompleteDart>('codelite_agent_fim_complete');
+    _agentPlanMultiFile = _dylib!.lookupFunction<_AgentPlanTaskC, _AgentPlanTaskDart>('codelite_agent_plan_multi_file');
+    _agentRollbackStep = _dylib!.lookupFunction<_AgentRollbackStepC, _AgentRollbackStepDart>('codelite_agent_rollback_step');
+    _worktreeCreate = _dylib!.lookupFunction<_WorktreeActionC, _WorktreeActionDart>('codelite_worktree_create');
+    _worktreeMerge = _dylib!.lookupFunction<_WorktreeActionC, _WorktreeActionDart>('codelite_worktree_merge');
+    _worktreeDiscard = _dylib!.lookupFunction<_WorktreeActionC, _WorktreeActionDart>('codelite_worktree_discard');
+    _storageEvents = _dylib!.lookupFunction<_StorageEventsC, _StorageEventsDart>('codelite_storage_events');
+    _graphSymbols = _dylib!.lookupFunction<_GraphSymbolsC, _GraphSymbolsDart>('codelite_graph_symbols');
+    _graphIndexFile = _dylib!.lookupFunction<_GraphFileC, _GraphFileDart>('codelite_graph_index_file');
+    _graphQueryOutline = _dylib!.lookupFunction<_GraphFileC, _GraphFileDart>('codelite_graph_query_outline');
+    _graphFindDefinition = _dylib!.lookupFunction<_GraphQueryC, _GraphQueryDart>('codelite_graph_find_definition');
+    _graphFindReferences = _dylib!.lookupFunction<_GraphQueryC, _GraphQueryDart>('codelite_graph_find_references');
+    _graphGetContext = _dylib!.lookupFunction<_GraphQueryC, _GraphQueryDart>('codelite_graph_get_context');
+    _graphFindCallers = _dylib!.lookupFunction<_GraphQueryC, _GraphQueryDart>('codelite_graph_find_callers');
+    _graphFindCallees = _dylib!.lookupFunction<_GraphQueryC, _GraphQueryDart>('codelite_graph_find_callees');
+    _lspInitServer = _dylib!.lookupFunction<_LspInitServerC, _LspInitServerDart>('codelite_lsp_init_server');
+    _lspDidOpen = _dylib!.lookupFunction<_LspDidOpenC, _LspDidOpenDart>('codelite_lsp_did_open');
+    _lspDidChange = _dylib!.lookupFunction<_LspDidChangeC, _LspDidChangeDart>('codelite_lsp_did_change');
+    _lspGetDiagnostics = _dylib!.lookupFunction<_LspGetDiagsC, _LspGetDiagsDart>('codelite_lsp_get_diagnostics');
+    _lspGotoDefinition = _dylib!.lookupFunction<_LspPosQueryC, _LspPosQueryDart>('codelite_lsp_goto_definition');
+    _lspFindReferences = _dylib!.lookupFunction<_LspFindRefsC, _LspFindRefsDart>('codelite_lsp_find_references');
+    _lspHover = _dylib!.lookupFunction<_LspPosQueryC, _LspPosQueryDart>('codelite_lsp_hover');
+    _lspCompletion = _dylib!.lookupFunction<_LspPosQueryC, _LspPosQueryDart>('codelite_lsp_completion');
+    _lspRename = _dylib!.lookupFunction<_LspRenameC, _LspRenameDart>('codelite_lsp_rename');
+    _getViewportTokens = _dylib!.lookupFunction<_GetViewportTokensC, _GetViewportTokensDart>('codelite_get_viewport_tokens');
+    _searchWorkspace = _dylib!.lookupFunction<_SearchWorkspaceC, _SearchWorkspaceDart>('codelite_search_workspace');
+    _replaceWorkspace = _dylib!.lookupFunction<_ReplaceWorkspaceC, _ReplaceWorkspaceDart>('codelite_replace_workspace');
+    _terminalExec = _dylib!.lookupFunction<_TerminalExecC, _TerminalExecDart>('codelite_terminal_exec');
+    _agentPromptStream = _dylib!.lookupFunction<_AgentPromptStreamC, _AgentPromptStreamDart>('codelite_agent_send_prompt_stream');
+    _agentPollStream = _dylib!.lookupFunction<_AgentPollStreamC, _AgentPollStreamDart>('codelite_agent_poll_stream_events');
+    _sessionListMessages = _dylib!.lookupFunction<_SessionMessagesC, _SessionMessagesDart>('codelite_session_list_messages');
+    _sessionClearMessages = _dylib!.lookupFunction<_SessionMessagesC, _SessionMessagesDart>('codelite_session_clear_messages');
+    _gitStatus = _dylib!.lookupFunction<_GitStatusC, _GitStatusDart>('codelite_git_status');
+    _gitDiff = _dylib!.lookupFunction<_GitDiffC, _GitDiffDart>('codelite_git_diff');
+    _gitStage = _dylib!.lookupFunction<_GitStageC, _GitStageDart>('codelite_git_stage');
+    _gitUnstage = _dylib!.lookupFunction<_GitStageC, _GitStageDart>('codelite_git_unstage');
+    _gitCommit = _dylib!.lookupFunction<_GitCommitC, _GitCommitDart>('codelite_git_commit');
+    _gitFileHunks = _dylib!.lookupFunction<_GitFileHunksC, _GitFileHunksDart>('codelite_git_file_diff_hunks');
+    _gitRevertFile = _dylib!.lookupFunction<_GitRevertFileC, _GitRevertFileDart>('codelite_git_revert_file');
+    _jsonRpcCall = _dylib!.lookupFunction<_JsonRpcCallC, _JsonRpcCallDart>('codelite_jsonrpc_call');
+    _contextBuildTaskPrompt = _dylib!.lookupFunction<_ContextBuildTaskPromptC, _ContextBuildTaskPromptDart>('codelite_context_build_task_prompt');
+    _memoryQuery = _dylib!.lookupFunction<_MemoryQueryC, _MemoryQueryDart>('codelite_memory_query');
+    _memoryRecordDecision = _dylib!.lookupFunction<_MemoryRecordDecisionC, _MemoryRecordDecisionDart>('codelite_memory_record_decision');
+    _memoryRecordError = _dylib!.lookupFunction<_MemoryRecordErrorC, _MemoryRecordErrorDart>('codelite_memory_record_error');
+    _skillsList = _dylib!.lookupFunction<_SkillsListC, _SkillsListDart>('codelite_skills_list');
+    _mcpToolsList = _dylib!.lookupFunction<_McpToolsListC, _McpToolsListDart>('codelite_mcp_tools_list');
+    _updaterCheck = _dylib!.lookupFunction<_UpdaterCheckC, _UpdaterCheckDart>('codelite_updater_check');
+    _updaterStage = _dylib!.lookupFunction<_UpdaterStageC, _UpdaterStageDart>('codelite_updater_stage');
+    _updaterApply = _dylib!.lookupFunction<_UpdaterApplyC, _UpdaterApplyDart>('codelite_updater_apply');
+    _pluginLoad = _dylib!.lookupFunction<_PluginLoadC, _PluginLoadDart>('codelite_plugin_load');
+    _pluginList = _dylib!.lookupFunction<_PluginListC, _PluginListDart>('codelite_plugin_list');
+    _pluginToggle = _dylib!.lookupFunction<_PluginToggleC, _PluginToggleDart>('codelite_plugin_toggle');
+    _pluginExecuteTool = _dylib!.lookupFunction<_PluginExecuteToolC, _PluginExecuteToolDart>('codelite_plugin_execute_tool');
+    _pluginUnload = _dylib!.lookupFunction<_PluginUnloadC, _PluginUnloadDart>('codelite_plugin_unload');
   }
 
   /// 销毁当前上下文并以新的工作区根重新初始化(File → Open)。
