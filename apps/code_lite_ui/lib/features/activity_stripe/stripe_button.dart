@@ -8,14 +8,18 @@ import '../../core/theme/intellij_theme.dart';
 class StripeButton extends StatefulWidget {
   const StripeButton({
     super.key,
-    required this.icon,
+    this.icon,
+    this.iconBuilder,
     required this.tooltip,
     required this.isActive,
     required this.onTap,
     this.badgeColor,
-  });
+  }) : assert(icon != null || iconBuilder != null, 'StripeButton 需要 icon 或 iconBuilder');
 
-  final IconData icon;
+  final IconData? icon;
+
+  /// 自绘图标(Material 里没有的形状,比如 Git 分支)。传了它就忽略 [icon]。
+  final Widget Function(Color color, double size)? iconBuilder;
   final String tooltip;
   final bool isActive;
   final VoidCallback onTap;
@@ -31,6 +35,7 @@ class _StripeButtonState extends State<StripeButton> {
   @override
   Widget build(BuildContext context) {
     final active = widget.isActive;
+    final iconColor = active ? IntelliJTheme.accentBlue : IntelliJTheme.textMuted;
 
     return Tooltip(
       message: widget.tooltip,
@@ -69,11 +74,8 @@ class _StripeButtonState extends State<StripeButton> {
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Center(
-                    child: Icon(
-                      widget.icon,
-                      size: IntelliJMetrics.stripeIcon,
-                      color: active ? IntelliJTheme.accentBlue : IntelliJTheme.textMuted,
-                    ),
+                    child: widget.iconBuilder?.call(iconColor, IntelliJMetrics.stripeIcon) ??
+                        Icon(widget.icon, size: IntelliJMetrics.stripeIcon, color: iconColor),
                   ),
                 ),
                 if (widget.badgeColor != null && !active)

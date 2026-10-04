@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/state/layout_store.dart';
+import '../../core/theme/app_icons.dart';
 import '../../core/theme/intellij_theme.dart';
 import '../bottom_tools/bottom_tools_widget.dart';
 import 'stripe_button.dart';
@@ -73,7 +74,7 @@ class ActivityStripeWidget extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           StripeButton(
-            icon: Icons.commit_outlined,
+            iconBuilder: (color, size) => GitBranchIcon(color: color, size: size),
             tooltip: 'Git 提交与日志',
             isActive: isBottomOpen && bottomTab == BottomToolTab.git,
             onTap: () => onSelectBottomTab(BottomToolTab.git),
