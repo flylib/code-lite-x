@@ -844,4 +844,42 @@ void main() {
     expect((await outside.status())['status'], 'error');
     expect(await outside.isRepo(), isFalse);
   });
+
+  // 所有提交时间戳相同时,git 遍历 --all 会先处理分支提交、解析到坏掉的根提交就退出,
+  // 一条都输出不了 —— 这时必须退到只看 HEAD(合并提交还能读出来)。时间戳固定,结果确定。
+  test('corrupt root with tied timestamps falls back to HEAD only', () async {
+    final dir = Directory.systemTemp.createTempSync('clx_headonly_');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    const env = {'GIT_AUTHOR_DATE': '@1700000000 +0000', 'GIT_COMMITTER_DATE': '@1700000000 +0000'};
+    Future<void> run(List<String> args) async {
+      final r = await Process.run('git', args, workingDirectory: dir.path, environment: env);
+      if (r.exitCode != 0) throw StateError('git ${args.join(' ')}: ${r.stderr}');
+    }
+
+    await run(['init', '-q', '-b', 'main']);
+    await run(['config', 'user.name', 'T']);
+    await run(['config', 'user.email', 't@x']);
+    File('${dir.path}/a').writeAsStringSync('a');
+    await run(['add', 'a']);
+    await run(['commit', '-q', '-m', 'root']);
+    await run(['switch', '-q', '-c', 'feat/x']);
+    File('${dir.path}/x').writeAsStringSync('x');
+    await run(['add', 'x']);
+    await run(['commit', '-q', '-m', 'featx']);
+    await run(['switch', '-q', 'main']);
+    File('${dir.path}/b').writeAsStringSync('b');
+    await run(['add', 'b']);
+    await run(['commit', '-q', '-m', 'fix']);
+    await run(['merge', '-q', '--no-ff', 'feat/x', '-m', 'merge']);
+
+    final root = (await Process.run('git', ['rev-list', '--max-parents=0', 'HEAD'], workingDirectory: dir.path)).stdout.toString().trim();
+    final obj = File('${dir.path}/.git/objects/${root.substring(0, 2)}/${root.substring(2)}');
+    await Process.run('chmod', ['u+w', obj.path]);
+    obj.writeAsStringSync('not zlib at all');
+
+    final res = await GitService(dir.path).call('git.log');
+    expect(res['status'], 'ok');
+    expect(res['warning'] as String, contains('仅显示 HEAD'));
+    expect([for (final c in res['commits'] as List) c['subject']], ['merge']);
+  });
 }

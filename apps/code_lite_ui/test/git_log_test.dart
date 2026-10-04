@@ -113,10 +113,13 @@ void main() {
 
     final store = GitLogStore(client);
     await store.refresh();
+    // 对用户的保证:不报错、给出警告、读得到的提交照常显示。
+    // 走到哪一级回退(流式 --all 还是只看 HEAD)取决于几个提交的时间戳是否同一秒 ——
+    // git 按时间出队,先碰到坏根提交就一条也输出不了。所以这里不断言具体是哪一级。
     expect(store.error, isNull);
-    // 两条分支都以坏掉的根提交为父,--all 读不出任何东西,退到只看 HEAD:合并提交还能显示。
-    expect(store.warning, contains('仅显示 HEAD'));
-    expect(store.commits.map((c) => c.subject), ['merge feat/x']);
+    expect(store.warning, isNotNull);
+    expect(store.commits.map((c) => c.subject), contains('merge feat/x'));
+    expect(store.commits.map((c) => c.subject), isNot(contains('feat: 初始提交')));
     store.dispose();
   });
 }
