@@ -12,8 +12,9 @@ void main() {
     await tester.pump();
 
     // Verify Title Bar
-    expect(find.text('code-lite-x'), findsAtLeastNWidgets(1));
-    expect(find.text('[Flutter + Rust]'), findsOneWidget);
+    // 标题栏不再显示写死的项目名 / 版本徽标。
+    expect(find.text('[Flutter + Rust]'), findsNothing);
+    expect(find.text('v0.1.0'), findsNothing);
     expect(find.text('main'), findsWidgets);
 
     // 启动不再硬编码打开某个文件:恢复上次项目,没有就是空态,由 File → Open 进入项目。

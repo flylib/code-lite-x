@@ -137,7 +137,6 @@ class _Workbench extends StatelessWidget {
                   onUndo: workspace.undo,
                   onRedo: workspace.redo,
                   onSearch: () => _openSearch(context),
-                  onCheckUpdate: () => _openUpdates(context),
                 ),
               ),
 
@@ -315,6 +314,7 @@ class _EditorRegion extends StatelessWidget {
         final active = sessions.activeTab;
 
         return EditorViewWidget(
+          projectName: workspace.projectName,
           openTabs: sessions.openPaths,
           activeFile: sessions.activePath ?? '',
           codeContent: active?.controller.text ?? '',

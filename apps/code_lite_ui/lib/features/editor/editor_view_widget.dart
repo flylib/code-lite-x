@@ -38,8 +38,12 @@ class EditorViewWidget extends StatefulWidget {
   final ValueChanged<String>? onSelectSecondaryTab;
   final ValueChanged<String>? onRevertFile;
 
+  /// 面包屑的根:当前项目目录名。没打开项目时为空,不显示根节点。
+  final String projectName;
+
   const EditorViewWidget({
     super.key,
+    this.projectName = '',
     required this.openTabs,
     required this.activeFile,
     required this.codeContent,
@@ -923,9 +927,11 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
               scrollDirection: Axis.horizontal,
               child: Row(
                 children: [
-                  const Icon(Icons.folder_open, size: 12, color: IntelliJTheme.accentYellow),
-                  const SizedBox(width: 4),
-                  const Text('code-lite-x', style: TextStyle(color: IntelliJTheme.textMuted, fontSize: 11)),
+                  if (widget.projectName.isNotEmpty) ...[
+                    const Icon(Icons.folder_open, size: 12, color: IntelliJTheme.accentYellow),
+                    const SizedBox(width: 4),
+                    Text(widget.projectName, style: const TextStyle(color: IntelliJTheme.textMuted, fontSize: 11)),
+                  ],
                   ...segments.map((seg) {
                     final isLast = seg == segments.last;
                     return Row(
