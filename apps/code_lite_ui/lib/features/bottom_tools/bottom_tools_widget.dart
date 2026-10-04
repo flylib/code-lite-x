@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../core/client/api_client.dart';
 import '../../core/theme/intellij_theme.dart';
+import '../terminal/terminal_store.dart';
+import '../terminal/terminal_view.dart';
 
 enum BottomToolTab { git, sqlite, codegraph, terminal }
 
@@ -10,12 +12,16 @@ class BottomToolsWidget extends StatefulWidget {
   final VoidCallback onRevertTask;
   final ApiClient? client;
 
+  /// 终端会话活在面板之外,面板收起时 shell 不会被杀。
+  final TerminalStore? terminals;
+
   const BottomToolsWidget({
     super.key,
     required this.activeTab,
     required this.onSelectTab,
     required this.onRevertTask,
     this.client,
+    this.terminals,
   });
 
   @override
@@ -25,14 +31,7 @@ class BottomToolsWidget extends StatefulWidget {
 class _BottomToolsWidgetState extends State<BottomToolsWidget> {
   late final ApiClient _client;
   bool _reverted = false;
-  final TextEditingController _terminalController = TextEditingController();
-  final ScrollController _terminalScrollController = ScrollController();
   final TextEditingController _commitController = TextEditingController();
-  final List<String> _terminalLines = [
-    'CodeLiteX Embedded PTY (zsh) — Session 1 [Rust Core C-ABI Connected]',
-    'dev@mac:~/rust/code-lite-x % ready',
-  ];
-  bool _isRunningCmd = false;
   String _currentBranch = 'main';
   List<Map<String, dynamic>> _gitChanges = [];
   bool _isCommitting = false;
@@ -77,14 +76,27 @@ class _BottomToolsWidgetState extends State<BottomToolsWidget> {
 
   @override
   void dispose() {
-    _terminalController.dispose();
-    _terminalScrollController.dispose();
     _commitController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final terminals = widget.terminals;
+    if (widget.activeTab == BottomToolTab.terminal && terminals != null) {
+      // 终端用 IntelliJ 式的独立标题栏(Terminal | Local × | +),不显示共享标签条。
+      return Container(
+        height: 220,
+        decoration: const BoxDecoration(
+          border: Border(top: BorderSide(color: IntelliJTheme.borderSubtle)),
+        ),
+        child: TerminalPanel(
+          store: terminals,
+          client: _client,
+          onHide: () => widget.onSelectTab(BottomToolTab.terminal),
+        ),
+      );
+    }
     return Container(
       height: 220,
       decoration: const BoxDecoration(
@@ -120,7 +132,7 @@ class _BottomToolsWidgetState extends State<BottomToolsWidget> {
               BottomToolTab.git => _buildGitPanel(),
               BottomToolTab.sqlite => _buildSqlitePanel(),
               BottomToolTab.codegraph => _buildCodeGraphPanel(),
-              BottomToolTab.terminal => _buildTerminalPanel(),
+              BottomToolTab.terminal => const SizedBox.shrink(),
             },
           ),
         ],
@@ -552,209 +564,6 @@ class _BottomToolsWidgetState extends State<BottomToolsWidget> {
           const SizedBox(height: 2),
           Text(loc, style: const TextStyle(color: IntelliJTheme.textMuted, fontSize: 10)),
         ],
-      ),
-    );
-  }
-
-  Future<void> _executeCommand(String input) async {
-    final cmdLine = input.trim();
-    if (cmdLine.isEmpty) return;
-    _terminalController.clear();
-
-    setState(() {
-      _terminalLines.add('dev@mac:~/rust/code-lite-x % $cmdLine');
-      _isRunningCmd = true;
-    });
-
-    if (cmdLine == 'clear') {
-      setState(() {
-        _terminalLines.clear();
-        _terminalLines.add('CodeLiteX Embedded PTY (zsh) — Session 1');
-        _isRunningCmd = false;
-      });
-      return;
-    }
-
-    if (widget.client != null) {
-      final parts = cmdLine.split(RegExp(r'\s+'));
-      final bin = parts.first;
-      final args = parts.skip(1).toList();
-
-      final res = await widget.client!.terminalExec(bin, args);
-      setState(() {
-        _isRunningCmd = false;
-        if (res['status'] == 'ok') {
-          final stdout = (res['stdout'] as String?)?.trim();
-          final stderr = (res['stderr'] as String?)?.trim();
-          final code = (res['exit_code'] as int?) ?? 0;
-          if (stdout != null && stdout.isNotEmpty) {
-            _terminalLines.addAll(stdout.split('\n'));
-          }
-          if (stderr != null && stderr.isNotEmpty) {
-            _terminalLines.addAll(stderr.split('\n'));
-          }
-          if (code != 0) {
-            _terminalLines.add('[Process exited with code $code]');
-          }
-        } else {
-          _terminalLines.add('Error: ${res['error'] ?? 'Execution failed'}');
-        }
-      });
-    } else {
-      setState(() {
-        _isRunningCmd = false;
-        _terminalLines.add('[Executed: $cmdLine]');
-      });
-    }
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_terminalScrollController.hasClients) {
-        _terminalScrollController.jumpTo(_terminalScrollController.position.maxScrollExtent);
-      }
-    });
-  }
-
-  // 4. Terminal Panel (Interactive PTY execution)
-  Widget _buildTerminalPanel() {
-    return Container(
-      color: IntelliJTheme.cardBg,
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Quick Action Bar
-          Row(
-            children: [
-              const Text('Quick Actions: ', style: TextStyle(color: IntelliJTheme.textMuted, fontSize: 10)),
-              _buildQuickChip('cargo test', () => _executeCommand('cargo test --offline --workspace')),
-              const SizedBox(width: 4),
-              _buildQuickChip('git status', () => _executeCommand('git status -s')),
-              const SizedBox(width: 4),
-              _buildQuickChip('ls -la', () => _executeCommand('ls -la')),
-              const SizedBox(width: 4),
-              _buildQuickChip('clear', () => _executeCommand('clear')),
-              const Spacer(),
-              if (_isRunningCmd)
-                const SizedBox(
-                  width: 12,
-                  height: 12,
-                  child: CircularProgressIndicator(strokeWidth: 1.5, color: IntelliJTheme.accentBlue),
-                ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          const Divider(height: 1, color: IntelliJTheme.borderSubtle),
-          const SizedBox(height: 4),
-
-          // Output Console Log
-          Expanded(
-            child: ListView.builder(
-              controller: _terminalScrollController,
-              itemCount: _terminalLines.length,
-              itemBuilder: (context, index) {
-                final line = _terminalLines[index];
-                final isPrompt = line.startsWith('dev@mac:');
-                final isSuccess = line.contains('ok') || line.contains('passed');
-                final isError = line.contains('Error') || line.contains('FAILED') || line.contains('exit');
-
-                final color = isPrompt
-                    ? IntelliJTheme.gitGreen
-                    : isSuccess
-                        ? IntelliJTheme.gitGreen
-                        : isError
-                            ? IntelliJTheme.gitRed
-                            : IntelliJTheme.textPrimary;
-
-                return Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 1),
-                  child: Text(
-                    line,
-                    style: TextStyle(
-                      color: color,
-                      fontSize: 11,
-                      fontFamily: 'monospace',
-                      fontWeight: isPrompt ? FontWeight.bold : FontWeight.normal,
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-
-          // Interactive Command Input Line
-          Container(
-            height: 28,
-            margin: const EdgeInsets.only(top: 4),
-            decoration: BoxDecoration(
-              color: IntelliJTheme.editorBg,
-              borderRadius: BorderRadius.circular(3),
-              border: Border.all(color: IntelliJTheme.borderSubtle),
-            ),
-            child: Row(
-              children: [
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 6),
-                  child: Text(
-                    '\$',
-                    style: TextStyle(
-                      color: IntelliJTheme.gitGreen,
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      fontFamily: 'monospace',
-                    ),
-                  ),
-                ),
-                Expanded(
-                  child: TextField(
-                    controller: _terminalController,
-                    style: const TextStyle(
-                      color: IntelliJTheme.textPrimary,
-                      fontSize: 11,
-                      fontFamily: 'monospace',
-                    ),
-                    decoration: const InputDecoration(
-                      hintText: 'Type shell command (e.g. echo hello, cargo test)...',
-                      hintStyle: TextStyle(color: IntelliJTheme.textMuted, fontSize: 11),
-                      border: InputBorder.none,
-                      isDense: true,
-                      contentPadding: EdgeInsets.symmetric(vertical: 6),
-                    ),
-                    onSubmitted: _executeCommand,
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.arrow_forward, size: 14, color: IntelliJTheme.accentBlue),
-                  padding: const EdgeInsets.symmetric(horizontal: 6),
-                  constraints: const BoxConstraints(),
-                  onPressed: () => _executeCommand(_terminalController.text),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildQuickChip(String label, VoidCallback onTap) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(3),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-        decoration: BoxDecoration(
-          color: IntelliJTheme.subHeaderBg,
-          borderRadius: BorderRadius.circular(3),
-          border: Border.all(color: IntelliJTheme.borderSubtle),
-        ),
-        child: Text(
-          label,
-          style: const TextStyle(
-            color: IntelliJTheme.textSecondary,
-            fontSize: 10,
-            fontFamily: 'monospace',
-          ),
-        ),
       ),
     );
   }

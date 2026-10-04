@@ -22,3 +22,4 @@ parking_lot = { workspace = true }
 uuid = { workspace = true }
 code-lite-rpc = { path = "../code-lite-rpc" }
 code-lite-plugin = { path = "../code-lite-plugin" }
+code-lite-terminal = { path = "../code-lite-terminal" }

@@ -514,6 +514,15 @@ class ApiClient {
     return {'status': 'error', 'error': 'FFI unavailable'};
   }
 
+  // 交互式终端(PTY)。同步调用:都是内存操作,轮询频率下开销可忽略。
+  // 没有 Rust Core(web 预览)时统一返回 error,终端视图据此显示不可用。
+  Map<String, dynamic> ptyOpen(int rows, int cols) => _ffi.ptyOpen(rows, cols);
+  Map<String, dynamic> ptyWrite(String id, String data) => _ffi.ptyWrite(id, data);
+  Map<String, dynamic> ptyResize(String id, int rows, int cols) => _ffi.ptyResize(id, rows, cols);
+  Map<String, dynamic> ptySnapshot(String id, {int sinceSeq = -1, int scrollback = 0}) =>
+      _ffi.ptySnapshot(id, sinceSeq: sinceSeq, scrollback: scrollback);
+  Map<String, dynamic> ptyClose(String id) => _ffi.ptyClose(id);
+
   // ---------------------------------------------------------------------------
   // Phase 5: Streaming AI Chat, History Persistence & Git Operations
   // ---------------------------------------------------------------------------

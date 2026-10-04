@@ -116,6 +116,16 @@ typedef _ReplaceWorkspaceDart = Pointer<Char> Function(Pointer<Void> ctx, Pointe
 
 typedef _TerminalExecC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> cmd, Pointer<Char> argsJson);
 typedef _TerminalExecDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> cmd, Pointer<Char> argsJson);
+typedef _PtyOpenC = Pointer<Char> Function(Pointer<Void> ctx, Uint16 rows, Uint16 cols);
+typedef _PtyOpenDart = Pointer<Char> Function(Pointer<Void> ctx, int rows, int cols);
+typedef _PtyWriteC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> id, Pointer<Char> data);
+typedef _PtyWriteDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> id, Pointer<Char> data);
+typedef _PtyResizeC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> id, Uint16 rows, Uint16 cols);
+typedef _PtyResizeDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> id, int rows, int cols);
+typedef _PtySnapshotC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> id, Int64 sinceSeq, Uint32 scrollback);
+typedef _PtySnapshotDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> id, int sinceSeq, int scrollback);
+typedef _PtyCloseC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> id);
+typedef _PtyCloseDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> id);
 
 typedef _AgentPromptStreamC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> sessionId, Pointer<Char> prompt);
 typedef _AgentPromptStreamDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> sessionId, Pointer<Char> prompt);
@@ -251,6 +261,11 @@ class CodeLiteBindings {
   late final _SearchWorkspaceDart _searchWorkspace;
   late final _ReplaceWorkspaceDart _replaceWorkspace;
   late final _TerminalExecDart _terminalExec;
+  late final _PtyOpenDart _ptyOpen;
+  late final _PtyWriteDart _ptyWrite;
+  late final _PtyResizeDart _ptyResize;
+  late final _PtySnapshotDart _ptySnapshot;
+  late final _PtyCloseDart _ptyClose;
   late final _AgentPromptStreamDart _agentPromptStream;
   late final _AgentPollStreamDart _agentPollStream;
   late final _SessionMessagesDart _sessionListMessages;
@@ -358,6 +373,11 @@ class CodeLiteBindings {
     _searchWorkspace = _dylib!.lookupFunction<_SearchWorkspaceC, _SearchWorkspaceDart>('codelite_search_workspace');
     _replaceWorkspace = _dylib!.lookupFunction<_ReplaceWorkspaceC, _ReplaceWorkspaceDart>('codelite_replace_workspace');
     _terminalExec = _dylib!.lookupFunction<_TerminalExecC, _TerminalExecDart>('codelite_terminal_exec');
+    _ptyOpen = _dylib!.lookupFunction<_PtyOpenC, _PtyOpenDart>('codelite_pty_open');
+    _ptyWrite = _dylib!.lookupFunction<_PtyWriteC, _PtyWriteDart>('codelite_pty_write');
+    _ptyResize = _dylib!.lookupFunction<_PtyResizeC, _PtyResizeDart>('codelite_pty_resize');
+    _ptySnapshot = _dylib!.lookupFunction<_PtySnapshotC, _PtySnapshotDart>('codelite_pty_snapshot');
+    _ptyClose = _dylib!.lookupFunction<_PtyCloseC, _PtyCloseDart>('codelite_pty_close');
     _agentPromptStream = _dylib!.lookupFunction<_AgentPromptStreamC, _AgentPromptStreamDart>('codelite_agent_send_prompt_stream');
     _agentPollStream = _dylib!.lookupFunction<_AgentPollStreamC, _AgentPollStreamDart>('codelite_agent_poll_stream_events');
     _sessionListMessages = _dylib!.lookupFunction<_SessionMessagesC, _SessionMessagesDart>('codelite_session_list_messages');
@@ -805,6 +825,47 @@ class CodeLiteBindings {
     final ptr = _terminalExec(_ctx!, cmdPtr.pointer, argsPtr.pointer);
     _freeAllocatedString(cmdPtr);
     _freeAllocatedString(argsPtr);
+    return _parseJsonMap(_fromCString(ptr));
+  }
+
+  // --- 交互式终端(PTY)。屏幕由 Rust 侧 vt100 排好版,这里只搬 JSON。
+
+  Map<String, dynamic> ptyOpen(int rows, int cols) {
+    if (!isAvailable) return {'status': 'error', 'error': 'FFI not available'};
+    return _parseJsonMap(_fromCString(_ptyOpen(_ctx!, rows, cols)));
+  }
+
+  Map<String, dynamic> ptyWrite(String id, String data) {
+    if (!isAvailable) return {'status': 'error', 'error': 'FFI not available'};
+    final idPtr = _toCString(id);
+    final dataPtr = _toCString(data);
+    final ptr = _ptyWrite(_ctx!, idPtr.pointer, dataPtr.pointer);
+    _freeAllocatedString(idPtr);
+    _freeAllocatedString(dataPtr);
+    return _parseJsonMap(_fromCString(ptr));
+  }
+
+  Map<String, dynamic> ptyResize(String id, int rows, int cols) {
+    if (!isAvailable) return {'status': 'error', 'error': 'FFI not available'};
+    final idPtr = _toCString(id);
+    final ptr = _ptyResize(_ctx!, idPtr.pointer, rows, cols);
+    _freeAllocatedString(idPtr);
+    return _parseJsonMap(_fromCString(ptr));
+  }
+
+  Map<String, dynamic> ptySnapshot(String id, {int sinceSeq = -1, int scrollback = 0}) {
+    if (!isAvailable) return {'status': 'error', 'error': 'FFI not available'};
+    final idPtr = _toCString(id);
+    final ptr = _ptySnapshot(_ctx!, idPtr.pointer, sinceSeq, scrollback);
+    _freeAllocatedString(idPtr);
+    return _parseJsonMap(_fromCString(ptr));
+  }
+
+  Map<String, dynamic> ptyClose(String id) {
+    if (!isAvailable) return {'status': 'error', 'error': 'FFI not available'};
+    final idPtr = _toCString(id);
+    final ptr = _ptyClose(_ctx!, idPtr.pointer);
+    _freeAllocatedString(idPtr);
     return _parseJsonMap(_fromCString(ptr));
   }
 

@@ -50,6 +50,8 @@ pub struct CodeLiteContext {
     pub llm_provider: std::sync::Arc<dyn LlmProvider>,
     pub stream_events: Mutex<Vec<StreamEvent>>,
     pub plugin_registry: std::sync::Arc<code_lite_plugin::PluginRegistry>,
+    /// 用户终端会话。随上下文销毁一起杀掉 shell(切换项目即关闭旧项目的终端)。
+    pub terminals: code_lite_terminal::TerminalManager,
 }
 
 // ---------------------------------------------------------------------------
@@ -160,6 +162,7 @@ pub unsafe extern "C" fn codelite_init(workspace_path: *const c_char) -> *mut Co
         llm_provider,
         stream_events,
         plugin_registry,
+        terminals: code_lite_terminal::TerminalManager::new(),
     });
 
     Box::into_raw(ctx)
@@ -1951,6 +1954,94 @@ pub unsafe extern "C" fn codelite_terminal_exec(
     });
 
     json_to_c_char(&result)
+}
+
+// --- 交互式终端(PTY)。与上面的单次 exec 不同:shell 常驻,cd / 环境变量 / 交互程序都保留。
+
+/// 在工作区根目录起一个登录 shell。返回 `{"status":"ok","id":"term-1"}`。
+#[no_mangle]
+pub unsafe extern "C" fn codelite_pty_open(ctx: *mut CodeLiteContext, rows: u16, cols: u16) -> *const c_char {
+    if ctx.is_null() {
+        return err_json("Context is null");
+    }
+    let ctx = &*ctx;
+    match ctx.terminals.open(&ctx.workspace_root, rows, cols) {
+        Ok(id) => json_to_c_char(&serde_json::json!({ "status": "ok", "id": id })),
+        Err(e) => err_json(&e),
+    }
+}
+
+/// 把用户按键(已编码为终端字节序列的 UTF-8 文本)写进 shell。
+#[no_mangle]
+pub unsafe extern "C" fn codelite_pty_write(
+    ctx: *mut CodeLiteContext,
+    id: *const c_char,
+    data: *const c_char,
+) -> *const c_char {
+    if ctx.is_null() {
+        return err_json("Context is null");
+    }
+    let (Some(id), Some(data)) = (c_str_to_str(id), c_str_to_str(data)) else {
+        return err_json("Invalid id or data");
+    };
+    match (*ctx).terminals.get(id) {
+        Some(s) => match s.write(data.as_bytes()) {
+            Ok(()) => json_to_c_char(&serde_json::json!({ "status": "ok" })),
+            Err(e) => err_json(&e),
+        },
+        None => err_json("No such terminal session"),
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn codelite_pty_resize(
+    ctx: *mut CodeLiteContext,
+    id: *const c_char,
+    rows: u16,
+    cols: u16,
+) -> *const c_char {
+    if ctx.is_null() {
+        return err_json("Context is null");
+    }
+    let Some(id) = c_str_to_str(id) else { return err_json("Invalid id") };
+    match (*ctx).terminals.get(id) {
+        Some(s) => match s.resize(rows, cols) {
+            Ok(()) => json_to_c_char(&serde_json::json!({ "status": "ok" })),
+            Err(e) => err_json(&e),
+        },
+        None => err_json("No such terminal session"),
+    }
+}
+
+/// 读取屏幕。`since_seq < 0` 表示强制全量;等于当前 seq 时只回 `unchanged`。
+#[no_mangle]
+pub unsafe extern "C" fn codelite_pty_snapshot(
+    ctx: *mut CodeLiteContext,
+    id: *const c_char,
+    since_seq: i64,
+    scrollback: u32,
+) -> *const c_char {
+    if ctx.is_null() {
+        return err_json("Context is null");
+    }
+    let Some(id) = c_str_to_str(id) else { return err_json("Invalid id") };
+    match (*ctx).terminals.get(id) {
+        Some(s) => {
+            let since = if since_seq < 0 { None } else { Some(since_seq as u64) };
+            json_to_c_char(&s.snapshot(since, scrollback as usize))
+        }
+        None => err_json("No such terminal session"),
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn codelite_pty_close(ctx: *mut CodeLiteContext, id: *const c_char) -> *const c_char {
+    if ctx.is_null() {
+        return err_json("Context is null");
+    }
+    let Some(id) = c_str_to_str(id) else { return err_json("Invalid id") };
+    (*ctx).terminals.close(id);
+    json_to_c_char(&serde_json::json!({ "status": "ok" }))
 }
 
 // ---------------------------------------------------------------------------

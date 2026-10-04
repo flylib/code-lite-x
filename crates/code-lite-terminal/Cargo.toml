@@ -1,0 +1,13 @@
+[package]
+name = "code-lite-terminal"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+portable-pty = "0.9"
+vt100 = "0.16"
+parking_lot = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }

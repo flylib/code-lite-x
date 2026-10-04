@@ -132,6 +132,17 @@ class CodeLiteBindings {
 
   Map<String, dynamic> terminalExec(String cmd, List<String> args) => {'status': 'error', 'error': 'Bindings unavailable'};
 
+  Map<String, dynamic> ptyOpen(int rows, int cols) => {'status': 'error', 'error': 'FFI not available'};
+
+  Map<String, dynamic> ptyWrite(String id, String data) => {'status': 'error', 'error': 'FFI not available'};
+
+  Map<String, dynamic> ptyResize(String id, int rows, int cols) => {'status': 'error', 'error': 'FFI not available'};
+
+  Map<String, dynamic> ptySnapshot(String id, {int sinceSeq = -1, int scrollback = 0}) =>
+      {'status': 'error', 'error': 'FFI not available'};
+
+  Map<String, dynamic> ptyClose(String id) => {'status': 'error', 'error': 'FFI not available'};
+
   Map<String, dynamic> undo(String relPath) => {};
 
   Map<String, dynamic> updaterApply(String stagingDir, String targetDir, List<String> files, {String? platform}) => {'status': 'error', 'error': 'FFI not available'};

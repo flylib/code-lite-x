@@ -19,6 +19,7 @@ import 'features/project_explorer/project_explorer_widget.dart';
 import 'features/project_explorer/structure_widget.dart';
 import 'features/search/global_search_modal.dart';
 import 'features/status_bar/status_bar_widget.dart';
+import 'features/terminal/terminal_store.dart';
 import 'features/title_bar/title_bar_widget.dart';
 import 'features/update/update_modal.dart';
 import 'features/plugins/plugins_modal.dart';
@@ -40,6 +41,7 @@ class _CodeLiteAppState extends State<CodeLiteApp> {
   late final EditorSessionManager _sessions;
   late final WorkspaceStore _workspace;
   final LayoutStore _layout = LayoutStore();
+  late final TerminalStore _terminals = TerminalStore(_client);
 
   @override
   void initState() {
@@ -55,6 +57,7 @@ class _CodeLiteAppState extends State<CodeLiteApp> {
 
   @override
   void dispose() {
+    _terminals.dispose();
     _layout.dispose();
     _workspace.dispose();
     _sessions.dispose();
@@ -73,7 +76,7 @@ class _CodeLiteAppState extends State<CodeLiteApp> {
           notifier: _workspace,
           child: SessionScope(
             notifier: _sessions,
-            child: _Workbench(client: _client),
+            child: _Workbench(client: _client, terminals: _terminals),
           ),
         ),
       ),
@@ -82,9 +85,10 @@ class _CodeLiteAppState extends State<CodeLiteApp> {
 }
 
 class _Workbench extends StatelessWidget {
-  const _Workbench({required this.client});
+  const _Workbench({required this.client, required this.terminals});
 
   final ApiClient client;
+  final TerminalStore terminals;
 
   @override
   Widget build(BuildContext context) {
@@ -178,6 +182,7 @@ class _Workbench extends StatelessWidget {
                                 onSelectTab: layout.selectBottomTab,
                                 onRevertTask: () => _revertTask(context),
                                 client: client,
+                                terminals: terminals,
                               );
                             },
                           ),

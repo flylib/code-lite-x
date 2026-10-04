@@ -7,7 +7,7 @@ import 'stripe_button.dart';
 
 export '../../core/state/layout_store.dart' show LeftTool;
 
-/// 左侧活动条。上半段切左侧工具窗,中段切底部工具窗,下半段是终端与设置。
+/// 左侧活动条。上半段切左侧工具窗与插件,下半段切底部工具窗(IntelliJ 布局),最底是设置。
 ///
 /// 之前左侧工具窗和底部工具窗的按钮混在一个 enum 里,选中态语义也混着;
 /// 现在两组各自独立 —— 与 IntelliJ 一致,也和 design/Main.dc.html 对得上。
@@ -56,28 +56,6 @@ class ActivityStripeWidget extends StatelessWidget {
             onTap: () => onSelectLeftTool(LeftTool.structure),
           ),
 
-          const _StripeDivider(),
-
-          StripeButton(
-            icon: Icons.commit_outlined,
-            tooltip: 'Git 提交与日志',
-            isActive: isBottomOpen && bottomTab == BottomToolTab.git,
-            onTap: () => onSelectBottomTab(BottomToolTab.git),
-          ),
-          const SizedBox(height: 6),
-          StripeButton(
-            icon: Icons.hub_outlined,
-            tooltip: 'CodeGraph 调用图',
-            isActive: isBottomOpen && bottomTab == BottomToolTab.codegraph,
-            onTap: () => onSelectBottomTab(BottomToolTab.codegraph),
-          ),
-          const SizedBox(height: 6),
-          StripeButton(
-            icon: Icons.storage_outlined,
-            tooltip: '操作记录与回滚',
-            isActive: isBottomOpen && bottomTab == BottomToolTab.sqlite,
-            onTap: () => onSelectBottomTab(BottomToolTab.sqlite),
-          ),
           const SizedBox(height: 6),
           StripeButton(
             icon: Icons.extension_outlined,
@@ -88,6 +66,21 @@ class ActivityStripeWidget extends StatelessWidget {
 
           const Spacer(),
 
+          // 下半段:底部工具窗(与 IntelliJ 一致,贴着它们打开的位置)。
+          StripeButton(
+            icon: Icons.storage_outlined,
+            tooltip: '操作记录与回滚',
+            isActive: isBottomOpen && bottomTab == BottomToolTab.sqlite,
+            onTap: () => onSelectBottomTab(BottomToolTab.sqlite),
+          ),
+          const SizedBox(height: 6),
+          StripeButton(
+            icon: Icons.hub_outlined,
+            tooltip: 'CodeGraph 调用图',
+            isActive: isBottomOpen && bottomTab == BottomToolTab.codegraph,
+            onTap: () => onSelectBottomTab(BottomToolTab.codegraph),
+          ),
+          const SizedBox(height: 6),
           StripeButton(
             icon: Icons.terminal_outlined,
             tooltip: '终端 (⌥F12)',
@@ -95,6 +88,15 @@ class ActivityStripeWidget extends StatelessWidget {
             onTap: () => onSelectBottomTab(BottomToolTab.terminal),
           ),
           const SizedBox(height: 6),
+          StripeButton(
+            icon: Icons.commit_outlined,
+            tooltip: 'Git 提交与日志',
+            isActive: isBottomOpen && bottomTab == BottomToolTab.git,
+            onTap: () => onSelectBottomTab(BottomToolTab.git),
+          ),
+
+          const _StripeDivider(),
+
           StripeButton(
             icon: Icons.tune,
             tooltip: '设置',
