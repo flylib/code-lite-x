@@ -76,15 +76,6 @@ fields = [
 ]
 
 [[types]]
-name = "StreamEvent"
-description = "Streaming event payload for agent or long-running tasks"
-fields = [
-    { name = "event_type", type = "string" },
-    { name = "payload", type = "string" },
-    { name = "is_done", type = "bool" },
-]
-
-[[types]]
 name = "GitFileChange"
 description = "Git status file modification"
 fields = [
@@ -165,17 +156,6 @@ params = [
 ]
 returns = "DiagnosticList"
 streaming = false
-
-[[methods]]
-name = "agent.send_prompt"
-description = "Send a prompt to the AI agent loop"
-handler = "crate::handlers::agent::handle_send_prompt"
-params = [
-    { name = "prompt", type = "string" },
-    { name = "stream", type = "bool" },
-]
-returns = "StreamEvent"
-streaming = true
 
 [[methods]]
 name = "git.status"

@@ -6,12 +6,11 @@ import '../git/git_log_window.dart';
 import '../terminal/terminal_store.dart';
 import '../terminal/terminal_view.dart';
 
-enum BottomToolTab { git, sqlite, codegraph, terminal }
+enum BottomToolTab { git, codegraph, terminal }
 
 class BottomToolsWidget extends StatefulWidget {
   final BottomToolTab activeTab;
   final ValueChanged<BottomToolTab> onSelectTab;
-  final VoidCallback onRevertTask;
   final ApiClient? client;
 
   /// 终端会话活在面板之外,面板收起时 shell 不会被杀。
@@ -30,7 +29,6 @@ class BottomToolsWidget extends StatefulWidget {
     super.key,
     required this.activeTab,
     required this.onSelectTab,
-    required this.onRevertTask,
     this.client,
     this.terminals,
     this.gitLog,
@@ -44,7 +42,6 @@ class BottomToolsWidget extends StatefulWidget {
 
 class _BottomToolsWidgetState extends State<BottomToolsWidget> {
   late final ApiClient _client;
-  bool _reverted = false;
 
   @override
   void initState() {
@@ -105,7 +102,6 @@ class _BottomToolsWidgetState extends State<BottomToolsWidget> {
               child: Row(
                 children: [
                   _buildTab('Git', BottomToolTab.git),
-                  _buildTab('SQLite State & Rollback', BottomToolTab.sqlite),
                   _buildTab('CodeGraph Explorer', BottomToolTab.codegraph),
                   _buildTab('Terminal', BottomToolTab.terminal),
                 ],
@@ -117,7 +113,6 @@ class _BottomToolsWidgetState extends State<BottomToolsWidget> {
           Expanded(
             child: switch (widget.activeTab) {
               BottomToolTab.git => const SizedBox.shrink(),
-              BottomToolTab.sqlite => _buildSqlitePanel(),
               BottomToolTab.codegraph => _buildCodeGraphPanel(),
               BottomToolTab.terminal => const SizedBox.shrink(),
             },
@@ -156,111 +151,7 @@ class _BottomToolsWidgetState extends State<BottomToolsWidget> {
     );
   }
 
-  // 1. Git Version Control Panel
-  // 2. SQLite State & Rollback Panel
-  Widget _buildSqlitePanel() {
-    return Padding(
-      padding: const EdgeInsets.all(12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Row(
-                children: [
-                  Icon(Icons.circle, size: 8, color: IntelliJTheme.gitGreen),
-                  SizedBox(width: 6),
-                  Text('SQLite Operations Audit (.codelite/project.db)', style: TextStyle(color: IntelliJTheme.textHigh, fontSize: 12, fontWeight: FontWeight.bold)),
-                ],
-              ),
-              ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _reverted ? IntelliJTheme.gitGreen : IntelliJTheme.gitRed.withOpacity(0.2),
-                  foregroundColor: _reverted ? Colors.white : const Color(0xFFF27474),
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  elevation: 0,
-                  side: BorderSide(color: _reverted ? IntelliJTheme.gitGreen : IntelliJTheme.gitRed.withOpacity(0.4)),
-                ),
-                icon: Icon(_reverted ? Icons.check : Icons.undo, size: 14),
-                label: Text(
-                  _reverted ? 'Reverted Task #104 (Files Restored)' : 'Undo Task #104 (Revert All Agent Edits)',
-                  style: const TextStyle(fontSize: 11),
-                ),
-                onPressed: () {
-                  setState(() => _reverted = true);
-                  widget.onRevertTask();
-                },
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Expanded(
-            child: ListView(
-              children: [
-                _buildOpCard(
-                  id: '#op-201',
-                  file: 'crates/code-lite-storage/src/op_store.rs',
-                  status: _reverted ? 'REVERTED' : 'APPLIED',
-                  statusColor: _reverted ? IntelliJTheme.gitYellow : IntelliJTheme.gitGreen,
-                  diff: 'Unified Patch (+42 lines revert/revert_task)',
-                ),
-                const SizedBox(height: 6),
-                _buildOpCard(
-                  id: '#op-200',
-                  file: 'crates/code-lite-storage/src/graph_store.rs',
-                  status: _reverted ? 'REVERTED' : 'APPLIED',
-                  statusColor: _reverted ? IntelliJTheme.gitYellow : IntelliJTheme.gitGreen,
-                  diff: 'CallGraph query index insertion',
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildOpCard({
-    required String id,
-    required String file,
-    required String status,
-    required Color statusColor,
-    required String diff,
-  }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      decoration: BoxDecoration(
-        color: IntelliJTheme.cardBg,
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: IntelliJTheme.border),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Row(
-            children: [
-              Text(id, style: const TextStyle(color: Color(0xFF6CB4F8), fontSize: 11, fontFamily: 'monospace')),
-              const SizedBox(width: 8),
-              Text(file, style: const TextStyle(color: IntelliJTheme.textHigh, fontSize: 11, fontWeight: FontWeight.w600)),
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                decoration: BoxDecoration(
-                  color: statusColor.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(3),
-                ),
-                child: Text(status, style: TextStyle(color: statusColor, fontSize: 9, fontWeight: FontWeight.bold)),
-              ),
-            ],
-          ),
-          Text(diff, style: const TextStyle(color: IntelliJTheme.textMuted, fontSize: 11, fontFamily: 'monospace')),
-        ],
-      ),
-    );
-  }
-
-  // 3. CodeGraph Explorer Panel
+  // CodeGraph Explorer Panel
   Widget _buildCodeGraphPanel() {
     return Padding(
       padding: const EdgeInsets.all(12),

@@ -1,8 +1,8 @@
 # CodeLiteX
 
-A modern, high-performance, intelligent IDE and code editor engine built in Rust.
+A modern, high-performance code editor with built-in Git management, built in Rust.
 
-`CodeLiteX` integrates a low-latency text editing core, structural code knowledge graph (**CodeGraph**), transactional state and memory engine (**SQLite**), standard Language Server Protocol (**LSP**), and an autonomous **AI Coding Agent**.
+`CodeLiteX` integrates a low-latency text editing core, Git management (status / stage / commit / diff / log), a structural code knowledge graph (**CodeGraph**, persisted in **SQLite**), standard Language Server Protocol (**LSP**), workspace search & replace, and an embedded **PTY terminal**.
 
 ---
 
@@ -15,17 +15,12 @@ A modern, high-performance, intelligent IDE and code editor engine built in Rust
                                       │
        ┌──────────────┬───────────────┼───────────────┬──────────────┐
        ▼              ▼               ▼               ▼              ▼
-  Editor Core     CodeGraph        SQLite            LSP          Terminal
- (Ropey/Cursors) (AST/Call Graph) (State/Memory)  (Diagnostics)   (PTY Shell)
-       │              │               │               │              │
-       └──────────────┴───────┬───────┴───────────────┴──────────────┘
-                              ▼
-                      AI Agent Engine
-                              │
-               ┌──────────────┴──────────────┐
-               ▼                             ▼
-      Graph-Aware Context            Reversible Operations
-  (Call Chains & Impact Analysis)    (Patch Diff & Undo Rollback)
+  Editor Core        Git           CodeGraph          LSP          Terminal
+ (Ropey/Cursors) (Status/Log/Diff) (AST/Call Graph) (Diagnostics)   (PTY Shell)
+                                      │
+                                      ▼
+                                SQLite (WAL)
+                        (Symbols / Diagnostics Index)
 ```
 
 ### Core Crates
@@ -38,14 +33,21 @@ A modern, high-performance, intelligent IDE and code editor engine built in Rust
   - High-level `Editor` orchestrator.
 
 - **`code-lite-storage`**: Embedded SQLite database (`rusqlite` with WAL mode).
-  - CodeGraph persistent relations: `files`, `symbols`, `symbol_references`, `call_graph`, `import_graph`.
-  - State & Memory: `sessions`, `tasks`, and `operations`.
-  - Atomic Rollback Engine: records before/after hashes and unified diff patches to revert agent edits safely.
-  - Global Event Stream: records lifecycle events (`FileOpened`, `FileChanged`, `AgentEditedFile`, etc.).
+  - CodeGraph persistent relations: `files`, `symbols`, `symbol_references`, `call_graph`, `import_graph`, resumable `index_jobs`.
+  - LSP `diagnostics` cache.
 
-- **`code-lite-fs`**: File system scanner and workspace tree.
+- **`code-lite-fs`**: File system, Git and updater.
   - Fast directory tree traversal with ignore rules (`.git`, `target`, `node_modules`, `.codelite`).
-  - Metadata indexing preparation.
+  - Multi-threaded / regex workspace search & replace.
+  - `GitEngine` (wraps the system `git` CLI): status, stage/unstage, commit, diff hunks, history/log.
+  - Cross-platform differential auto-updater.
+
+- **`code-lite-graph`**: Incremental AST parsing, stable `SymbolKey`, outline / definitions / references / callers / callees.
+- **`code-lite-lsp`**: LSP protocol client, process supervisor and built-in virtual LSP server.
+- **`code-lite-terminal`**: PTY-backed interactive terminal sessions.
+- **`code-lite-rpc`**: Shared JSON-RPC 2.0 protocol models and framing.
+- **`code-lite-ffi`**: C-ABI dynamic library (`libcodelite`) consumed by the Flutter desktop UI.
+- **`code-lite-app`**: Lightweight standalone daemon with a minimal web UI.
 
 ---
 
@@ -54,7 +56,7 @@ A modern, high-performance, intelligent IDE and code editor engine built in Rust
 Ensure Rust toolchain is available (Rust 1.80+):
 
 ```bash
-cargo test --workspace
+cargo test --offline --workspace
 ```
 
 ---

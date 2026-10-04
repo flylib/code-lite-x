@@ -2,6 +2,9 @@ use rusqlite::{Connection, Result};
 
 pub const SCHEMA_VERSION: i32 = 1;
 
+/// 只建仍在使用的表。旧版本库里遗留的 sessions / tasks / operations / events /
+/// approvals / messages / *_memories 表不再创建也不主动删除:`CREATE TABLE IF NOT EXISTS`
+/// 不会碰它们,旧的 `.codelite/workspace.db` 照常能打开。
 pub fn initialize_schema(conn: &Connection) -> Result<()> {
     conn.execute_batch(
         r#"
@@ -67,52 +70,7 @@ pub fn initialize_schema(conn: &Connection) -> Result<()> {
             raw_specifier TEXT NOT NULL
         );
 
-        -- 6. Sessions & Tasks
-        CREATE TABLE IF NOT EXISTS sessions (
-            id TEXT PRIMARY KEY,
-            title TEXT NOT NULL,
-            created_at INTEGER NOT NULL,
-            updated_at INTEGER NOT NULL
-        );
-
-        CREATE TABLE IF NOT EXISTS tasks (
-            id TEXT PRIMARY KEY,
-            session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
-            user_prompt TEXT NOT NULL,
-            status TEXT NOT NULL,
-            plan_json TEXT,
-            created_at INTEGER NOT NULL,
-            finished_at INTEGER
-        );
-
-        -- 7. Operations & File Patches (Supports atomic undo / rollback)
-        CREATE TABLE IF NOT EXISTS operations (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
-            task_id TEXT REFERENCES tasks(id) ON DELETE CASCADE,
-            file_path TEXT NOT NULL,
-            op_type TEXT NOT NULL,
-            before_hash TEXT,
-            after_hash TEXT,
-            before_content TEXT,
-            after_content TEXT,
-            patch_diff TEXT NOT NULL,
-            status TEXT NOT NULL,
-            created_at INTEGER NOT NULL
-        );
-
-        -- 8. Global Event Stream
-        CREATE TABLE IF NOT EXISTS events (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            session_id TEXT,
-            event_type TEXT NOT NULL,
-            payload_json TEXT NOT NULL,
-            created_at INTEGER NOT NULL
-        );
-        CREATE INDEX IF NOT EXISTS idx_events_session ON events(session_id);
-        CREATE INDEX IF NOT EXISTS idx_events_type ON events(event_type);
-
-        -- 9. Index Jobs (Resumable, Crash-Safe Background Indexing)
+        -- 6. Index Jobs (Resumable, Crash-Safe Background Indexing)
         CREATE TABLE IF NOT EXISTS index_jobs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             job_id TEXT UNIQUE NOT NULL,
@@ -127,7 +85,7 @@ pub fn initialize_schema(conn: &Connection) -> Result<()> {
         CREATE INDEX IF NOT EXISTS idx_index_jobs_status ON index_jobs(status);
         CREATE INDEX IF NOT EXISTS idx_index_jobs_path ON index_jobs(file_path);
 
-        -- 10. LSP Diagnostics (Errors, Warnings, Information, Hints)
+        -- 7. LSP Diagnostics (Errors, Warnings, Information, Hints)
         CREATE TABLE IF NOT EXISTS diagnostics (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             file_path TEXT NOT NULL,
@@ -143,63 +101,39 @@ pub fn initialize_schema(conn: &Connection) -> Result<()> {
         );
         CREATE INDEX IF NOT EXISTS idx_diagnostics_file ON diagnostics(file_path);
         CREATE INDEX IF NOT EXISTS idx_diagnostics_severity ON diagnostics(severity);
-
-        -- 11. Agent Approvals & Gateways (Three-Tier Permission Architecture)
-        CREATE TABLE IF NOT EXISTS approvals (
-            id TEXT PRIMARY KEY,
-            session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
-            task_id TEXT REFERENCES tasks(id) ON DELETE CASCADE,
-            step_id TEXT NOT NULL,
-            tool_name TEXT NOT NULL,
-            args_json TEXT NOT NULL,
-            risk_level TEXT NOT NULL,
-            status TEXT NOT NULL,
-            requested_at INTEGER NOT NULL,
-            resolved_at INTEGER
-        );
-        CREATE INDEX IF NOT EXISTS idx_approvals_session ON approvals(session_id);
-        CREATE INDEX IF NOT EXISTS idx_approvals_status ON approvals(status);
-
-        -- 12. Chat Messages & Thought Chains (Persistent Multi-turn AI Assistant)
-        CREATE TABLE IF NOT EXISTS messages (
-            id TEXT PRIMARY KEY,
-            session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
-            role TEXT NOT NULL,
-            content TEXT NOT NULL,
-            thought TEXT,
-            plan_id TEXT,
-            created_at INTEGER NOT NULL
-        );
-        CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id);
-
-        -- 13. Decision Memory (Architecture choices, user approvals/rejections, manual interventions)
-        CREATE TABLE IF NOT EXISTS decision_memories (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            session_id TEXT,
-            decision_type TEXT NOT NULL, -- e.g. 'approval_granted', 'approval_rejected', 'user_directive', 'architecture_choice'
-            subject TEXT NOT NULL,       -- tool name, file, or topic
-            detail TEXT NOT NULL,        -- rationale, user reason, or summary
-            context_tags TEXT,           -- comma-separated tags or JSON
-            created_at INTEGER NOT NULL
-        );
-        CREATE INDEX IF NOT EXISTS idx_decision_memories_type ON decision_memories(decision_type);
-        CREATE INDEX IF NOT EXISTS idx_decision_memories_subject ON decision_memories(subject);
-
-        -- 14. Error Memory (Lessons learned from failures, rollbacks, test failures, lsp errors)
-        CREATE TABLE IF NOT EXISTS error_memories (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            session_id TEXT,
-            error_type TEXT NOT NULL,    -- e.g. 'lsp_diagnostic', 'rollback', 'command_failure', 'test_failure'
-            target_path TEXT,            -- file path or module affected
-            error_summary TEXT NOT NULL, -- the error message or symptom
-            lesson_learned TEXT NOT NULL,-- what went wrong / what not to do ("此路不通")
-            context_snippet TEXT,        -- code snippet or failed diff
-            created_at INTEGER NOT NULL
-        );
-        CREATE INDEX IF NOT EXISTS idx_error_memories_type ON error_memories(error_type);
-        CREATE INDEX IF NOT EXISTS idx_error_memories_path ON error_memories(target_path);
         "#,
     )?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_legacy_db_with_removed_tables_still_opens() {
+        // 模拟旧版本留下的库:含已下线功能的表和数据,再跑一次建表必须不报错且不动旧数据
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            r#"
+            PRAGMA foreign_keys = ON;
+            CREATE TABLE sessions (id TEXT PRIMARY KEY, title TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
+            CREATE TABLE events (id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT, event_type TEXT NOT NULL, payload_json TEXT NOT NULL, created_at INTEGER NOT NULL);
+            INSERT INTO sessions VALUES ('s1', 'old', 0, 0);
+            INSERT INTO events (event_type, payload_json, created_at) VALUES ('WorkspaceOpened', '{}', 0);
+            "#,
+        )
+        .unwrap();
+
+        initialize_schema(&conn).unwrap();
+        initialize_schema(&conn).unwrap();
+
+        let legacy: i64 = conn.query_row("SELECT COUNT(*) FROM events", [], |r| r.get(0)).unwrap();
+        assert_eq!(legacy, 1);
+        let has_symbols: i64 = conn
+            .query_row("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='symbols'", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(has_symbols, 1);
+    }
 }

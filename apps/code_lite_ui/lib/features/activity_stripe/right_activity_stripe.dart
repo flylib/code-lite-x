@@ -6,7 +6,7 @@ import 'stripe_button.dart';
 
 /// 右侧活动条。切右侧工具窗 —— 与左侧同一套按钮语义。
 ///
-/// 设计稿里右栏是 Cargo 与助手两个工具窗;再点一次当前项收起该栏。
+/// 右栏目前只有 Cargo 工具窗;再点一次当前项收起该栏。
 class RightActivityStripe extends StatelessWidget {
   const RightActivityStripe({
     super.key,
@@ -43,13 +43,6 @@ class RightActivityStripe extends StatelessWidget {
             tooltip: 'Cargo',
             isActive: rightTool == RightTool.cargo,
             onTap: () => onSelectRightTool(RightTool.cargo),
-          ),
-          const SizedBox(height: 6),
-          StripeButton(
-            icon: Icons.auto_awesome_outlined,
-            tooltip: '助手',
-            isActive: rightTool == RightTool.assistant,
-            onTap: () => onSelectRightTool(RightTool.assistant),
           ),
         ],
       ),

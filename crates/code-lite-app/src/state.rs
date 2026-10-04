@@ -1,7 +1,5 @@
 use code_lite_core::Editor;
-use code_lite_storage::{
-    Database, EventStore, GraphStore, OperationStore, SessionStore, StorageError, SymbolRecord,
-};
+use code_lite_storage::{Database, GraphStore, StorageError, SymbolRecord};
 use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -10,10 +8,7 @@ use std::path::{Path, PathBuf};
 pub struct AppState {
     pub workspace_root: PathBuf,
     pub db: Database,
-    pub event_store: EventStore,
-    pub op_store: OperationStore,
     pub graph_store: GraphStore,
-    pub session_store: SessionStore,
     pub editors: Mutex<HashMap<String, Editor>>,
 }
 
@@ -23,27 +18,12 @@ impl AppState {
         let db_path = root.join(".codelite").join("workspace.db");
         let db = Database::open(&db_path)?;
 
-        let event_store = EventStore::new(db.clone());
-        let op_store = OperationStore::new(db.clone());
         let graph_store = GraphStore::new(db.clone());
-        let session_store = SessionStore::new(db.clone());
-
-        // Log application startup
-        let _ = event_store.log(
-            None,
-            "WorkspaceOpened",
-            &serde_json::json!({
-                "root": root.to_string_lossy()
-            }),
-        );
 
         let state = Self {
             workspace_root: root,
             db,
-            event_store,
-            op_store,
             graph_store,
-            session_store,
             editors: Mutex::new(HashMap::new()),
         };
 
@@ -152,12 +132,6 @@ impl AppState {
         let content = std::fs::read_to_string(&full_path)?;
         let editor = Editor::from_str(&content);
         editors.insert(rel_path.to_string(), editor);
-
-        let _ = self.event_store.log(
-            None,
-            "FileOpened",
-            &serde_json::json!({ "path": rel_path }),
-        );
 
         Ok(content)
     }

@@ -10,7 +10,6 @@ import 'core/state/workspace_store.dart';
 import 'core/theme/intellij_theme.dart';
 import 'features/activity_stripe/activity_stripe_widget.dart';
 import 'features/activity_stripe/right_activity_stripe.dart';
-import 'features/ai_assistant/ai_assistant_panel.dart';
 import 'features/bottom_tools/bottom_tools_widget.dart';
 import 'features/cargo/cargo_panel.dart';
 import 'features/commit/commit_panel.dart';
@@ -24,7 +23,6 @@ import 'features/status_bar/status_bar_widget.dart';
 import 'features/terminal/terminal_store.dart';
 import 'features/title_bar/title_bar_widget.dart';
 import 'features/update/update_modal.dart';
-import 'features/plugins/plugins_modal.dart';
 
 /// 应用根:建 store,挂 scope,之后不再持有可变 UI 状态。
 ///
@@ -119,8 +117,6 @@ class _Workbench extends StatelessWidget {
         const SingleActivator(LogicalKeyboardKey.keyF, control: true, shift: true): () => _openSearch(context),
         const SingleActivator(LogicalKeyboardKey.keyU, meta: true): () => _openUpdates(context),
         const SingleActivator(LogicalKeyboardKey.keyU, control: true): () => _openUpdates(context),
-        const SingleActivator(LogicalKeyboardKey.keyX, meta: true, shift: true): () => _openPlugins(context),
-        const SingleActivator(LogicalKeyboardKey.keyX, control: true, shift: true): () => _openPlugins(context),
       },
       child: Focus(
         autofocus: true,
@@ -133,7 +129,6 @@ class _Workbench extends StatelessWidget {
                 listenable: workspace,
                 builder: (context, _) => TitleBarWidget(
                   activeFile: workspace.activeFile,
-                  onToggleAi: () => layout.selectRightTool(RightTool.assistant),
                   onUndo: workspace.undo,
                   onRedo: workspace.redo,
                   onSearch: () => _openSearch(context),
@@ -153,7 +148,6 @@ class _Workbench extends StatelessWidget {
                         isBottomOpen: layout.isBottomOpen,
                         onSelectLeftTool: layout.selectLeftTool,
                         onSelectBottomTab: layout.selectBottomTab,
-                        onOpenPlugins: () => _openPlugins(context),
                       ),
                     ),
 
@@ -205,7 +199,6 @@ class _Workbench extends StatelessWidget {
                                     BottomToolsWidget(
                                       activeTab: layout.bottomTab,
                                       onSelectTab: layout.selectBottomTab,
-                                      onRevertTask: () => _revertTask(context),
                                       client: client,
                                       terminals: terminals,
                                       gitLog: gitLog,
@@ -232,13 +225,6 @@ class _Workbench extends StatelessWidget {
                                 builder: (context, _) => CargoPanel(
                                   client: client,
                                   tree: workspace.tree,
-                                  onClose: layout.closeRight,
-                                ),
-                              ),
-                            RightTool.assistant => ListenableBuilder(
-                                listenable: workspace,
-                                builder: (context, _) => AiAssistantPanel(
-                                  activeFile: workspace.activeFile,
                                   onClose: layout.closeRight,
                                 ),
                               ),
@@ -285,15 +271,6 @@ class _Workbench extends StatelessWidget {
     UpdateModal.show(context, client: client, currentVersion: '0.1.0');
   }
 
-  void _openPlugins(BuildContext context) {
-    PluginsModal.show(context, client: client);
-  }
-
-  Future<void> _revertTask(BuildContext context) async {
-    final workspace = context.workspaceRead;
-    await client.revertTask('task-104');
-    await workspace.openFile(workspace.activeFile);
-  }
 }
 
 /// 编辑区。只订阅会话层 —— 换标签、分屏会重建这里,

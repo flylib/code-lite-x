@@ -45,14 +45,6 @@ class IntelliJTheme {
   static const Color syntaxNumber = Color(0xFF2AACB8);
 
 
-  // Agent step states (Phase 9 — StepStatus 的 7 态)
-  static const Color stepSuccess = gitGreen;
-  static const Color stepRunning = accentBlue;
-  static const Color stepAwaiting = accentYellow;
-  static const Color stepFailed = gitRed;
-  static const Color stepRolledBack = Color(0xFF8E6BC4);
-  static const Color stepPending = textMuted;
-
   // Editor overlays (与 editor_view_widget 里的字面量对齐)
   static const Color ghostText = Color(0xFF6E7681);
   static const Color caret = Color(0xFF589DF6);
@@ -101,8 +93,6 @@ class IntelliJMetrics {
   static const double codeFontSize = 12;
   static const double codeLineHeight = 1.4;
   static const double charWidth = 7.2;
-  static const double aiPanel = 310;
-  static const double agentPanel = 420;
   static const double cargoPanel = 250;
   static const double contextSources = 300;
   static const double contextDetail = 340;

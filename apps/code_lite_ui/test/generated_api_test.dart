@@ -71,11 +71,6 @@ void main() {
             }
           ],
         },
-        'agent.send_prompt': {
-          'event_type': 'done',
-          'payload': 'Task completed',
-          'is_done': true,
-        },
         'git.status': {
           'branch': 'main',
           'is_clean': true,
@@ -129,21 +124,14 @@ void main() {
       expect(diags.diagnostics.first.severity, 'Warning');
       expect(diags.diagnostics.first.message, 'unused variable');
 
-      // 7. agentSendPrompt (streaming)
-      final events = await client.agentSendPrompt(prompt: 'Plan task').toList();
-      expect(events.length, 1);
-      expect(events.first.eventType, 'done');
-      expect(events.first.payload, 'Task completed');
-      expect(events.first.isDone, isTrue);
-
-      // 8. gitStatus
+      // 7. gitStatus
       final git = await client.gitStatus(workspacePath: '/tmp/repo');
       expect(git.branch, 'main');
       expect(git.isClean, isTrue);
       expect(git.changes, isEmpty);
 
-      // Verify all 8 methods were recorded
-      expect(mock.recordedCalls.length, 8);
+      // Verify all 7 methods were recorded
+      expect(mock.recordedCalls.length, 7);
     });
 
     test('JsonRpcException handles error payloads properly', () async {
@@ -198,12 +186,7 @@ void main() {
         final redo = await client.fileRedo(path: 'hello.txt');
         expect(redo.success, isTrue);
 
-        // 4. agentSendPrompt
-        final stream = await client.agentSendPrompt(prompt: 'Status check', stream: false).toList();
-        expect(stream.isNotEmpty, isTrue);
-        expect(stream.first.isDone, isTrue);
-
-        // 5. gitStatus
+        // 4. gitStatus
         Process.runSync('git', ['-C', tempDir.path, 'init']);
         final git = await client.gitStatus(workspacePath: tempDir.path);
         expect(git.branch, isNotNull);

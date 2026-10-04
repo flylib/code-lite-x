@@ -41,41 +41,17 @@ typedef _FileSaveDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> 
 typedef _FileCursorSetC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> path, Uint32 line, Uint32 col, Bool select);
 typedef _FileCursorSetDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> path, int line, int col, bool select);
 
-typedef _AgentPromptC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> sessionId, Pointer<Char> prompt);
-typedef _AgentPromptDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> sessionId, Pointer<Char> prompt);
 
-typedef _AgentRollbackC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> sessionId, Int64 targetStepId);
-typedef _AgentRollbackDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> sessionId, int targetStepId);
 
-typedef _AgentRestoreC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> sessionId);
-typedef _AgentRestoreDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> sessionId);
 
-typedef _AgentPlanTaskC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> sessionId, Pointer<Char> paramsJson);
-typedef _AgentPlanTaskDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> sessionId, Pointer<Char> paramsJson);
 
-typedef _AgentExecStepC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> planId);
-typedef _AgentExecStepDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> planId);
 
-typedef _AgentApproveC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> requestId, Bool approved);
-typedef _AgentApproveDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> requestId, bool approved);
 
-typedef _AgentPendingApprovalsC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> sessionId);
-typedef _AgentPendingApprovalsDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> sessionId);
 
-typedef _AgentDiffReviewC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> sessionId);
-typedef _AgentDiffReviewDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> sessionId);
 
-typedef _AgentFimCompleteC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> filePath, Pointer<Char> prefix, Pointer<Char> suffix, Pointer<Char> language);
-typedef _AgentFimCompleteDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> filePath, Pointer<Char> prefix, Pointer<Char> suffix, Pointer<Char> language);
 
-typedef _AgentRollbackStepC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> planId, Pointer<Char> stepId);
-typedef _AgentRollbackStepDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> planId, Pointer<Char> stepId);
 
-typedef _WorktreeActionC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> taskId);
-typedef _WorktreeActionDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> taskId);
 
-typedef _StorageEventsC = Pointer<Char> Function(Pointer<Void> ctx);
-typedef _StorageEventsDart = Pointer<Char> Function(Pointer<Void> ctx);
 
 typedef _GraphSymbolsC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> query);
 typedef _GraphSymbolsDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> query);
@@ -131,14 +107,8 @@ typedef _PtyCloseDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> 
 typedef _GitCallC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> method, Pointer<Char> paramsJson);
 typedef _GitCallDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> method, Pointer<Char> paramsJson);
 
-typedef _AgentPromptStreamC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> sessionId, Pointer<Char> prompt);
-typedef _AgentPromptStreamDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> sessionId, Pointer<Char> prompt);
 
-typedef _AgentPollStreamC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> sessionId);
-typedef _AgentPollStreamDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> sessionId);
 
-typedef _SessionMessagesC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> sessionId);
-typedef _SessionMessagesDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> sessionId);
 
 typedef _GitStatusC = Pointer<Char> Function(Pointer<Void> ctx);
 typedef _GitStatusDart = Pointer<Char> Function(Pointer<Void> ctx);
@@ -161,23 +131,11 @@ typedef _GitRevertFileDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<C
 typedef _JsonRpcCallC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> requestJson);
 typedef _JsonRpcCallDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> requestJson);
 
-typedef _ContextBuildTaskPromptC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> taskPrompt, Pointer<Char> focusFile, Pointer<Char> focusSymbol);
-typedef _ContextBuildTaskPromptDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> taskPrompt, Pointer<Char> focusFile, Pointer<Char> focusSymbol);
 
-typedef _MemoryQueryC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> query, Pointer<Char> targetPath, Int32 limit);
-typedef _MemoryQueryDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> query, Pointer<Char> targetPath, int limit);
 
-typedef _MemoryRecordDecisionC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> sessionId, Pointer<Char> decisionType, Pointer<Char> subject, Pointer<Char> detail, Pointer<Char> tags);
-typedef _MemoryRecordDecisionDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> sessionId, Pointer<Char> decisionType, Pointer<Char> subject, Pointer<Char> detail, Pointer<Char> tags);
 
-typedef _MemoryRecordErrorC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> sessionId, Pointer<Char> errorType, Pointer<Char> targetPath, Pointer<Char> summary, Pointer<Char> lesson, Pointer<Char> snippet);
-typedef _MemoryRecordErrorDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> sessionId, Pointer<Char> errorType, Pointer<Char> targetPath, Pointer<Char> summary, Pointer<Char> lesson, Pointer<Char> snippet);
 
-typedef _SkillsListC = Pointer<Char> Function(Pointer<Void> ctx);
-typedef _SkillsListDart = Pointer<Char> Function(Pointer<Void> ctx);
 
-typedef _McpToolsListC = Pointer<Char> Function(Pointer<Void> ctx);
-typedef _McpToolsListDart = Pointer<Char> Function(Pointer<Void> ctx);
 
 typedef _UpdaterCheckC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> currentVersion, Pointer<Char> manifestJson, Pointer<Char> platform);
 typedef _UpdaterCheckDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> currentVersion, Pointer<Char> manifestJson, Pointer<Char> platform);
@@ -188,20 +146,10 @@ typedef _UpdaterStageDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Ch
 typedef _UpdaterApplyC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> stagingDir, Pointer<Char> targetDir, Pointer<Char> filesJson, Pointer<Char> platform);
 typedef _UpdaterApplyDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> stagingDir, Pointer<Char> targetDir, Pointer<Char> filesJson, Pointer<Char> platform);
 
-typedef _PluginLoadC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> manifestJson, Pointer<Uint8> wasmBytesPtr, Size wasmBytesLen);
-typedef _PluginLoadDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> manifestJson, Pointer<Uint8> wasmBytesPtr, int wasmBytesLen);
 
-typedef _PluginListC = Pointer<Char> Function(Pointer<Void> ctx);
-typedef _PluginListDart = Pointer<Char> Function(Pointer<Void> ctx);
 
-typedef _PluginToggleC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> pluginId, Bool enable);
-typedef _PluginToggleDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> pluginId, bool enable);
 
-typedef _PluginExecuteToolC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> pluginId, Pointer<Char> toolName, Pointer<Char> argsJson);
-typedef _PluginExecuteToolDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> pluginId, Pointer<Char> toolName, Pointer<Char> argsJson);
 
-typedef _PluginUnloadC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> pluginId);
-typedef _PluginUnloadDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> pluginId);
 
 /// Dart FFI bindings to Rust Core dynamic library (`libcodelite.dylib`).
 class CodeLiteBindings {
@@ -236,21 +184,6 @@ class CodeLiteBindings {
   late final _UndoRedoDart _redo;
   late final _FileSaveDart _fileSave;
   late final _FileCursorSetDart _fileCursorSet;
-  late final _AgentPromptDart _agentPrompt;
-  late final _AgentRollbackDart _agentRollback;
-  late final _AgentRestoreDart _agentRestore;
-  late final _AgentPlanTaskDart _agentPlanTask;
-  late final _AgentExecStepDart _agentExecStep;
-  late final _AgentApproveDart _agentApprove;
-  late final _AgentPendingApprovalsDart _agentPendingApprovals;
-  late final _AgentDiffReviewDart _agentDiffReview;
-  late final _AgentFimCompleteDart _agentFimComplete;
-  late final _AgentPlanTaskDart _agentPlanMultiFile;
-  late final _AgentRollbackStepDart _agentRollbackStep;
-  late final _WorktreeActionDart _worktreeCreate;
-  late final _WorktreeActionDart _worktreeMerge;
-  late final _WorktreeActionDart _worktreeDiscard;
-  late final _StorageEventsDart _storageEvents;
   late final _GraphSymbolsDart _graphSymbols;
   late final _GraphFileDart _graphIndexFile;
   late final _GraphFileDart _graphQueryOutline;
@@ -278,10 +211,6 @@ class CodeLiteBindings {
   late final _PtySnapshotDart _ptySnapshot;
   late final _PtyCloseDart _ptyClose;
   late final _GitCallDart _gitCall;
-  late final _AgentPromptStreamDart _agentPromptStream;
-  late final _AgentPollStreamDart _agentPollStream;
-  late final _SessionMessagesDart _sessionListMessages;
-  late final _SessionMessagesDart _sessionClearMessages;
   late final _GitStatusDart _gitStatus;
   late final _GitDiffDart _gitDiff;
   late final _GitStageDart _gitStage;
@@ -290,20 +219,9 @@ class CodeLiteBindings {
   late final _GitFileHunksDart _gitFileHunks;
   late final _GitRevertFileDart _gitRevertFile;
   late final _JsonRpcCallDart _jsonRpcCall;
-  late final _ContextBuildTaskPromptDart _contextBuildTaskPrompt;
-  late final _MemoryQueryDart _memoryQuery;
-  late final _MemoryRecordDecisionDart _memoryRecordDecision;
-  late final _MemoryRecordErrorDart _memoryRecordError;
-  late final _SkillsListDart _skillsList;
-  late final _McpToolsListDart _mcpToolsList;
   late final _UpdaterCheckDart _updaterCheck;
   late final _UpdaterStageDart _updaterStage;
   late final _UpdaterApplyDart _updaterApply;
-  late final _PluginLoadDart _pluginLoad;
-  late final _PluginListDart _pluginList;
-  late final _PluginToggleDart _pluginToggle;
-  late final _PluginExecuteToolDart _pluginExecuteTool;
-  late final _PluginUnloadDart _pluginUnload;
 
   Pointer<Void>? get contextPointer => _ctx;
 
@@ -349,21 +267,6 @@ class CodeLiteBindings {
     _redo = _dylib!.lookupFunction<_UndoRedoC, _UndoRedoDart>('codelite_redo');
     _fileSave = _dylib!.lookupFunction<_FileSaveC, _FileSaveDart>('codelite_file_save');
     _fileCursorSet = _dylib!.lookupFunction<_FileCursorSetC, _FileCursorSetDart>('codelite_file_cursor_set');
-    _agentPrompt = _dylib!.lookupFunction<_AgentPromptC, _AgentPromptDart>('codelite_agent_send_prompt');
-    _agentRollback = _dylib!.lookupFunction<_AgentRollbackC, _AgentRollbackDart>('codelite_agent_rollback');
-    _agentRestore = _dylib!.lookupFunction<_AgentRestoreC, _AgentRestoreDart>('codelite_agent_restore_start');
-    _agentPlanTask = _dylib!.lookupFunction<_AgentPlanTaskC, _AgentPlanTaskDart>('codelite_agent_plan_task');
-    _agentExecStep = _dylib!.lookupFunction<_AgentExecStepC, _AgentExecStepDart>('codelite_agent_execute_next_step');
-    _agentApprove = _dylib!.lookupFunction<_AgentApproveC, _AgentApproveDart>('codelite_agent_approve_step');
-    _agentPendingApprovals = _dylib!.lookupFunction<_AgentPendingApprovalsC, _AgentPendingApprovalsDart>('codelite_agent_get_pending_approvals');
-    _agentDiffReview = _dylib!.lookupFunction<_AgentDiffReviewC, _AgentDiffReviewDart>('codelite_agent_get_diff_review');
-    _agentFimComplete = _dylib!.lookupFunction<_AgentFimCompleteC, _AgentFimCompleteDart>('codelite_agent_fim_complete');
-    _agentPlanMultiFile = _dylib!.lookupFunction<_AgentPlanTaskC, _AgentPlanTaskDart>('codelite_agent_plan_multi_file');
-    _agentRollbackStep = _dylib!.lookupFunction<_AgentRollbackStepC, _AgentRollbackStepDart>('codelite_agent_rollback_step');
-    _worktreeCreate = _dylib!.lookupFunction<_WorktreeActionC, _WorktreeActionDart>('codelite_worktree_create');
-    _worktreeMerge = _dylib!.lookupFunction<_WorktreeActionC, _WorktreeActionDart>('codelite_worktree_merge');
-    _worktreeDiscard = _dylib!.lookupFunction<_WorktreeActionC, _WorktreeActionDart>('codelite_worktree_discard');
-    _storageEvents = _dylib!.lookupFunction<_StorageEventsC, _StorageEventsDart>('codelite_storage_events');
     _graphSymbols = _dylib!.lookupFunction<_GraphSymbolsC, _GraphSymbolsDart>('codelite_graph_symbols');
     _graphIndexFile = _dylib!.lookupFunction<_GraphFileC, _GraphFileDart>('codelite_graph_index_file');
     _graphQueryOutline = _dylib!.lookupFunction<_GraphFileC, _GraphFileDart>('codelite_graph_query_outline');
@@ -391,10 +294,6 @@ class CodeLiteBindings {
     _ptySnapshot = _dylib!.lookupFunction<_PtySnapshotC, _PtySnapshotDart>('codelite_pty_snapshot');
     _ptyClose = _dylib!.lookupFunction<_PtyCloseC, _PtyCloseDart>('codelite_pty_close');
     _gitCall = _dylib!.lookupFunction<_GitCallC, _GitCallDart>('codelite_git_call');
-    _agentPromptStream = _dylib!.lookupFunction<_AgentPromptStreamC, _AgentPromptStreamDart>('codelite_agent_send_prompt_stream');
-    _agentPollStream = _dylib!.lookupFunction<_AgentPollStreamC, _AgentPollStreamDart>('codelite_agent_poll_stream_events');
-    _sessionListMessages = _dylib!.lookupFunction<_SessionMessagesC, _SessionMessagesDart>('codelite_session_list_messages');
-    _sessionClearMessages = _dylib!.lookupFunction<_SessionMessagesC, _SessionMessagesDart>('codelite_session_clear_messages');
     _gitStatus = _dylib!.lookupFunction<_GitStatusC, _GitStatusDart>('codelite_git_status');
     _gitDiff = _dylib!.lookupFunction<_GitDiffC, _GitDiffDart>('codelite_git_diff');
     _gitStage = _dylib!.lookupFunction<_GitStageC, _GitStageDart>('codelite_git_stage');
@@ -403,20 +302,9 @@ class CodeLiteBindings {
     _gitFileHunks = _dylib!.lookupFunction<_GitFileHunksC, _GitFileHunksDart>('codelite_git_file_diff_hunks');
     _gitRevertFile = _dylib!.lookupFunction<_GitRevertFileC, _GitRevertFileDart>('codelite_git_revert_file');
     _jsonRpcCall = _dylib!.lookupFunction<_JsonRpcCallC, _JsonRpcCallDart>('codelite_jsonrpc_call');
-    _contextBuildTaskPrompt = _dylib!.lookupFunction<_ContextBuildTaskPromptC, _ContextBuildTaskPromptDart>('codelite_context_build_task_prompt');
-    _memoryQuery = _dylib!.lookupFunction<_MemoryQueryC, _MemoryQueryDart>('codelite_memory_query');
-    _memoryRecordDecision = _dylib!.lookupFunction<_MemoryRecordDecisionC, _MemoryRecordDecisionDart>('codelite_memory_record_decision');
-    _memoryRecordError = _dylib!.lookupFunction<_MemoryRecordErrorC, _MemoryRecordErrorDart>('codelite_memory_record_error');
-    _skillsList = _dylib!.lookupFunction<_SkillsListC, _SkillsListDart>('codelite_skills_list');
-    _mcpToolsList = _dylib!.lookupFunction<_McpToolsListC, _McpToolsListDart>('codelite_mcp_tools_list');
     _updaterCheck = _dylib!.lookupFunction<_UpdaterCheckC, _UpdaterCheckDart>('codelite_updater_check');
     _updaterStage = _dylib!.lookupFunction<_UpdaterStageC, _UpdaterStageDart>('codelite_updater_stage');
     _updaterApply = _dylib!.lookupFunction<_UpdaterApplyC, _UpdaterApplyDart>('codelite_updater_apply');
-    _pluginLoad = _dylib!.lookupFunction<_PluginLoadC, _PluginLoadDart>('codelite_plugin_load');
-    _pluginList = _dylib!.lookupFunction<_PluginListC, _PluginListDart>('codelite_plugin_list');
-    _pluginToggle = _dylib!.lookupFunction<_PluginToggleC, _PluginToggleDart>('codelite_plugin_toggle');
-    _pluginExecuteTool = _dylib!.lookupFunction<_PluginExecuteToolC, _PluginExecuteToolDart>('codelite_plugin_execute_tool');
-    _pluginUnload = _dylib!.lookupFunction<_PluginUnloadC, _PluginUnloadDart>('codelite_plugin_unload');
   }
 
   /// 销毁当前上下文并以新的工作区根重新初始化(File → Open)。
@@ -508,141 +396,6 @@ class CodeLiteBindings {
     final ptr = _fileCursorSet(_ctx!, pathPtr.pointer, line, col, select);
     _freeAllocatedString(pathPtr);
     return _parseJsonMap(_fromCString(ptr));
-  }
-
-  Map<String, dynamic> sendAgentPrompt(String sessionId, String prompt) {
-    if (!isAvailable) return {};
-    final sessPtr = _toCString(sessionId);
-    final promptPtr = _toCString(prompt);
-    final ptr = _agentPrompt(_ctx!, sessPtr.pointer, promptPtr.pointer);
-    _freeAllocatedString(sessPtr);
-    _freeAllocatedString(promptPtr);
-    return _parseJsonMap(_fromCString(ptr));
-  }
-
-  Map<String, dynamic> rollbackAgent(String sessionId, int targetStepId) {
-    if (!isAvailable) return {};
-    final sessPtr = _toCString(sessionId);
-    final ptr = _agentRollback(_ctx!, sessPtr.pointer, targetStepId);
-    _freeAllocatedString(sessPtr);
-    return _parseJsonMap(_fromCString(ptr));
-  }
-
-  Map<String, dynamic> restoreAgent(String sessionId) {
-    if (!isAvailable) return {};
-    final sessPtr = _toCString(sessionId);
-    final ptr = _agentRestore(_ctx!, sessPtr.pointer);
-    _freeAllocatedString(sessPtr);
-    return _parseJsonMap(_fromCString(ptr));
-  }
-
-  /// Generates Fill-In-The-Middle (FIM) inline code completion (Phase 8.2).
-  Map<String, dynamic> agentFimComplete(String filePath, String prefix, String suffix, String language) {
-    if (!isAvailable) {
-      return {'status': 'ok', 'suggestion': '// [Mock FIM] completion unavailable'};
-    }
-    final filePtr = _toCString(filePath);
-    final prefixPtr = _toCString(prefix);
-    final suffixPtr = _toCString(suffix);
-    final langPtr = _toCString(language);
-    final ptr = _agentFimComplete(_ctx!, filePtr.pointer, prefixPtr.pointer, suffixPtr.pointer, langPtr.pointer);
-    _freeAllocatedString(filePtr);
-    _freeAllocatedString(prefixPtr);
-    _freeAllocatedString(suffixPtr);
-    _freeAllocatedString(langPtr);
-    return _parseJsonMap(_fromCString(ptr));
-  }
-
-  Map<String, dynamic> agentPlanTask(String sessionId, Map<String, dynamic> params) {
-    if (!isAvailable) return {};
-    final sessPtr = _toCString(sessionId);
-    final paramsPtr = _toCString(jsonEncode(params));
-    final ptr = _agentPlanTask(_ctx!, sessPtr.pointer, paramsPtr.pointer);
-    _freeAllocatedString(sessPtr);
-    _freeAllocatedString(paramsPtr);
-    return _parseJsonMap(_fromCString(ptr));
-  }
-
-  Map<String, dynamic> agentExecuteNextStep(String planId) {
-    if (!isAvailable) return {};
-    final planPtr = _toCString(planId);
-    final ptr = _agentExecStep(_ctx!, planPtr.pointer);
-    _freeAllocatedString(planPtr);
-    return _parseJsonMap(_fromCString(ptr));
-  }
-
-  Map<String, dynamic> agentApproveStep(String requestId, bool approved) {
-    if (!isAvailable) return {};
-    final reqPtr = _toCString(requestId);
-    final ptr = _agentApprove(_ctx!, reqPtr.pointer, approved);
-    _freeAllocatedString(reqPtr);
-    return _parseJsonMap(_fromCString(ptr));
-  }
-
-  Map<String, dynamic> agentGetPendingApprovals([String? sessionId]) {
-    if (!isAvailable) return {};
-    final sessPtr = sessionId != null ? _toCString(sessionId) : null;
-    final ptr = _agentPendingApprovals(_ctx!, sessPtr?.pointer ?? nullptr);
-    if (sessPtr != null) _freeAllocatedString(sessPtr);
-    return _parseJsonMap(_fromCString(ptr));
-  }
-
-  Map<String, dynamic> agentGetDiffReview(String sessionId) {
-    if (!isAvailable) return {};
-    final sessPtr = _toCString(sessionId);
-    final ptr = _agentDiffReview(_ctx!, sessPtr.pointer);
-    _freeAllocatedString(sessPtr);
-    return _parseJsonMap(_fromCString(ptr));
-  }
-
-  Map<String, dynamic> agentPlanMultiFile(String sessionId, Map<String, dynamic> params) {
-    if (!isAvailable) return {};
-    final sessPtr = _toCString(sessionId);
-    final paramsPtr = _toCString(jsonEncode(params));
-    final ptr = _agentPlanMultiFile(_ctx!, sessPtr.pointer, paramsPtr.pointer);
-    _freeAllocatedString(sessPtr);
-    _freeAllocatedString(paramsPtr);
-    return _parseJsonMap(_fromCString(ptr));
-  }
-
-  Map<String, dynamic> agentRollbackStep(String planId, String stepId) {
-    if (!isAvailable) return {};
-    final planPtr = _toCString(planId);
-    final stepPtr = _toCString(stepId);
-    final ptr = _agentRollbackStep(_ctx!, planPtr.pointer, stepPtr.pointer);
-    _freeAllocatedString(planPtr);
-    _freeAllocatedString(stepPtr);
-    return _parseJsonMap(_fromCString(ptr));
-  }
-
-  Map<String, dynamic> worktreeCreate(String taskId) {
-    if (!isAvailable) return {};
-    final taskPtr = _toCString(taskId);
-    final ptr = _worktreeCreate(_ctx!, taskPtr.pointer);
-    _freeAllocatedString(taskPtr);
-    return _parseJsonMap(_fromCString(ptr));
-  }
-
-  Map<String, dynamic> worktreeMerge(String taskId) {
-    if (!isAvailable) return {};
-    final taskPtr = _toCString(taskId);
-    final ptr = _worktreeMerge(_ctx!, taskPtr.pointer);
-    _freeAllocatedString(taskPtr);
-    return _parseJsonMap(_fromCString(ptr));
-  }
-
-  Map<String, dynamic> worktreeDiscard(String taskId) {
-    if (!isAvailable) return {};
-    final taskPtr = _toCString(taskId);
-    final ptr = _worktreeDiscard(_ctx!, taskPtr.pointer);
-    _freeAllocatedString(taskPtr);
-    return _parseJsonMap(_fromCString(ptr));
-  }
-
-  List<dynamic> fetchEvents() {
-    if (!isAvailable) return [];
-    final ptr = _storageEvents(_ctx!);
-    return _parseJsonList(_fromCString(ptr));
   }
 
   List<dynamic> fetchSymbols([String query = '']) {
@@ -925,40 +678,6 @@ class CodeLiteBindings {
   // Phase 5: Streaming AI Chat, Message Persistence & Git Operations
   // ---------------------------------------------------------------------------
 
-  Map<String, dynamic> sendPromptStream(String sessionId, String prompt) {
-    if (!isAvailable) return {'status': 'error', 'error': 'FFI unavailable'};
-    final sessPtr = _toCString(sessionId);
-    final promptPtr = _toCString(prompt);
-    final ptr = _agentPromptStream(_ctx!, sessPtr.pointer, promptPtr.pointer);
-    _freeAllocatedString(sessPtr);
-    _freeAllocatedString(promptPtr);
-    return _parseJsonMap(_fromCString(ptr));
-  }
-
-  List<dynamic> pollStreamEvents([String sessionId = '']) {
-    if (!isAvailable) return [];
-    final sessPtr = _toCString(sessionId);
-    final ptr = _agentPollStream(_ctx!, sessPtr.pointer);
-    _freeAllocatedString(sessPtr);
-    return _parseJsonList(_fromCString(ptr));
-  }
-
-  List<dynamic> listMessages(String sessionId) {
-    if (!isAvailable) return [];
-    final sessPtr = _toCString(sessionId);
-    final ptr = _sessionListMessages(_ctx!, sessPtr.pointer);
-    _freeAllocatedString(sessPtr);
-    return _parseJsonList(_fromCString(ptr));
-  }
-
-  Map<String, dynamic> clearMessages(String sessionId) {
-    if (!isAvailable) return {'status': 'error'};
-    final sessPtr = _toCString(sessionId);
-    final ptr = _sessionClearMessages(_ctx!, sessPtr.pointer);
-    _freeAllocatedString(sessPtr);
-    return _parseJsonMap(_fromCString(ptr));
-  }
-
   Map<String, dynamic> getGitStatus() {
     if (!isAvailable) return {'branch': 'HEAD', 'changes': []};
     final ptr = _gitStatus(_ctx!);
@@ -1017,126 +736,6 @@ class CodeLiteBindings {
   // Context Engine & Memory (Phase 10)
   // ---------------------------------------------------------------------------
 
-  Map<String, dynamic> buildTaskPrompt(String taskPrompt, {String? focusFile, String? focusSymbol}) {
-    if (!isAvailable) {
-      return {
-        'status': 'ok',
-        'prompt': 'Offline mock context for: $taskPrompt',
-        'insights': {
-          'instruction_files': ['AGENTS.md'],
-          'active_skills': [],
-          'recalled_decisions': 0,
-          'recalled_errors': 0,
-          'has_codegraph': false,
-          'has_lsp_diagnostics': false,
-        }
-      };
-    }
-    final pPrompt = _toCString(taskPrompt);
-    final pFile = focusFile != null ? _toCString(focusFile) : null;
-    final pSym = focusSymbol != null ? _toCString(focusSymbol) : null;
-
-    final ptr = _contextBuildTaskPrompt(
-      _ctx!,
-      pPrompt.pointer,
-      pFile != null ? pFile.pointer : nullptr,
-      pSym != null ? pSym.pointer : nullptr,
-    );
-
-    _freeAllocatedString(pPrompt);
-    if (pFile != null) _freeAllocatedString(pFile);
-    if (pSym != null) _freeAllocatedString(pSym);
-
-    return _parseJsonMap(_fromCString(ptr));
-  }
-
-  Map<String, dynamic> queryMemory(String query, {String? targetPath, int limit = 10}) {
-    if (!isAvailable) return {'status': 'error', 'decisions': [], 'errors': []};
-    final pQuery = _toCString(query);
-    final pPath = targetPath != null ? _toCString(targetPath) : null;
-
-    final ptr = _memoryQuery(
-      _ctx!,
-      pQuery.pointer,
-      pPath != null ? pPath.pointer : nullptr,
-      limit,
-    );
-
-    _freeAllocatedString(pQuery);
-    if (pPath != null) _freeAllocatedString(pPath);
-
-    return _parseJsonMap(_fromCString(ptr));
-  }
-
-  Map<String, dynamic> recordDecisionMemory(String sessionId, String decisionType, String subject, String detail, {String? tags}) {
-    if (!isAvailable) return {'status': 'error'};
-    final pSess = _toCString(sessionId);
-    final pType = _toCString(decisionType);
-    final pSubj = _toCString(subject);
-    final pDet = _toCString(detail);
-    final pTags = tags != null ? _toCString(tags) : null;
-
-    final ptr = _memoryRecordDecision(
-      _ctx!,
-      pSess.pointer,
-      pType.pointer,
-      pSubj.pointer,
-      pDet.pointer,
-      pTags != null ? pTags.pointer : nullptr,
-    );
-
-    _freeAllocatedString(pSess);
-    _freeAllocatedString(pType);
-    _freeAllocatedString(pSubj);
-    _freeAllocatedString(pDet);
-    if (pTags != null) _freeAllocatedString(pTags);
-
-    return _parseJsonMap(_fromCString(ptr));
-  }
-
-  Map<String, dynamic> recordErrorMemory(String sessionId, String errorType, String summary, String lesson, {String? targetPath, String? snippet}) {
-    if (!isAvailable) return {'status': 'error'};
-    final pSess = _toCString(sessionId);
-    final pType = _toCString(errorType);
-    final pSum = _toCString(summary);
-    final pLes = _toCString(lesson);
-    final pPath = targetPath != null ? _toCString(targetPath) : null;
-    final pSnip = snippet != null ? _toCString(snippet) : null;
-
-    final ptr = _memoryRecordError(
-      _ctx!,
-      pSess.pointer,
-      pType.pointer,
-      pPath != null ? pPath.pointer : nullptr,
-      pSum.pointer,
-      pLes.pointer,
-      pSnip != null ? pSnip.pointer : nullptr,
-    );
-
-    _freeAllocatedString(pSess);
-    _freeAllocatedString(pType);
-    _freeAllocatedString(pSum);
-    _freeAllocatedString(pLes);
-    if (pPath != null) _freeAllocatedString(pPath);
-    if (pSnip != null) _freeAllocatedString(pSnip);
-
-    return _parseJsonMap(_fromCString(ptr));
-  }
-
-  List<dynamic> listSkills() {
-    if (!isAvailable) return [];
-    final ptr = _skillsList(_ctx!);
-    final res = _parseJsonMap(_fromCString(ptr));
-    return (res['skills'] as List<dynamic>?) ?? [];
-  }
-
-  List<dynamic> listMcpTools() {
-    if (!isAvailable) return [];
-    final ptr = _mcpToolsList(_ctx!);
-    final res = _parseJsonMap(_fromCString(ptr));
-    return (res['tools'] as List<dynamic>?) ?? [];
-  }
-
   Map<String, dynamic> updaterCheck(String currentVersion, String manifestJson, {String? platform}) {
     if (!isAvailable) return {'status': 'error', 'error': 'FFI not available'};
     final pVer = _toCString(currentVersion);
@@ -1183,67 +782,6 @@ class CodeLiteBindings {
       _freeAllocatedString(pTarget);
       _freeAllocatedString(pFiles);
       _freeAllocatedString(pPlat);
-    }
-  }
-
-  Map<String, dynamic> pluginLoad(String manifestJson, List<int> wasmBytes) {
-    if (!isAvailable) return {'status': 'error', 'error': 'FFI not available'};
-    final pMan = _toCString(manifestJson);
-    final bytesLen = wasmBytes.length;
-    final ptr = _stringAlloc(bytesLen);
-    final bytePtr = ptr.cast<Uint8>();
-    for (int i = 0; i < bytesLen; i++) {
-      bytePtr[i] = wasmBytes[i];
-    }
-    try {
-      final resPtr = _pluginLoad(_ctx!, pMan.pointer, bytePtr, bytesLen);
-      return _parseJsonMap(_fromCString(resPtr));
-    } finally {
-      _bufferFree(ptr, bytesLen);
-      _freeAllocatedString(pMan);
-    }
-  }
-
-  Map<String, dynamic> pluginList() {
-    if (!isAvailable) return {'status': 'error', 'error': 'FFI not available'};
-    final ptr = _pluginList(_ctx!);
-    return _parseJsonMap(_fromCString(ptr));
-  }
-
-  Map<String, dynamic> pluginToggle(String pluginId, bool enable) {
-    if (!isAvailable) return {'status': 'error', 'error': 'FFI not available'};
-    final pId = _toCString(pluginId);
-    try {
-      final ptr = _pluginToggle(_ctx!, pId.pointer, enable);
-      return _parseJsonMap(_fromCString(ptr));
-    } finally {
-      _freeAllocatedString(pId);
-    }
-  }
-
-  Map<String, dynamic> pluginExecuteTool(String pluginId, String toolName, Map<String, dynamic> args) {
-    if (!isAvailable) return {'status': 'error', 'error': 'FFI not available'};
-    final pId = _toCString(pluginId);
-    final pTool = _toCString(toolName);
-    final pArgs = _toCString(jsonEncode(args));
-    try {
-      final ptr = _pluginExecuteTool(_ctx!, pId.pointer, pTool.pointer, pArgs.pointer);
-      return _parseJsonMap(_fromCString(ptr));
-    } finally {
-      _freeAllocatedString(pId);
-      _freeAllocatedString(pTool);
-      _freeAllocatedString(pArgs);
-    }
-  }
-
-  Map<String, dynamic> pluginUnload(String pluginId) {
-    if (!isAvailable) return {'status': 'error', 'error': 'FFI not available'};
-    final pId = _toCString(pluginId);
-    try {
-      final ptr = _pluginUnload(_ctx!, pId.pointer);
-      return _parseJsonMap(_fromCString(ptr));
-    } finally {
-      _freeAllocatedString(pId);
     }
   }
 

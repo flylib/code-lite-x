@@ -18,29 +18,7 @@ class CodeLiteBindings {
   /// web 上永远没有原生库。
   bool get isAvailable => false;
 
-  Map<String, dynamic> agentApproveStep(String requestId, bool approved) => {};
-
-  Map<String, dynamic> agentExecuteNextStep(String planId) => {};
-
-  Map<String, dynamic> agentFimComplete(String filePath, String prefix, String suffix, String language) => {};
-
-  Map<String, dynamic> agentGetDiffReview(String sessionId) => {};
-
-  Map<String, dynamic> agentGetPendingApprovals([String? sessionId]) => {};
-
-  Map<String, dynamic> agentPlanMultiFile(String sessionId, Map<String, dynamic> params) => {};
-
-  Map<String, dynamic> agentPlanTask(String sessionId, Map<String, dynamic> params) => {};
-
-  Map<String, dynamic> agentRollbackStep(String planId, String stepId) => {};
-
-  Map<String, dynamic> buildTaskPrompt(String taskPrompt, {String? focusFile, String? focusSymbol}) => {};
-
-  Map<String, dynamic> clearMessages(String sessionId) => {'status': 'error'};
-
   Map<String, dynamic> editFile(String relPath, Map<String, dynamic> editPayload) => {};
-
-  List<dynamic> fetchEvents() => [];
 
   List<dynamic> fetchSymbols([String query = '']) => [];
 
@@ -76,12 +54,6 @@ class CodeLiteBindings {
 
   bool reinitialize(String workspacePath) => false;
 
-  List<dynamic> listMcpTools() => [];
-
-  List<dynamic> listMessages(String sessionId) => [];
-
-  List<dynamic> listSkills() => [];
-
   List<dynamic> lspCompletion(String filePath, int line, int col) => [];
 
   List<dynamic> lspDidChange(String filePath, int version, String content) => [];
@@ -100,33 +72,17 @@ class CodeLiteBindings {
 
   Map<String, dynamic> openFile(String relPath) => {};
 
-  List<dynamic> pollStreamEvents([String sessionId = '']) => [];
-
-  Map<String, dynamic> queryMemory(String query, {String? targetPath, int limit = 10}) => {'status': 'error', 'decisions': [], 'errors': []};
-
   List<dynamic> queryOutline(String relPath) => [];
-
-  Map<String, dynamic> recordDecisionMemory(String sessionId, String decisionType, String subject, String detail, {String? tags}) => {'status': 'error'};
-
-  Map<String, dynamic> recordErrorMemory(String sessionId, String errorType, String summary, String lesson, {String? targetPath, String? snippet}) => {'status': 'error'};
 
   Map<String, dynamic> redo(String relPath) => {};
 
   Map<String, dynamic> replaceWorkspace(String query, String replacement, [Map<String, dynamic>? options]) => {'status': 'error', 'replaced_count': 0};
-
-  Map<String, dynamic> restoreAgent(String sessionId) => {};
-
-  Map<String, dynamic> rollbackAgent(String sessionId, int targetStepId) => {};
 
   Map<String, dynamic> saveFile(String relPath) => {};
 
   Map<String, dynamic> scanWorkspace({int maxDepth = 4}) => {};
 
   Map<String, dynamic> searchWorkspace(String query, [Map<String, dynamic>? options]) => {'status': 'error', 'matches': []};
-
-  Map<String, dynamic> sendAgentPrompt(String sessionId, String prompt) => {};
-
-  Map<String, dynamic> sendPromptStream(String sessionId, String prompt) => {'status': 'error', 'error': 'FFI unavailable'};
 
   Map<String, dynamic> setFileCursor(String relPath, int line, int col, {bool select = false}) => {};
 
@@ -159,19 +115,4 @@ class CodeLiteBindings {
 
   Map<String, dynamic> updaterStage(String stagingDir, String fileName, String content, String expectedSha256) => {'status': 'error', 'error': 'FFI not available'};
 
-  Map<String, dynamic> worktreeCreate(String taskId) => {};
-
-  Map<String, dynamic> worktreeDiscard(String taskId) => {};
-
-  Map<String, dynamic> worktreeMerge(String taskId) => {};
-
-  Map<String, dynamic> pluginLoad(String manifestJson, List<int> wasmBytes) => {'status': 'error', 'error': 'FFI not available'};
-
-  Map<String, dynamic> pluginList() => {'status': 'ok', 'plugins': []};
-
-  Map<String, dynamic> pluginToggle(String pluginId, bool enable) => {'status': 'error', 'error': 'FFI not available'};
-
-  Map<String, dynamic> pluginExecuteTool(String pluginId, String toolName, Map<String, dynamic> args) => {'status': 'error', 'error': 'FFI not available'};
-
-  Map<String, dynamic> pluginUnload(String pluginId) => {'status': 'error', 'error': 'FFI not available'};
 }

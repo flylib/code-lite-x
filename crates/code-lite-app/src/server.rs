@@ -112,44 +112,7 @@ pub fn run_server(state: Arc<AppState>, port: u16) -> Result<(), Box<dyn std::er
             continue;
         }
 
-        // 6. /api/storage/events
-        if url == "/api/storage/events" {
-            let events = state.event_store.list(None, 30).unwrap_or_default();
-            let json = serde_json::to_string(&events).unwrap_or_default();
-            let mut res = Response::from_string(json);
-            res.add_header(Header::from_bytes(&b"Content-Type"[..], &b"application/json"[..]).unwrap());
-            let _ = request.respond(res);
-            continue;
-        }
-
-        // 6b. /api/storage/operations
-        if url == "/api/storage/operations" {
-            // Retrieve recent tasks / operations
-            let sessions = state.session_store.list_sessions().unwrap_or_default();
-            let json = serde_json::to_string(&sessions).unwrap_or_default();
-            let mut res = Response::from_string(json);
-            res.add_header(Header::from_bytes(&b"Content-Type"[..], &b"application/json"[..]).unwrap());
-            let _ = request.respond(res);
-            continue;
-        }
-
-        // 6c. /api/storage/revert
-        if url == "/api/storage/revert" && method == "POST" {
-            let mut req = request;
-            let mut body_str = String::new();
-            let _ = req.as_reader().read_to_string(&mut body_str);
-            let payload: serde_json::Value = serde_json::from_str(&body_str).unwrap_or_default();
-            if let Some(op_id) = payload["op_id"].as_i64() {
-                let _ = state.op_store.revert(op_id);
-            } else if let Some(task_id) = payload["task_id"].as_str() {
-                let _ = state.op_store.revert_task(task_id);
-            }
-            let res = Response::from_string("{\"success\": true}");
-            let _ = req.respond(res);
-            continue;
-        }
-
-        // 7. /api/graph/symbols
+        // 6. /api/graph/symbols
         if url.starts_with("/api/graph/symbols") {
             let query = url.split('?').nth(1).unwrap_or("");
             let q = query

@@ -8,7 +8,6 @@ pub mod git_history;
 pub mod search;
 pub mod tree;
 pub mod updater;
-pub mod worktree;
 
 pub use entry::FileSystemEntry;
 pub use git::{DiffHunkKind, GitEngine, GitError, GitFileChange, GitLineDiff, GitStatusKind, GitStatusResult};
@@ -18,7 +17,6 @@ pub use updater::{
     compare_semver, sha256_digest, ApplyReport, PlatformArtifact, PlatformKind, PlatformRelease,
     UpdateCheckResult, UpdateStrategy, UpdaterEngine, UpdaterError, VersionManifest,
 };
-pub use worktree::{WorktreeManager, WorktreeSession};
 
 pub fn version() -> &'static str {
     env!("CARGO_PKG_VERSION")

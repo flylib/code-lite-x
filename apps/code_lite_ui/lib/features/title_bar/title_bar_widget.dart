@@ -3,7 +3,6 @@ import '../../core/theme/intellij_theme.dart';
 
 class TitleBarWidget extends StatelessWidget {
   final String activeFile;
-  final VoidCallback onToggleAi;
   final VoidCallback onUndo;
   final VoidCallback onRedo;
   final VoidCallback? onSearch;
@@ -11,7 +10,6 @@ class TitleBarWidget extends StatelessWidget {
   const TitleBarWidget({
     super.key,
     required this.activeFile,
-    required this.onToggleAi,
     required this.onUndo,
     required this.onRedo,
     this.onSearch,
@@ -65,8 +63,6 @@ class TitleBarWidget extends StatelessWidget {
               const SizedBox(width: 4),
               _buildActionBtn(Icons.play_arrow, IntelliJTheme.gitGreen, 'Run (Shift+F10)'),
               _buildActionBtn(Icons.bug_report, IntelliJTheme.syntaxFunction, 'Debug (Shift+F9)'),
-              const SizedBox(width: 8),
-              _buildAiAgentButton(),
             ],
           ),
         ],
@@ -187,25 +183,4 @@ class TitleBarWidget extends StatelessWidget {
     );
   }
 
-  Widget _buildAiAgentButton() {
-    return InkWell(
-      onTap: onToggleAi,
-      borderRadius: BorderRadius.circular(4),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
-          color: IntelliJTheme.accentBlue.withOpacity(0.15),
-          borderRadius: BorderRadius.circular(4),
-          border: Border.all(color: IntelliJTheme.accentBlue.withOpacity(0.4)),
-        ),
-        child: const Row(
-          children: [
-            Icon(Icons.auto_awesome, size: 13, color: Color(0xFF6CB4F8)),
-            SizedBox(width: 4),
-            Text('AI Agent', style: TextStyle(color: Color(0xFF6CB4F8), fontSize: 11, fontWeight: FontWeight.bold)),
-          ],
-        ),
-      ),
-    );
-  }
 }

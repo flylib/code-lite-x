@@ -6,7 +6,7 @@ import '../../features/bottom_tools/bottom_tools_widget.dart';
 enum LeftTool { project, commit, structure }
 
 /// 右侧工具窗(右侧活动条选择的那一栏)。
-enum RightTool { none, cargo, assistant }
+enum RightTool { none, cargo }
 
 /// 面板显隐与选中项。只放"哪个面板开着、选中了什么",
 /// 不放文件内容 —— 那些在 [WorkspaceStore] 与 EditorSessionManager 里。
@@ -15,8 +15,7 @@ enum RightTool { none, cargo, assistant }
 /// 布局变化和编辑变化各自通知各自的订阅者。
 class LayoutStore extends ChangeNotifier {
   LeftTool _leftTool = LeftTool.project;
-  // 默认不打开右栏:助手面板挂载时会做 FFI 往返,启动阶段不该为一个
-  // 用户还没要求看的面板付这个代价。用户点右活动条再开。
+  // 默认不打开右栏:用户点右活动条再开。
   RightTool _rightTool = RightTool.none;
   BottomToolTab _bottomTab = BottomToolTab.git;
   bool _isLeftOpen = true;

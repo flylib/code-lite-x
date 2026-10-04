@@ -68,14 +68,6 @@ pub struct DiagnosticList {
     pub diagnostics: Vec<DiagnosticItem>,
 }
 
-/// Streaming event payload for agent or long-running tasks
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct StreamEvent {
-    pub event_type: String,
-    pub payload: String,
-    pub is_done: bool,
-}
-
 /// Git status file modification
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct GitFileChange {
@@ -130,13 +122,6 @@ pub struct LspCompletionParams {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct LspDiagnosticsParams {
     pub path: String,
-}
-
-/// Request parameters for `agent.send_prompt`
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct AgentSendPromptParams {
-    pub prompt: String,
-    pub stream: bool,
 }
 
 /// Request parameters for `git.status`

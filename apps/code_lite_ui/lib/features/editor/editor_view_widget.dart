@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../core/client/api_client.dart';
@@ -91,7 +90,6 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
   ImeTextInputBridge? _secondaryImeBridge;
 
   double _charWidth = 7.2;
-  Timer? _fimDebounceTimer;
 
   List<GitLineDiff> _diffHunks = [];
   GitLineDiff? _activeHunkOverlay;
@@ -161,15 +159,8 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
     _controller.onTextChanged = (newText) {
       widget.onCodeChanged(newText);
       _imeBridge.syncState();
-      _scheduleFimQuery();
     };
 
-    _controller.onCursorChanged = (pos) {
-      if (_controller.hasGhostText && _controller.ghostPosition != pos) {
-        _controller.clearGhostText();
-      }
-      _scheduleFimQuery();
-    };
   }
 
   void _initScrollControllers() {
@@ -221,7 +212,6 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
     }
 
     if (widget.controller != oldWidget.controller) {
-      _fimDebounceTimer?.cancel();
       if (_ownsController) _controller.dispose();
       _initController();
       _imeBridge = ImeTextInputBridge(controller: _controller, focusNode: _focusNode);
@@ -246,7 +236,6 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
 
   @override
   void dispose() {
-    _fimDebounceTimer?.cancel();
     _imeBridge.detach();
     _secondaryImeBridge?.detach();
     _focusNode.dispose();
@@ -255,45 +244,6 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
     if (_ownsVerticalScroll) _verticalScroll.dispose();
     if (_ownsHorizontalScroll) _horizontalScroll.dispose();
     super.dispose();
-  }
-
-  void _scheduleFimQuery() {
-    _fimDebounceTimer?.cancel();
-    final client = widget.apiClient;
-    if (client == null) return;
-
-    _fimDebounceTimer = Timer(const Duration(milliseconds: 300), () async {
-      if (!mounted) return;
-      if (_controller.hasSelection) return;
-
-      final reqPos = _controller.cursorPosition;
-      final prefix = _controller.getPrefixForFim(1000);
-      final suffix = _controller.getSuffixForFim(500);
-
-      if (prefix.trim().isEmpty) return;
-
-      final lang = widget.activeFile.endsWith('.dart')
-          ? 'dart'
-          : (widget.activeFile.endsWith('.rs')
-              ? 'rust'
-              : (widget.activeFile.endsWith('.ts') ? 'typescript' : 'go'));
-
-      final suggestion = await client.fimComplete(
-        widget.activeFile,
-        prefix,
-        suffix,
-        lang,
-      );
-
-      if (!mounted) return;
-      if (_controller.cursorPosition == reqPos && !_controller.hasSelection) {
-        if (suggestion != null && suggestion.isNotEmpty) {
-          _controller.setGhostText(suggestion, position: reqPos);
-        } else {
-          _controller.clearGhostText();
-        }
-      }
-    });
   }
 
   KeyEventResult _handlePaneKeyEvent(
@@ -320,12 +270,8 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
       return KeyEventResult.handled;
     }
 
-    // Shortcuts: Dismiss Ghost Text with Escape or close MiniDiffOverlay
+    // Shortcuts: Escape closes MiniDiffOverlay
     if (event.logicalKey == LogicalKeyboardKey.escape) {
-      if (controller.hasGhostText) {
-        controller.clearGhostText();
-        return KeyEventResult.handled;
-      }
       if (_activeHunkOverlay != null) {
         setState(() => _activeHunkOverlay = null);
         return KeyEventResult.handled;
@@ -394,11 +340,6 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
       return KeyEventResult.handled;
     }
     if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
-      if (isCmd && controller.hasGhostText) {
-        controller.acceptGhostTextWord();
-        imeBridge?.syncState();
-        return KeyEventResult.handled;
-      }
       controller.moveCursor(
         direction: NavigationDirection.right,
         extendSelection: isShift,
@@ -441,13 +382,11 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
 
     // Backspace / Delete
     if (event.logicalKey == LogicalKeyboardKey.backspace) {
-      controller.clearGhostText();
       controller.deleteBackward();
       imeBridge?.syncState();
       return KeyEventResult.handled;
     }
     if (event.logicalKey == LogicalKeyboardKey.delete) {
-      controller.clearGhostText();
       controller.deleteForward();
       imeBridge?.syncState();
       return KeyEventResult.handled;
@@ -455,7 +394,6 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
 
     // Enter
     if (event.logicalKey == LogicalKeyboardKey.enter || event.logicalKey == LogicalKeyboardKey.numpadEnter) {
-      controller.clearGhostText();
       controller.insertNewline();
       imeBridge?.syncState();
       return KeyEventResult.handled;
@@ -463,12 +401,6 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
 
     // Tab / Shift+Tab
     if (event.logicalKey == LogicalKeyboardKey.tab) {
-      if (!isShift && controller.hasGhostText) {
-        controller.acceptGhostText();
-        imeBridge?.syncState();
-        return KeyEventResult.handled;
-      }
-      controller.clearGhostText();
       if (isShift) {
         controller.unindent();
       } else {
@@ -482,7 +414,6 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
     if (!isCmd && event.character != null && event.character!.isNotEmpty) {
       final code = event.character!.codeUnitAt(0);
       if (code >= 32) {
-        controller.clearGhostText();
         controller.insertText(event.character!);
         imeBridge?.syncState();
         return KeyEventResult.handled;
@@ -869,10 +800,8 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
                                           controller: controller,
                                           filePath: filePath,
                                           diagnostics: diagnostics,
-                                          showGhost: isPrimary,
                                         );
                                       }),
-                                      if (isPrimary) _buildAiGhostHint(),
                                     ],
                                   ),
                                 ),
@@ -1254,7 +1183,6 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
     required CodeEditorController controller,
     required String filePath,
     required List<EditorDiagnostic> diagnostics,
-    required bool showGhost,
   }) {
     final lang = filePath.endsWith('.dart') ? 'dart' : 'rust';
     final spans = SyntaxHighlighter.highlightLine(lineText, language: lang);
@@ -1317,48 +1245,6 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
             overflow: TextOverflow.clip,
           ),
 
-          // 2.5 AI Ghost Text (Inline at Caret)
-          if (showGhost &&
-              isCaretLine &&
-              controller.hasGhostText &&
-              controller.ghostPosition?.line == lineIndex &&
-              controller.ghostPosition?.col == caretCol) ...[
-            Positioned(
-              left: (caretCol * _charWidth).clamp(0.0, 99999.0),
-              top: 0,
-              bottom: 0,
-              child: IgnorePointer(
-                child: Text(
-                  controller.ghostText!.split('\n').first,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontFamily: 'monospace',
-                    fontStyle: FontStyle.italic,
-                    height: 1.4,
-                    color: Color(0xFF6E7681),
-                  ),
-                ),
-              ),
-            ),
-            if (controller.ghostText!.contains('\n'))
-              Positioned(
-                left: 0,
-                top: 20,
-                child: IgnorePointer(
-                  child: Text(
-                    controller.ghostText!.split('\n').skip(1).join('\n'),
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontFamily: 'monospace',
-                      fontStyle: FontStyle.italic,
-                      height: 1.666667,
-                      color: Color(0xFF6E7681),
-                    ),
-                  ),
-                ),
-              ),
-          ],
-
           // 3. Caret (Blinking Cursor)
           if (isCaretLine && controller.cursorVisible)
             Positioned(
@@ -1405,34 +1291,7 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
     return lineContent;
   }
 
-  Widget _buildAiGhostHint() {
-    if (!_controller.hasGhostText) return const SizedBox.shrink();
-    return Container(
-      margin: const EdgeInsets.only(top: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1E222B),
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: const Color(0xFF353B47), width: 0.8),
-      ),
-      child: const Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.auto_awesome, size: 11, color: Color(0xFF6CB4F8)),
-          SizedBox(width: 6),
-          Text(
-            'FIM Suggestion',
-            style: TextStyle(color: Color(0xFF6CB4F8), fontSize: 10, fontWeight: FontWeight.w600),
-          ),
-          SizedBox(width: 8),
-          Text(
-            '[Tab] to accept  •  [Cmd/Ctrl+→] word  •  [Esc] dismiss',
-            style: TextStyle(color: Color(0xFF8B949E), fontSize: 10, fontFamily: 'monospace'),
-          ),
-        ],
-      ),
-    );
-  }
+
 
   Widget _buildRightErrorStripe(int totalLines, {required List<EditorDiagnostic> diagnostics}) {
     return Container(

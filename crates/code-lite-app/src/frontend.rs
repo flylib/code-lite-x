@@ -108,10 +108,6 @@ pub const INDEX_HTML: &str = r#"<!DOCTYPE html>
         <button onclick="redo()" class="p-1 rounded hover:bg-[#2b2d30] text-[var(--ij-text-muted)] hover:text-[#dfe1e5]" title="Redo (Cmd+Shift+Z)">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 10h-10a8 8 0 00-8 8v2m18-10l-6 6m6-6l-6-6"/></svg>
         </button>
-        <div class="h-4 w-[1px] bg-[#393b40]"></div>
-        <button onclick="toggleRightPanel()" class="flex items-center space-x-1 px-2 py-0.5 rounded bg-[#3574f0]/20 text-[#6cb4f8] border border-[#3574f0]/40 text-xs font-medium">
-          <span>✨ AI Agent</span>
-        </button>
       </div>
     </header>
 
@@ -125,9 +121,6 @@ pub const INDEX_HTML: &str = r#"<!DOCTYPE html>
           </button>
           <button id="btn-stripe-graph" onclick="switchLeftTab('graph')" class="w-8 h-8 rounded-lg flex items-center justify-center text-[var(--ij-text-muted)] hover:text-[#dfe1e5]" title="CodeGraph">
             <svg class="w-4 h-4 text-[#c886e5]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"/></svg>
-          </button>
-          <button id="btn-stripe-storage" onclick="switchBottomTab('sqlite')" class="w-8 h-8 rounded-lg flex items-center justify-center text-[var(--ij-text-muted)] hover:text-[#dfe1e5]" title="SQLite Database">
-            <svg class="w-4 h-4 text-[#e5a84b]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"/></svg>
           </button>
         </div>
         <div>
@@ -169,14 +162,11 @@ pub const INDEX_HTML: &str = r#"<!DOCTYPE html>
           </div>
         </div>
 
-        <!-- Bottom Tool Window (Git, SQLite, Terminal, CodeGraph) -->
+        <!-- Bottom Tool Window (CodeGraph, Terminal) -->
         <section class="h-56 bg-[var(--ij-bg-panel)] border-t border-[var(--ij-border-subtle)] flex flex-col shrink-0">
           <div class="h-7 bg-[#232428] border-b border-[var(--ij-border-subtle)] flex items-center justify-between px-2 text-xs">
             <div class="flex items-center space-x-1">
-              <button id="btab-sqlite" onclick="switchBottomTab('sqlite')" class="px-3 py-0.5 font-semibold text-[#dfe1e5] bg-[var(--ij-bg-panel)] rounded-t border-t-2 border-[var(--ij-accent-blue)]">
-                SQLite State &amp; Rollback
-              </button>
-              <button id="btab-graph" onclick="switchBottomTab('graph')" class="px-3 py-0.5 font-medium text-[var(--ij-text-muted)] hover:text-[#dfe1e5]">
+              <button id="btab-graph" onclick="switchBottomTab('graph')" class="px-3 py-0.5 font-semibold text-[#dfe1e5] bg-[var(--ij-bg-panel)] rounded-t border-t-2 border-[var(--ij-accent-blue)]">
                 CodeGraph Symbols
               </button>
               <button id="btab-terminal" onclick="switchBottomTab('terminal')" class="px-3 py-0.5 font-medium text-[var(--ij-text-muted)] hover:text-[#dfe1e5]">
@@ -185,17 +175,8 @@ pub const INDEX_HTML: &str = r#"<!DOCTYPE html>
             </div>
           </div>
 
-          <!-- SQLite Content -->
-          <div id="bview-sqlite" class="flex-1 p-2 overflow-y-auto text-xs space-y-1.5">
-            <div class="flex items-center justify-between">
-              <span class="text-[var(--ij-text-muted)]">Live Event Stream &amp; Reversible Operations (.codelite/project.db)</span>
-              <button onclick="refreshStorage()" class="text-[#3574f0] text-[11px] hover:underline">Refresh</button>
-            </div>
-            <div id="sqlite-events-list" class="space-y-1"></div>
-          </div>
-
           <!-- CodeGraph Content -->
-          <div id="bview-graph" class="hidden flex-1 p-2 overflow-y-auto text-xs space-y-1">
+          <div id="bview-graph" class="flex-1 p-2 overflow-y-auto text-xs space-y-1">
             <div class="flex items-center justify-between mb-1">
               <span class="text-[var(--ij-text-muted)]">CodeGraph AST Symbols (Indexed from Rust Source)</span>
               <button onclick="loadSymbols()" class="text-[#3574f0] text-[11px] hover:underline">Reload</button>
@@ -211,24 +192,6 @@ pub const INDEX_HTML: &str = r#"<!DOCTYPE html>
           </div>
         </section>
       </main>
-
-      <!-- Right AI Assistant Panel -->
-      <aside id="right-panel" class="w-72 bg-[var(--ij-bg-panel)] border-l border-[var(--ij-border-subtle)] flex flex-col shrink-0">
-        <div class="h-8 border-b border-[var(--ij-border-subtle)] flex items-center justify-between px-3 text-xs font-semibold text-[#dfe1e5]">
-          <span>✨ CodeLite AI Assistant</span>
-          <button onclick="toggleRightPanel()" class="text-[var(--ij-text-muted)]">×</button>
-        </div>
-        <div class="flex-1 p-2.5 overflow-y-auto text-xs space-y-2">
-          <div class="p-2 bg-[#1e1f22] rounded border border-[#393b40]">
-            <div class="text-[10px] text-[var(--ij-text-muted)] font-semibold uppercase">Active File Context</div>
-            <div class="text-[#6cb4f8] font-mono mt-0.5" id="ai-active-file">-</div>
-          </div>
-          <div class="bg-[#1e1f22] border border-[#393b40] rounded-lg p-2 text-[#bcbec4] space-y-1">
-            <div class="text-[10px] text-[#59a869] font-semibold">CodeLite Agent</div>
-            <p>已就绪。支持通过 CodeGraph 拓扑检索符号，每次修改均在 SQLite 中生成统一 Diff 补丁并支持一键原子回滚。</p>
-          </div>
-        </div>
-      </aside>
     </div>
 
     <!-- Status Bar -->
@@ -250,13 +213,12 @@ pub const INDEX_HTML: &str = r#"<!DOCTYPE html>
     let activeFile = 'crates/code-lite-core/src/buffer.rs';
     let openTabs = [
       'crates/code-lite-core/src/buffer.rs',
-      'crates/code-lite-storage/src/op_store.rs'
+      'crates/code-lite-storage/src/graph_store.rs'
     ];
 
     async function init() {
       await loadWorkspace();
       await openFile(activeFile);
-      await refreshStorage();
       await loadSymbols();
       setupEditorListeners();
     }
@@ -306,7 +268,6 @@ pub const INDEX_HTML: &str = r#"<!DOCTYPE html>
         activeFile = path;
         document.getElementById('code-editor').value = data.content || '';
         document.getElementById('breadcrumb-file').innerText = path;
-        document.getElementById('ai-active-file').innerText = path;
 
         if (!openTabs.includes(path)) openTabs.push(path);
         renderTabs();
@@ -381,23 +342,6 @@ pub const INDEX_HTML: &str = r#"<!DOCTYPE html>
       } catch (e) { console.error(e); }
     }
 
-    async function refreshStorage() {
-      try {
-        const res = await fetch('/api/storage/events');
-        const events = await res.json();
-        const list = document.getElementById('sqlite-events-list');
-        list.innerHTML = events.slice(-6).reverse().map(e => `
-          <div class="p-1.5 bg-[#1e1f22] rounded border border-[#393b40] flex items-center justify-between text-[11px]">
-            <div>
-              <span class="text-[#6cb4f8] font-semibold">${e.event_type}</span>
-              <span class="text-[var(--ij-text-muted)] ml-2">${JSON.stringify(e.payload)}</span>
-            </div>
-            <span class="text-[10px] text-[var(--ij-text-muted)]">id: ${e.id}</span>
-          </div>
-        `).join('');
-      } catch (e) { console.error(e); }
-    }
-
     async function loadSymbols() {
       try {
         const res = await fetch('/api/graph/symbols?query=');
@@ -413,16 +357,12 @@ pub const INDEX_HTML: &str = r#"<!DOCTYPE html>
     }
 
     function switchBottomTab(tab) {
-      ['sqlite', 'graph', 'terminal'].forEach(t => {
+      ['graph', 'terminal'].forEach(t => {
         document.getElementById('bview-' + t).classList.add('hidden');
         document.getElementById('btab-' + t).className = 'px-3 py-0.5 font-medium text-[var(--ij-text-muted)] hover:text-[#dfe1e5]';
       });
       document.getElementById('bview-' + tab).classList.remove('hidden');
       document.getElementById('btab-' + tab).className = 'px-3 py-0.5 font-semibold text-[#dfe1e5] bg-[var(--ij-bg-panel)] rounded-t border-t-2 border-[var(--ij-accent-blue)]';
-    }
-
-    function toggleRightPanel() {
-      document.getElementById('right-panel').classList.toggle('hidden');
     }
 
     window.onload = init;

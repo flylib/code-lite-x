@@ -27,12 +27,6 @@ pub fn handle_open(ctx: *mut CodeLiteContext, params: FileOpenParams) -> Result<
     let line_count = editor.buffer().len_lines() as i64;
     editors.insert(params.path.clone(), editor);
 
-    let _ = ctx.event_store.log(
-        None,
-        "FileOpened",
-        &serde_json::json!({ "path": params.path, "source": "jsonrpc" }),
-    );
-
     Ok(FileContent {
         path: params.path,
         content,

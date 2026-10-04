@@ -270,33 +270,6 @@ class DiagnosticList {
   };
 }
 
-/// Streaming event payload for agent or long-running tasks
-class StreamEvent {
-  final String eventType;
-  final String payload;
-  final bool isDone;
-
-  const StreamEvent({
-    required this.eventType,
-    required this.payload,
-    required this.isDone,
-  });
-
-  factory StreamEvent.fromJson(Map<String, dynamic> json) {
-    return StreamEvent(
-      eventType: json['event_type'] as String? ?? '',
-      payload: json['payload'] as String? ?? '',
-      isDone: json['is_done'] as bool? ?? false,
-    );
-  }
-
-  Map<String, dynamic> toJson() => {
-    'event_type': eventType,
-    'payload': payload,
-    'is_done': isDone,
-  };
-}
-
 /// Git status file modification
 class GitFileChange {
   final String path;
@@ -436,19 +409,6 @@ class CoreApiClient {
     };
     final res = await transport.sendRequest("lsp.diagnostics", params);
     return DiagnosticList.fromJson(res as Map<String, dynamic>);
-  }
-
-  /// Send a prompt to the AI agent loop
-  Stream<StreamEvent> agentSendPrompt({
-    required String prompt,
-    bool stream = true,
-  }) async* {
-    final params = <String, dynamic>{
-      'prompt': prompt,
-      'stream': stream,
-    };
-    final res = await transport.sendRequest("agent.send_prompt", params);
-    yield StreamEvent.fromJson(res as Map<String, dynamic>);
   }
 
   /// Query Git status of the workspace repository

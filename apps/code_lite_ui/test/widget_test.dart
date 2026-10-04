@@ -22,15 +22,15 @@ void main() {
 
     // 底部默认是 Git 工具窗,IntelliJ 式标题栏 Git | Log;其余底部面板从左侧条下半段打开。
     expect(find.text('Log'), findsOneWidget);
-    expect(find.byTooltip('操作记录与回滚'), findsOneWidget);
+    expect(find.byTooltip('操作记录与回滚'), findsNothing); // SQLite 回滚面板已移除
+    expect(find.byTooltip('助手'), findsNothing); // AI 助手已移除
     expect(find.byTooltip('Commit (⌘0)'), findsOneWidget);
 
     // The right column starts closed — no tool window should pay FFI cost on boot.
-    expect(find.text('CodeLite AI Assistant'), findsNothing);
     expect(find.text('Cargo'), findsNothing);
   });
 
-  testWidgets('right activity stripe opens, swaps and collapses tool windows', (WidgetTester tester) async {
+  testWidgets('right activity stripe opens and collapses the Cargo tool window', (WidgetTester tester) async {
     await tester.binding.setSurfaceSize(const Size(1280, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
@@ -39,22 +39,15 @@ void main() {
 
     // Nothing is docked on the right until asked for.
     expect(find.text('Cargo'), findsNothing);
-    expect(find.text('CodeLite AI Assistant'), findsNothing);
 
     await tester.tap(find.byTooltip('Cargo'));
     await tester.pump();
     expect(find.text('Cargo'), findsOneWidget);
 
-    // Picking another tool replaces it rather than stacking a second panel.
-    await tester.tap(find.byTooltip('助手'));
-    await tester.pump();
-    expect(find.text('CodeLite AI Assistant'), findsOneWidget);
-    expect(find.text('Cargo'), findsNothing);
-
     // Selecting the open tool again collapses the column.
-    await tester.tap(find.byTooltip('助手'));
+    await tester.tap(find.byTooltip('Cargo'));
     await tester.pump();
-    expect(find.text('CodeLite AI Assistant'), findsNothing);
+    expect(find.text('Cargo'), findsNothing);
   });
 
   testWidgets('left activity stripe collapses the project panel on re-tap', (WidgetTester tester) async {
