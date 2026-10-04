@@ -21,8 +21,6 @@ typedef _StringFreeDart = void Function(Pointer<Char> ptr);
 typedef _BufferFreeC = Void Function(Pointer<Char> ptr, Size len);
 typedef _BufferFreeDart = void Function(Pointer<Char> ptr, int len);
 
-typedef _WorkspaceScanC = Pointer<Char> Function(Pointer<Void> ctx, Size maxDepth);
-typedef _WorkspaceScanDart = Pointer<Char> Function(Pointer<Void> ctx, int maxDepth);
 
 typedef _FileOpenC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> path);
 typedef _FileOpenDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> path);
@@ -84,11 +82,7 @@ typedef _LspRenameDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char>
 typedef _GetViewportTokensC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> filePath, Uint32 startLine, Uint32 endLine);
 typedef _GetViewportTokensDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> filePath, int startLine, int endLine);
 
-typedef _SearchWorkspaceC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> query, Pointer<Char> optionsJson);
-typedef _SearchWorkspaceDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> query, Pointer<Char> optionsJson);
 
-typedef _ReplaceWorkspaceC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> query, Pointer<Char> replacement, Pointer<Char> optionsJson);
-typedef _ReplaceWorkspaceDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> query, Pointer<Char> replacement, Pointer<Char> optionsJson);
 
 typedef _TerminalExecC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> cmd, Pointer<Char> argsJson);
 typedef _TerminalExecDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> cmd, Pointer<Char> argsJson);
@@ -154,7 +148,6 @@ class CodeLiteBindings {
   late final _StringAllocDart _stringAlloc;
   late final _StringFreeDart _stringFree;
   late final _BufferFreeDart _bufferFree;
-  late final _WorkspaceScanDart _workspaceScan;
   late final _FileOpenDart _fileOpen;
   late final _FileEditDart _fileEdit;
   late final _UndoRedoDart _undo;
@@ -179,8 +172,6 @@ class CodeLiteBindings {
   late final _LspPosQueryDart _lspCompletion;
   late final _LspRenameDart _lspRename;
   late final _GetViewportTokensDart _getViewportTokens;
-  late final _SearchWorkspaceDart _searchWorkspace;
-  late final _ReplaceWorkspaceDart _replaceWorkspace;
   late final _TerminalExecDart _terminalExec;
   late final _PtyOpenDart _ptyOpen;
   late final _PtyWriteDart _ptyWrite;
@@ -229,7 +220,6 @@ class CodeLiteBindings {
     _stringAlloc = _dylib!.lookupFunction<_StringAllocC, _StringAllocDart>('codelite_string_alloc');
     _stringFree = _dylib!.lookupFunction<_StringFreeC, _StringFreeDart>('codelite_string_free');
     _bufferFree = _dylib!.lookupFunction<_BufferFreeC, _BufferFreeDart>('codelite_buffer_free');
-    _workspaceScan = _dylib!.lookupFunction<_WorkspaceScanC, _WorkspaceScanDart>('codelite_workspace_scan');
     _fileOpen = _dylib!.lookupFunction<_FileOpenC, _FileOpenDart>('codelite_file_open');
     _fileEdit = _dylib!.lookupFunction<_FileEditC, _FileEditDart>('codelite_file_edit');
     _undo = _dylib!.lookupFunction<_UndoRedoC, _UndoRedoDart>('codelite_undo');
@@ -254,8 +244,6 @@ class CodeLiteBindings {
     _lspCompletion = _dylib!.lookupFunction<_LspPosQueryC, _LspPosQueryDart>('codelite_lsp_completion');
     _lspRename = _dylib!.lookupFunction<_LspRenameC, _LspRenameDart>('codelite_lsp_rename');
     _getViewportTokens = _dylib!.lookupFunction<_GetViewportTokensC, _GetViewportTokensDart>('codelite_get_viewport_tokens');
-    _searchWorkspace = _dylib!.lookupFunction<_SearchWorkspaceC, _SearchWorkspaceDart>('codelite_search_workspace');
-    _replaceWorkspace = _dylib!.lookupFunction<_ReplaceWorkspaceC, _ReplaceWorkspaceDart>('codelite_replace_workspace');
     _terminalExec = _dylib!.lookupFunction<_TerminalExecC, _TerminalExecDart>('codelite_terminal_exec');
     _ptyOpen = _dylib!.lookupFunction<_PtyOpenC, _PtyOpenDart>('codelite_pty_open');
     _ptyWrite = _dylib!.lookupFunction<_PtyWriteC, _PtyWriteDart>('codelite_pty_write');
@@ -299,12 +287,6 @@ class CodeLiteBindings {
     } finally {
       _freeAllocatedString(reqPtr);
     }
-  }
-
-  Map<String, dynamic> scanWorkspace({int maxDepth = 4}) {
-    if (!isAvailable) return {};
-    final ptr = _workspaceScan(_ctx!, maxDepth);
-    return _parseJsonMap(_fromCString(ptr));
   }
 
   Map<String, dynamic> openFile(String relPath) {
@@ -520,28 +502,6 @@ class CodeLiteBindings {
     final filePtr = _toCString(filePath);
     final ptr = _getViewportTokens(_ctx!, filePtr.pointer, startLine, endLine);
     _freeAllocatedString(filePtr);
-    return _parseJsonMap(_fromCString(ptr));
-  }
-
-  Map<String, dynamic> searchWorkspace(String query, [Map<String, dynamic>? options]) {
-    if (!isAvailable) return {'status': 'error', 'matches': []};
-    final qPtr = _toCString(query);
-    final optPtr = _toCString(jsonEncode(options ?? {}));
-    final ptr = _searchWorkspace(_ctx!, qPtr.pointer, optPtr.pointer);
-    _freeAllocatedString(qPtr);
-    _freeAllocatedString(optPtr);
-    return _parseJsonMap(_fromCString(ptr));
-  }
-
-  Map<String, dynamic> replaceWorkspace(String query, String replacement, [Map<String, dynamic>? options]) {
-    if (!isAvailable) return {'status': 'error', 'replaced_count': 0};
-    final qPtr = _toCString(query);
-    final replPtr = _toCString(replacement);
-    final optPtr = _toCString(jsonEncode(options ?? {}));
-    final ptr = _replaceWorkspace(_ctx!, qPtr.pointer, replPtr.pointer, optPtr.pointer);
-    _freeAllocatedString(qPtr);
-    _freeAllocatedString(replPtr);
-    _freeAllocatedString(optPtr);
     return _parseJsonMap(_fromCString(ptr));
   }
 

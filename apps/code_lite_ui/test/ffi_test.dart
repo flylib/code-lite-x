@@ -16,9 +16,6 @@ void main() {
         final version = ffi.getVersion();
         expect(version, equals('0.1.0'));
 
-        final tree = ffi.scanWorkspace(maxDepth: 2);
-        expect(tree.containsKey('name'), isTrue);
-
         final fileRes = ffi.openFile('pubspec.yaml');
         expect(fileRes['status'], equals('ok'));
         expect((fileRes['content'] as String).contains('code_lite_ui'), isTrue);
@@ -68,10 +65,6 @@ void main() {
         final tokens = ffi.getViewportTokens('pubspec.yaml', 0, 10);
         expect(tokens['status'], equals('ok'));
         expect(tokens['lines'], isA<List>());
-
-        final searchRes = ffi.searchWorkspace('dependencies');
-        expect(searchRes['status'], equals('ok'));
-        expect(searchRes['matches'], isA<List>());
 
         final termRes = ffi.terminalExec('echo', ['hello_from_dart_ffi']);
         expect(termRes['status'], equals('ok'));
@@ -204,12 +197,11 @@ void main() {
       for (final dir in [a, b, a]) {
         expect(ffi.reinitialize(dir.path), isTrue, reason: 'reinitialize(${dir.path})');
         expect(ffi.isAvailable, isTrue);
-        final tree = ffi.scanWorkspace(maxDepth: 1);
-        final names = ((tree['children'] as List?) ?? const [])
-            .map((c) => (c as Map)['name'])
-            .toList();
-        final marker = dir == a ? 'only_in_a.txt' : 'only_in_b.txt';
-        expect(names, contains(marker));
+        // Rust 上下文确实换了根:只在该目录里存在的文件能打开,另一个打不开。
+        final here = dir == a ? 'only_in_a.txt' : 'only_in_b.txt';
+        final other = dir == a ? 'only_in_b.txt' : 'only_in_a.txt';
+        expect(ffi.openFile(here)['status'], 'ok');
+        expect(ffi.openFile(other)['status'], isNot('ok'));
       }
     });
   });

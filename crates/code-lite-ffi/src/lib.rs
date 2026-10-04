@@ -193,24 +193,6 @@ pub unsafe extern "C" fn codelite_jsonrpc_call(
 // 2. Workspace File Tree & Text Editor Operations
 // ---------------------------------------------------------------------------
 
-/// Scans the workspace directory tree and returns a hierarchical JSON representation.
-#[no_mangle]
-pub unsafe extern "C" fn codelite_workspace_scan(
-    ctx: *mut CodeLiteContext,
-    max_depth: usize,
-) -> *const c_char {
-    if ctx.is_null() {
-        return err_json("Context is null");
-    }
-    let ctx = &*ctx;
-
-    let tree = code_lite_fs::WorkspaceTree::new(&ctx.workspace_root);
-    match tree.scan(max_depth) {
-        Ok(entry) => json_to_c_char(&entry),
-        Err(e) => err_json(&format!("Scan failed: {}", e)),
-    }
-}
-
 /// Opens a file into the Rust text buffer, caching the `Editor` in memory.
 #[no_mangle]
 pub unsafe extern "C" fn codelite_file_open(
@@ -1151,84 +1133,6 @@ pub unsafe extern "C" fn codelite_get_viewport_tokens(
     json_to_c_char(&res)
 }
 
-/// Searches the workspace using the high-performance search engine.
-#[no_mangle]
-pub unsafe extern "C" fn codelite_search_workspace(
-    ctx: *mut CodeLiteContext,
-    query: *const c_char,
-    options_json: *const c_char,
-) -> *const c_char {
-    if ctx.is_null() {
-        return err_json("Context is null");
-    }
-    let ctx = &*ctx;
-    let query_str = match c_str_to_str(query) {
-        Some(s) => s,
-        None => return err_json("Invalid query"),
-    };
-
-    let opts: code_lite_fs::SearchOptions = if let Some(raw_opts) = c_str_to_str(options_json) {
-        serde_json::from_str(raw_opts).unwrap_or_default()
-    } else {
-        code_lite_fs::SearchOptions::default()
-    };
-
-    let searcher = code_lite_fs::WorkspaceSearcher::new(&ctx.workspace_root);
-    match searcher.search(query_str, &opts) {
-        Ok(matches) => {
-            let total = matches.len();
-            let res = serde_json::json!({
-                "status": "ok",
-                "query": query_str,
-                "total": total,
-                "matches": matches,
-            });
-            json_to_c_char(&res)
-        }
-        Err(e) => err_json(&format!("Search failed: {}", e)),
-    }
-}
-
-/// Replaces occurrences across the workspace.
-#[no_mangle]
-pub unsafe extern "C" fn codelite_replace_workspace(
-    ctx: *mut CodeLiteContext,
-    query: *const c_char,
-    replacement: *const c_char,
-    options_json: *const c_char,
-) -> *const c_char {
-    if ctx.is_null() {
-        return err_json("Context is null");
-    }
-    let ctx = &*ctx;
-    let query_str = match c_str_to_str(query) {
-        Some(s) => s,
-        None => return err_json("Invalid query"),
-    };
-    let repl_str = match c_str_to_str(replacement) {
-        Some(s) => s,
-        None => return err_json("Invalid replacement"),
-    };
-
-    let opts: code_lite_fs::SearchOptions = if let Some(raw_opts) = c_str_to_str(options_json) {
-        serde_json::from_str(raw_opts).unwrap_or_default()
-    } else {
-        code_lite_fs::SearchOptions::default()
-    };
-
-    let searcher = code_lite_fs::WorkspaceSearcher::new(&ctx.workspace_root);
-    match searcher.replace_all(query_str, repl_str, &opts) {
-        Ok(count) => {
-            let res = serde_json::json!({
-                "status": "ok",
-                "replaced_count": count,
-            });
-            json_to_c_char(&res)
-        }
-        Err(e) => err_json(&format!("Replace failed: {}", e)),
-    }
-}
-
 /// Executes a command in the workspace directory (simulated interactive terminal output).
 #[no_mangle]
 pub unsafe extern "C" fn codelite_terminal_exec(
@@ -1516,12 +1420,6 @@ mod tests {
             assert_eq!(ver, "0.1.0");
             codelite_string_free(ver_ptr as *mut c_char);
 
-            // Workspace scan
-            let scan_ptr = codelite_workspace_scan(ctx, 3);
-            let scan_str = CStr::from_ptr(scan_ptr).to_str().unwrap();
-            assert!(scan_str.contains("Cargo.toml") || scan_str.contains("src"));
-            codelite_string_free(scan_ptr as *mut c_char);
-
             // Open file
             let test_doc_rel = "test_ffi_editor.txt";
             let test_doc_full = (*ctx).workspace_root.join(test_doc_rel);
@@ -1653,7 +1551,6 @@ mod tests {
             let p4_rel = "test_tmp_phase4.rs";
             let p4_full = (*ctx).workspace_root.join(p4_rel);
             let s_tag = format!("sym_{}", "phase4_target_uniq");
-            let r_tag = format!("sym_{}", "phase4_replacement_uniq");
             std::fs::write(&p4_full, format!("fn {}() -> i32 {{ 42 }}\nfn main() {{ let x = {}(); }}\n", s_tag, s_tag)).unwrap();
             let p4_c = CString::new(p4_rel).unwrap();
 
@@ -1662,24 +1559,6 @@ mod tests {
             assert!(vp_str.contains("\"status\":\"ok\""));
             assert!(vp_str.contains("lines"));
             codelite_string_free(vp_ptr as *mut c_char);
-
-            // Phase 4: Workspace Search
-            let search_q = CString::new(s_tag.as_str()).unwrap();
-            let search_opts = CString::new(r#"{"case_sensitive":false,"whole_word":true}"#).unwrap();
-            let search_ptr = codelite_search_workspace(ctx, search_q.as_ptr(), search_opts.as_ptr());
-            let search_str = CStr::from_ptr(search_ptr).to_str().unwrap();
-            assert!(search_str.contains("\"status\":\"ok\""));
-            assert!(search_str.contains(p4_rel));
-            codelite_string_free(search_ptr as *mut c_char);
-
-            // Phase 4: Workspace Replace
-            let repl_target = CString::new(s_tag.as_str()).unwrap();
-            let repl_value = CString::new(r_tag.as_str()).unwrap();
-            let repl_ptr = codelite_replace_workspace(ctx, repl_target.as_ptr(), repl_value.as_ptr(), search_opts.as_ptr());
-            let repl_str = CStr::from_ptr(repl_ptr).to_str().unwrap();
-            assert!(repl_str.contains("\"status\":\"ok\""));
-            assert!(repl_str.contains("\"replaced_count\":2"));
-            codelite_string_free(repl_ptr as *mut c_char);
 
             let _ = std::fs::remove_file(&p4_full);
 

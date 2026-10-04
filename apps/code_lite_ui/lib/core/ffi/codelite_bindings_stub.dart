@@ -62,13 +62,7 @@ class CodeLiteBindings {
 
   Map<String, dynamic> redo(String relPath) => {};
 
-  Map<String, dynamic> replaceWorkspace(String query, String replacement, [Map<String, dynamic>? options]) => {'status': 'error', 'replaced_count': 0};
-
   Map<String, dynamic> saveFile(String relPath) => {};
-
-  Map<String, dynamic> scanWorkspace({int maxDepth = 4}) => {};
-
-  Map<String, dynamic> searchWorkspace(String query, [Map<String, dynamic>? options]) => {'status': 'error', 'matches': []};
 
   Map<String, dynamic> setFileCursor(String relPath, int line, int col, {bool select = false}) => {};
 

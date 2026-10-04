@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 
+import '../fs/workspace_fs.dart' as fs;
 import '../git/git.dart';
 // web 没有 dart:ffi —— 条件导入让 web 拿到桩(isAvailable 恒 false),
 // 原生拿到真实的 FFI 绑定。两者类名与签名一致。
@@ -13,10 +14,13 @@ class ApiClient {
   final String baseUrl;
   final CodeLiteBindings _ffi = CodeLiteBindings.instance;
 
-  /// 当前工作区的 Git;切换项目时随 [openWorkspace] 换成新根目录。
+  /// 当前工作区根目录与它的 Git;切换项目时随 [openWorkspace] 一起更新。
+  String _root;
   GitService _git;
 
-  ApiClient({this.baseUrl = 'http://127.0.0.1:4096', String initialRoot = '.'}) : _git = GitService(initialRoot) {
+  ApiClient({this.baseUrl = 'http://127.0.0.1:4096', String initialRoot = '.'})
+      : _root = initialRoot,
+        _git = GitService(initialRoot) {
     _ffi.initialize(initialRoot);
   }
 
@@ -24,27 +28,17 @@ class ApiClient {
 
   /// 把 Rust Core 重新指向另一个工作区根目录(File → Open)。
   bool openWorkspace(String path) {
+    _root = path;
     _git = GitService(path);
     return _ffi.reinitialize(path);
   }
 
 
-  /// Fetches the project workspace file tree.
+  /// Fetches the project workspace file tree(纯 Dart 扫描,后台 isolate)。
+  /// 只有 web 预览(没有 dart:io)拿不到真实目录,用演示数据兜底。
   Future<Map<String, dynamic>> fetchWorkspaceTree() async {
-    if (_ffi.isAvailable) {
-      final res = _ffi.scanWorkspace();
-      if (res.isNotEmpty) return res;
-    }
-
-    try {
-      final response = await http.get(Uri.parse('$baseUrl/api/workspace'));
-      if (response.statusCode == 200) {
-        return jsonDecode(response.body) as Map<String, dynamic>;
-      }
-    } catch (e) {
-      // Return fallback demo data if server is booting
-    }
-    return _fallbackWorkspace();
+    final tree = await fs.scanTree(_root);
+    return tree.isNotEmpty ? tree : _fallbackWorkspace();
   }
 
   /// Opens a file from disk into the Rust TextBuffer.
@@ -304,21 +298,13 @@ class ApiClient {
     return {'status': 'ok', 'lines': []};
   }
 
-  /// Searches the workspace with multi-threading and options.
-  Future<Map<String, dynamic>> searchWorkspace(String query, [Map<String, dynamic>? options]) async {
-    if (_ffi.isAvailable) {
-      return _ffi.searchWorkspace(query, options);
-    }
-    return {'status': 'error', 'matches': []};
-  }
+  /// Searches the workspace(纯 Dart,后台 isolate,不卡界面)。
+  Future<Map<String, dynamic>> searchWorkspace(String query, [Map<String, dynamic>? options]) =>
+      fs.searchWorkspace(_root, query, options);
 
   /// Replaces occurrences across the workspace.
-  Future<Map<String, dynamic>> replaceWorkspace(String query, String replacement, [Map<String, dynamic>? options]) async {
-    if (_ffi.isAvailable) {
-      return _ffi.replaceWorkspace(query, replacement, options);
-    }
-    return {'status': 'error', 'replaced_count': 0};
-  }
+  Future<Map<String, dynamic>> replaceWorkspace(String query, String replacement, [Map<String, dynamic>? options]) =>
+      fs.replaceWorkspace(_root, query, replacement, options);
 
   /// Executes command in interactive PTY/terminal.
   Future<Map<String, dynamic>> terminalExec(String cmd, List<String> args) async {
