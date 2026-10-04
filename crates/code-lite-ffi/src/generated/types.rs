@@ -37,37 +37,6 @@ pub struct UndoRedoResult {
     pub content: String,
 }
 
-/// Code completion suggestion
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct CompletionItem {
-    pub label: String,
-    pub kind: String,
-    pub detail: String,
-    pub insert_text: String,
-}
-
-/// List of code completions
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct CompletionList {
-    pub items: Vec<CompletionItem>,
-}
-
-/// Code diagnostic item (error, warning, hint)
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct DiagnosticItem {
-    pub line: i64,
-    pub start_col: i64,
-    pub end_col: i64,
-    pub severity: String,
-    pub message: String,
-}
-
-/// List of diagnostics for a file
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct DiagnosticList {
-    pub diagnostics: Vec<DiagnosticItem>,
-}
-
 /// Request parameters for `file.open`
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct FileOpenParams {
@@ -91,20 +60,6 @@ pub struct FileUndoParams {
 /// Request parameters for `file.redo`
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct FileRedoParams {
-    pub path: String,
-}
-
-/// Request parameters for `lsp.completion`
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct LspCompletionParams {
-    pub path: String,
-    pub line: i64,
-    pub character: i64,
-}
-
-/// Request parameters for `lsp.diagnostics`
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct LspDiagnosticsParams {
     pub path: String,
 }
 

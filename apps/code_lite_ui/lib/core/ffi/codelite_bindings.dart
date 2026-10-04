@@ -49,35 +49,15 @@ typedef _FileCursorSetDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<C
 
 
 
-typedef _GraphSymbolsC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> query);
-typedef _GraphSymbolsDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> query);
 
-typedef _GraphFileC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> relPath);
-typedef _GraphFileDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> relPath);
 
-typedef _GraphQueryC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> query);
-typedef _GraphQueryDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> query);
 
-typedef _LspInitServerC = Bool Function(Pointer<Void> ctx, Pointer<Char> cmd, Pointer<Char> argsJson);
-typedef _LspInitServerDart = bool Function(Pointer<Void> ctx, Pointer<Char> cmd, Pointer<Char> argsJson);
 
-typedef _LspDidOpenC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> filePath, Pointer<Char> language, Pointer<Char> content);
-typedef _LspDidOpenDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> filePath, Pointer<Char> language, Pointer<Char> content);
 
-typedef _LspDidChangeC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> filePath, Int32 version, Pointer<Char> content);
-typedef _LspDidChangeDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> filePath, int version, Pointer<Char> content);
 
-typedef _LspGetDiagsC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> filePath);
-typedef _LspGetDiagsDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> filePath);
 
-typedef _LspPosQueryC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> filePath, Uint32 line, Uint32 col);
-typedef _LspPosQueryDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> filePath, int line, int col);
 
-typedef _LspFindRefsC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> filePath, Uint32 line, Uint32 col, Bool includeDecl);
-typedef _LspFindRefsDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> filePath, int line, int col, bool includeDecl);
 
-typedef _LspRenameC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> filePath, Uint32 line, Uint32 col, Pointer<Char> newName);
-typedef _LspRenameDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> filePath, int line, int col, Pointer<Char> newName);
 
 typedef _GetViewportTokensC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> filePath, Uint32 startLine, Uint32 endLine);
 typedef _GetViewportTokensDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> filePath, int startLine, int endLine);
@@ -154,23 +134,6 @@ class CodeLiteBindings {
   late final _UndoRedoDart _redo;
   late final _FileSaveDart _fileSave;
   late final _FileCursorSetDart _fileCursorSet;
-  late final _GraphSymbolsDart _graphSymbols;
-  late final _GraphFileDart _graphIndexFile;
-  late final _GraphFileDart _graphQueryOutline;
-  late final _GraphQueryDart _graphFindDefinition;
-  late final _GraphQueryDart _graphFindReferences;
-  late final _GraphQueryDart _graphGetContext;
-  late final _GraphQueryDart _graphFindCallers;
-  late final _GraphQueryDart _graphFindCallees;
-  late final _LspInitServerDart _lspInitServer;
-  late final _LspDidOpenDart _lspDidOpen;
-  late final _LspDidChangeDart _lspDidChange;
-  late final _LspGetDiagsDart _lspGetDiagnostics;
-  late final _LspPosQueryDart _lspGotoDefinition;
-  late final _LspFindRefsDart _lspFindReferences;
-  late final _LspPosQueryDart _lspHover;
-  late final _LspPosQueryDart _lspCompletion;
-  late final _LspRenameDart _lspRename;
   late final _GetViewportTokensDart _getViewportTokens;
   late final _TerminalExecDart _terminalExec;
   late final _PtyOpenDart _ptyOpen;
@@ -226,23 +189,6 @@ class CodeLiteBindings {
     _redo = _dylib!.lookupFunction<_UndoRedoC, _UndoRedoDart>('codelite_redo');
     _fileSave = _dylib!.lookupFunction<_FileSaveC, _FileSaveDart>('codelite_file_save');
     _fileCursorSet = _dylib!.lookupFunction<_FileCursorSetC, _FileCursorSetDart>('codelite_file_cursor_set');
-    _graphSymbols = _dylib!.lookupFunction<_GraphSymbolsC, _GraphSymbolsDart>('codelite_graph_symbols');
-    _graphIndexFile = _dylib!.lookupFunction<_GraphFileC, _GraphFileDart>('codelite_graph_index_file');
-    _graphQueryOutline = _dylib!.lookupFunction<_GraphFileC, _GraphFileDart>('codelite_graph_query_outline');
-    _graphFindDefinition = _dylib!.lookupFunction<_GraphQueryC, _GraphQueryDart>('codelite_graph_find_definition');
-    _graphFindReferences = _dylib!.lookupFunction<_GraphQueryC, _GraphQueryDart>('codelite_graph_find_references');
-    _graphGetContext = _dylib!.lookupFunction<_GraphQueryC, _GraphQueryDart>('codelite_graph_get_context');
-    _graphFindCallers = _dylib!.lookupFunction<_GraphQueryC, _GraphQueryDart>('codelite_graph_find_callers');
-    _graphFindCallees = _dylib!.lookupFunction<_GraphQueryC, _GraphQueryDart>('codelite_graph_find_callees');
-    _lspInitServer = _dylib!.lookupFunction<_LspInitServerC, _LspInitServerDart>('codelite_lsp_init_server');
-    _lspDidOpen = _dylib!.lookupFunction<_LspDidOpenC, _LspDidOpenDart>('codelite_lsp_did_open');
-    _lspDidChange = _dylib!.lookupFunction<_LspDidChangeC, _LspDidChangeDart>('codelite_lsp_did_change');
-    _lspGetDiagnostics = _dylib!.lookupFunction<_LspGetDiagsC, _LspGetDiagsDart>('codelite_lsp_get_diagnostics');
-    _lspGotoDefinition = _dylib!.lookupFunction<_LspPosQueryC, _LspPosQueryDart>('codelite_lsp_goto_definition');
-    _lspFindReferences = _dylib!.lookupFunction<_LspFindRefsC, _LspFindRefsDart>('codelite_lsp_find_references');
-    _lspHover = _dylib!.lookupFunction<_LspPosQueryC, _LspPosQueryDart>('codelite_lsp_hover');
-    _lspCompletion = _dylib!.lookupFunction<_LspPosQueryC, _LspPosQueryDart>('codelite_lsp_completion');
-    _lspRename = _dylib!.lookupFunction<_LspRenameC, _LspRenameDart>('codelite_lsp_rename');
     _getViewportTokens = _dylib!.lookupFunction<_GetViewportTokensC, _GetViewportTokensDart>('codelite_get_viewport_tokens');
     _terminalExec = _dylib!.lookupFunction<_TerminalExecC, _TerminalExecDart>('codelite_terminal_exec');
     _ptyOpen = _dylib!.lookupFunction<_PtyOpenC, _PtyOpenDart>('codelite_pty_open');
@@ -341,157 +287,9 @@ class CodeLiteBindings {
     return _parseJsonMap(_fromCString(ptr));
   }
 
-  List<dynamic> fetchSymbols([String query = '']) {
-    if (!isAvailable) return [];
-    final queryPtr = _toCString(query);
-    final ptr = _graphSymbols(_ctx!, queryPtr.pointer);
-    _freeAllocatedString(queryPtr);
-    return _parseJsonList(_fromCString(ptr));
-  }
-
-  Map<String, dynamic> indexFile(String relPath) {
-    if (!isAvailable) return {};
-    final pathPtr = _toCString(relPath);
-    final ptr = _graphIndexFile(_ctx!, pathPtr.pointer);
-    _freeAllocatedString(pathPtr);
-    return _parseJsonMap(_fromCString(ptr));
-  }
-
-  List<dynamic> queryOutline(String relPath) {
-    if (!isAvailable) return [];
-    final pathPtr = _toCString(relPath);
-    final ptr = _graphQueryOutline(_ctx!, pathPtr.pointer);
-    _freeAllocatedString(pathPtr);
-    return _parseJsonList(_fromCString(ptr));
-  }
-
-  List<dynamic> findDefinition(String query) {
-    if (!isAvailable) return [];
-    final queryPtr = _toCString(query);
-    final ptr = _graphFindDefinition(_ctx!, queryPtr.pointer);
-    _freeAllocatedString(queryPtr);
-    return _parseJsonList(_fromCString(ptr));
-  }
-
-  List<dynamic> findReferences(String query) {
-    if (!isAvailable) return [];
-    final queryPtr = _toCString(query);
-    final ptr = _graphFindReferences(_ctx!, queryPtr.pointer);
-    _freeAllocatedString(queryPtr);
-    return _parseJsonList(_fromCString(ptr));
-  }
-
-  Map<String, dynamic> getCodeContext(String query) {
-    if (!isAvailable) return {};
-    final queryPtr = _toCString(query);
-    final ptr = _graphGetContext(_ctx!, queryPtr.pointer);
-    _freeAllocatedString(queryPtr);
-    return _parseJsonMap(_fromCString(ptr));
-  }
-
-  List<dynamic> findCallers(String query) {
-    if (!isAvailable) return [];
-    final queryPtr = _toCString(query);
-    final ptr = _graphFindCallers(_ctx!, queryPtr.pointer);
-    _freeAllocatedString(queryPtr);
-    return _parseJsonList(_fromCString(ptr));
-  }
-
-  List<dynamic> findCallees(String query) {
-    if (!isAvailable) return [];
-    final queryPtr = _toCString(query);
-    final ptr = _graphFindCallees(_ctx!, queryPtr.pointer);
-    _freeAllocatedString(queryPtr);
-    return _parseJsonList(_fromCString(ptr));
-  }
-
   // ---------------------------------------------------------------------------
   // LSP (Language Server Protocol) Cognitive Capabilities (P2.1 - P2.6)
   // ---------------------------------------------------------------------------
-
-  bool lspInitServer([String? cmd, List<String>? args]) {
-    if (!isAvailable) return false;
-    final cmdPtr = _toCString(cmd ?? '');
-    final argsPtr = _toCString(args != null ? jsonEncode(args) : '[]');
-    final ok = _lspInitServer(_ctx!, cmdPtr.pointer, argsPtr.pointer);
-    _freeAllocatedString(cmdPtr);
-    _freeAllocatedString(argsPtr);
-    return ok;
-  }
-
-  List<dynamic> lspDidOpen(String filePath, String language, String content) {
-    if (!isAvailable) return [];
-    final filePtr = _toCString(filePath);
-    final langPtr = _toCString(language);
-    final textPtr = _toCString(content);
-    final ptr = _lspDidOpen(_ctx!, filePtr.pointer, langPtr.pointer, textPtr.pointer);
-    _freeAllocatedString(filePtr);
-    _freeAllocatedString(langPtr);
-    _freeAllocatedString(textPtr);
-    return _parseJsonList(_fromCString(ptr));
-  }
-
-  List<dynamic> lspDidChange(String filePath, int version, String content) {
-    if (!isAvailable) return [];
-    final filePtr = _toCString(filePath);
-    final textPtr = _toCString(content);
-    final ptr = _lspDidChange(_ctx!, filePtr.pointer, version, textPtr.pointer);
-    _freeAllocatedString(filePtr);
-    _freeAllocatedString(textPtr);
-    return _parseJsonList(_fromCString(ptr));
-  }
-
-  List<dynamic> lspGetDiagnostics(String filePath) {
-    if (!isAvailable) return [];
-    final filePtr = _toCString(filePath);
-    final ptr = _lspGetDiagnostics(_ctx!, filePtr.pointer);
-    _freeAllocatedString(filePtr);
-    return _parseJsonList(_fromCString(ptr));
-  }
-
-  List<dynamic> lspGotoDefinition(String filePath, int line, int col) {
-    if (!isAvailable) return [];
-    final filePtr = _toCString(filePath);
-    final ptr = _lspGotoDefinition(_ctx!, filePtr.pointer, line, col);
-    _freeAllocatedString(filePtr);
-    return _parseJsonList(_fromCString(ptr));
-  }
-
-  List<dynamic> lspFindReferences(String filePath, int line, int col, {bool includeDecl = true}) {
-    if (!isAvailable) return [];
-    final filePtr = _toCString(filePath);
-    final ptr = _lspFindReferences(_ctx!, filePtr.pointer, line, col, includeDecl);
-    _freeAllocatedString(filePtr);
-    return _parseJsonList(_fromCString(ptr));
-  }
-
-  Map<String, dynamic>? lspHover(String filePath, int line, int col) {
-    if (!isAvailable) return null;
-    final filePtr = _toCString(filePath);
-    final ptr = _lspHover(_ctx!, filePtr.pointer, line, col);
-    _freeAllocatedString(filePtr);
-    final res = _parseJsonMap(_fromCString(ptr));
-    return res.isEmpty ? null : res;
-  }
-
-  List<dynamic> lspCompletion(String filePath, int line, int col) {
-    if (!isAvailable) return [];
-    final filePtr = _toCString(filePath);
-    final ptr = _lspCompletion(_ctx!, filePtr.pointer, line, col);
-    _freeAllocatedString(filePtr);
-    return _parseJsonList(_fromCString(ptr));
-  }
-
-  Map<String, dynamic>? lspRename(String filePath, int line, int col, String newName) {
-    if (!isAvailable) return null;
-    final filePtr = _toCString(filePath);
-    final namePtr = _toCString(newName);
-    final ptr = _lspRename(_ctx!, filePtr.pointer, line, col, namePtr.pointer);
-    _freeAllocatedString(filePtr);
-    _freeAllocatedString(namePtr);
-    final res = _parseJsonMap(_fromCString(ptr));
-    return res.isEmpty ? null : res;
-  }
 
   // ---------------------------------------------------------------------------
   // Phase 4: Viewport Tokens, Workspace Search & Terminal Execution
@@ -653,14 +451,6 @@ class CodeLiteBindings {
       if (decoded is Map<String, dynamic>) return decoded;
     } catch (_) {}
     return {};
-  }
-
-  List<dynamic> _parseJsonList(String jsonStr) {
-    try {
-      final decoded = jsonDecode(jsonStr);
-      if (decoded is List) return decoded;
-    } catch (_) {}
-    return [];
   }
 
   DynamicLibrary? _loadLibrary() {

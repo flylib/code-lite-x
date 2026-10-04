@@ -7,7 +7,6 @@ license.workspace = true
 
 [dependencies]
 code-lite-core = { path = "../code-lite-core" }
-code-lite-storage = { path = "../code-lite-storage" }
 code-lite-fs = { path = "../code-lite-fs" }
 serde = { workspace = true }
 serde_json = { workspace = true }

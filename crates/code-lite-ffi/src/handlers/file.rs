@@ -47,25 +47,13 @@ pub fn handle_edit(ctx: *mut CodeLiteContext, params: FileEditParams) -> Result<
         .ok_or_else(|| format!("File not open in editor: {}", params.path))?;
 
     editor.insert_text(&params.new_text);
-    let content = editor.text();
     let version = editor.buffer().len_lines() as i64;
-    drop(editors);
 
-    let _ = ctx.graph_engine.index_file(&params.path, &content);
-
-    let diag_count = {
-        let guard = ctx.lsp_client.lock();
-        if let Some(client) = guard.as_ref() {
-            client.get_diagnostics(&params.path).len() as i64
-        } else {
-            0
-        }
-    };
-
+    // LSP 已移到 Flutter 侧,Rust 不再持有诊断;字段保留以兼容已生成的 Dart 客户端
     Ok(FileEditResult {
         success: true,
         version,
-        diagnostics_count: diag_count,
+        diagnostics_count: 0,
     })
 }
 

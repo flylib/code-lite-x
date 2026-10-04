@@ -66,13 +66,6 @@ class ActivityStripeWidget extends StatelessWidget {
 
           // 下半段:底部工具窗(与 IntelliJ 一致,贴着它们打开的位置)。
           StripeButton(
-            icon: Icons.hub_outlined,
-            tooltip: 'CodeGraph 调用图',
-            isActive: isBottomOpen && bottomTab == BottomToolTab.codegraph,
-            onTap: () => onSelectBottomTab(BottomToolTab.codegraph),
-          ),
-          const SizedBox(height: 6),
-          StripeButton(
             icon: Icons.terminal_outlined,
             tooltip: '终端 (⌥F12)',
             isActive: isBottomOpen && bottomTab == BottomToolTab.terminal,

@@ -9,8 +9,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let current_dir = std::env::current_dir()?;
     println!("Initializing CodeLiteX workspace: {}", current_dir.display());
 
-    let state = Arc::new(AppState::new(&current_dir)?);
-    println!("SQLite database ready at .codelite/workspace.db");
+    let state = Arc::new(AppState::new(&current_dir));
 
     let port = 4096;
     server::run_server(state, port)?;

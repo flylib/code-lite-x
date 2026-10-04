@@ -112,23 +112,6 @@ pub fn run_server(state: Arc<AppState>, port: u16) -> Result<(), Box<dyn std::er
             continue;
         }
 
-        // 6. /api/graph/symbols
-        if url.starts_with("/api/graph/symbols") {
-            let query = url.split('?').nth(1).unwrap_or("");
-            let q = query
-                .split('&')
-                .find(|part| part.starts_with("query="))
-                .and_then(|p| p.strip_prefix("query="))
-                .unwrap_or("");
-
-            let symbols = state.graph_store.find_symbols_by_name(q).unwrap_or_default();
-            let json = serde_json::to_string(&symbols).unwrap_or_default();
-            let mut res = Response::from_string(json);
-            res.add_header(Header::from_bytes(&b"Content-Type"[..], &b"application/json"[..]).unwrap());
-            let _ = request.respond(res);
-            continue;
-        }
-
         // Fallback 404
         let _ = request.respond(Response::from_string("Not Found").with_status_code(404));
     }

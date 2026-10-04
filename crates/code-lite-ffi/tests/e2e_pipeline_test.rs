@@ -1,8 +1,8 @@
 //! End-to-End Integration Test Pipeline
 //!
 //! Tests cross-layer integration from external caller perspective:
-//! Workspace Init -> file.open (RPC) -> file.edit (RPC) -> lsp.diagnostics (RPC) -> Cleanup.
-//! (Git 已迁到 Dart 的 GitService,不再经过 Rust。)
+//! Workspace Init -> file.open (RPC) -> file.edit (RPC) -> file.undo / file.redo (RPC) -> Cleanup.
+//! (Git 已迁到 Dart 的 GitService,LSP 已迁到 Flutter 侧,都不再经过 Rust。)
 
 use codelite::*;
 use serde_json::Value;
@@ -17,7 +17,7 @@ unsafe fn c_to_str(ptr: *const std::ffi::c_char) -> String {
 }
 
 #[test]
-fn test_e2e_workspace_edit_lsp_pipeline() {
+fn test_e2e_workspace_edit_undo_pipeline() {
     unsafe {
         // 1. Setup isolated temporary workspace
         let temp_dir = std::env::temp_dir().join(format!("codelite-e2e-{}", uuid::Uuid::new_v4()));
@@ -61,16 +61,37 @@ fn test_e2e_workspace_edit_lsp_pipeline() {
         assert_eq!(edit_val["id"], 2);
         assert_eq!(edit_val["result"]["success"], true);
 
-        // 5. Step 3: lsp.diagnostics via JSON-RPC
-        let diag_req = CString::new(
-            r#"{"jsonrpc":"2.0","id":3,"method":"lsp.diagnostics","params":{"path":"src/main.rs"}}"#,
+        // 5. Step 3: file.undo via JSON-RPC -> 撤掉插入的注释
+        // (撤销按换行分组,单次 undo 只回退注释那一组,不断言整段还原)
+        let undo_req = CString::new(
+            r#"{"jsonrpc":"2.0","id":3,"method":"file.undo","params":{"path":"src/main.rs"}}"#,
         )
         .unwrap();
-        let diag_resp = codelite_jsonrpc_call(ctx, diag_req.as_ptr());
-        let diag_str = c_to_str(diag_resp);
-        let diag_val: Value = serde_json::from_str(&diag_str).expect("Valid JSON response");
-        assert_eq!(diag_val["id"], 3);
-        assert!(diag_val["result"]["diagnostics"].is_array());
+        let undo_str = c_to_str(codelite_jsonrpc_call(ctx, undo_req.as_ptr()));
+        let undo_val: Value = serde_json::from_str(&undo_str).expect("Valid JSON response");
+        assert_eq!(undo_val["id"], 3);
+        assert_eq!(undo_val["result"]["success"], true);
+        assert!(!undo_val["result"]["content"]
+            .as_str()
+            .unwrap()
+            .contains("// Optimized computation"));
+
+        // 6. Step 4: file.redo via JSON-RPC -> 编辑重新生效
+        let redo_req = CString::new(
+            r#"{"jsonrpc":"2.0","id":4,"method":"file.redo","params":{"path":"src/main.rs"}}"#,
+        )
+        .unwrap();
+        let redo_str = c_to_str(codelite_jsonrpc_call(ctx, redo_req.as_ptr()));
+        let redo_val: Value = serde_json::from_str(&redo_str).expect("Valid JSON response");
+        assert_eq!(redo_val["id"], 4);
+        assert_eq!(redo_val["result"]["success"], true);
+        assert!(redo_val["result"]["content"]
+            .as_str()
+            .unwrap()
+            .contains("// Optimized computation"));
+
+        // Rust 侧已无本地数据库,init 不应再在工作区里留下 .codelite/
+        assert!(!temp_dir.join(".codelite").exists());
 
         // 7. Teardown
         codelite_destroy(ctx);

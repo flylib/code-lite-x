@@ -89,7 +89,22 @@ class CodeEditorController extends ChangeNotifier {
   // IME composing range (if active)
   TextRange _composingRange = TextRange.empty;
 
+  /// 会话层(同步 Rust buffer、通知 LSP)用的回调。视图层不要覆盖它,改用 [addTextListener]。
   void Function(String newText)? onTextChanged;
+  final List<void Function(String newText)> _textListeners = [];
+
+  /// 额外的文本变化监听。此前视图层直接赋值 [onTextChanged],把会话层的回调顶掉了,
+  /// 编辑内容因此没同步给 Rust(保存会写回旧内容),LSP 也收不到 didChange。
+  void addTextListener(void Function(String newText) listener) => _textListeners.add(listener);
+
+  void removeTextListener(void Function(String newText) listener) => _textListeners.remove(listener);
+
+  void _emitTextChanged() {
+    onTextChanged?.call(_text);
+    for (final l in List.of(_textListeners)) {
+      l(_text);
+    }
+  }
   void Function(EditorPosition pos)? onCursorChanged;
   void Function(bool isDirty)? onDirtyChanged;
 
@@ -218,7 +233,7 @@ class CodeEditorController extends ChangeNotifier {
     _preferredCol = newPos.col;
     _markDirty();
 
-    onTextChanged?.call(_text);
+    _emitTextChanged();
     onCursorChanged?.call(newPos);
     _resetBlink();
     notifyListeners();
@@ -256,7 +271,7 @@ class CodeEditorController extends ChangeNotifier {
     }
 
     _markDirty();
-    onTextChanged?.call(_text);
+    _emitTextChanged();
     onCursorChanged?.call(_selection.head);
     _resetBlink();
     notifyListeners();
@@ -287,7 +302,7 @@ class CodeEditorController extends ChangeNotifier {
     }
 
     _markDirty();
-    onTextChanged?.call(_text);
+    _emitTextChanged();
     _resetBlink();
     notifyListeners();
   }
@@ -305,7 +320,7 @@ class CodeEditorController extends ChangeNotifier {
     _preferredCol = start.col;
 
     _markDirty();
-    onTextChanged?.call(_text);
+    _emitTextChanged();
     onCursorChanged?.call(start);
     _resetBlink();
     notifyListeners();
@@ -342,7 +357,7 @@ class CodeEditorController extends ChangeNotifier {
     _preferredCol = newPos.col;
 
     _markDirty();
-    onTextChanged?.call(_text);
+    _emitTextChanged();
     onCursorChanged?.call(newPos);
     _resetBlink();
     notifyListeners();
@@ -363,7 +378,7 @@ class CodeEditorController extends ChangeNotifier {
         head: EditorPosition(endLine, _selection.head.col + 4),
       );
       _markDirty();
-      onTextChanged?.call(_text);
+      _emitTextChanged();
       notifyListeners();
     } else {
       insertText('    ');
@@ -394,7 +409,7 @@ class CodeEditorController extends ChangeNotifier {
       _text = _lines.join('\n');
       _selection = EditorSelection.collapsed(_clampPosition(_selection.head));
       _markDirty();
-      onTextChanged?.call(_text);
+      _emitTextChanged();
       notifyListeners();
     }
   }

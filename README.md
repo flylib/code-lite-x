@@ -2,7 +2,7 @@
 
 A modern, high-performance code editor with built-in Git management, built in Rust.
 
-`CodeLiteX` integrates a low-latency text editing core, Git management (status / stage / commit / diff / log), a structural code knowledge graph (**CodeGraph**, persisted in **SQLite**), standard Language Server Protocol (**LSP**), workspace search & replace, and an embedded **PTY terminal**.
+`CodeLiteX` integrates a low-latency text editing core, Git management (status / stage / commit / diff / log), Language Server Protocol (**LSP**) support, workspace search & replace, and an embedded **PTY terminal**.
 
 ---
 
@@ -13,14 +13,10 @@ A modern, high-performance code editor with built-in Git management, built in Ru
                    │               CodeLiteX              │
                    └──────────────────┬───────────────────┘
                                       │
-       ┌──────────────┬───────────────┼───────────────┬──────────────┐
-       ▼              ▼               ▼               ▼              ▼
-  Editor Core        Git           CodeGraph          LSP          Terminal
- (Ropey/Cursors) (Status/Log/Diff) (AST/Call Graph) (Diagnostics)   (PTY Shell)
-                                      │
-                                      ▼
-                                SQLite (WAL)
-                        (Symbols / Diagnostics Index)
+       ┌──────────────┬───────────────┼───────────────┐
+       ▼              ▼               ▼               ▼
+  Editor Core        Git             LSP          Terminal
+ (Ropey/Cursors) (Status/Log/Diff) (Diagnostics)   (PTY Shell)
 ```
 
 ### Core Crates
@@ -32,19 +28,15 @@ A modern, high-performance code editor with built-in Git management, built in Ru
   - Transactional `UndoManager` supporting atomic batch edits, redo, and cursor state restoration.
   - High-level `Editor` orchestrator.
 
-- **`code-lite-storage`**: Embedded SQLite database (`rusqlite` with WAL mode).
-  - CodeGraph persistent relations: `files`, `symbols`, `symbol_references`, `call_graph`, `import_graph`, resumable `index_jobs`.
-  - LSP `diagnostics` cache.
-
 - **Git** lives in the Flutter app (`apps/code_lite_ui/lib/core/git/git_service.dart`): a pure Dart wrapper over the system `git` CLI — status, stage/unstage, commit, diff hunks, log/graph and history rewriting. The Rust core is being migrated to Dart module by module; Git was first.
+
+- **LSP and file outline** live in the Flutter app (`apps/code_lite_ui/lib/core/lsp/`). The Rust core has no LSP client, code graph or local database.
 
 - **`code-lite-fs`**: File system and updater.
   - Fast directory tree traversal with ignore rules (`.git`, `target`, `node_modules`, `.codelite`).
   - Multi-threaded / regex workspace search & replace.
   - Cross-platform differential auto-updater.
 
-- **`code-lite-graph`**: Incremental AST parsing, stable `SymbolKey`, outline / definitions / references / callers / callees.
-- **`code-lite-lsp`**: LSP protocol client, process supervisor and built-in virtual LSP server.
 - **`code-lite-terminal`**: PTY-backed interactive terminal sessions.
 - **`code-lite-rpc`**: Shared JSON-RPC 2.0 protocol models and framing.
 - **`code-lite-ffi`**: C-ABI dynamic library (`libcodelite`) consumed by the Flutter desktop UI.

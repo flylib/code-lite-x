@@ -119,9 +119,6 @@ pub const INDEX_HTML: &str = r#"<!DOCTYPE html>
           <button id="btn-stripe-project" onclick="switchLeftTab('project')" class="w-8 h-8 rounded-lg flex items-center justify-center text-[#dfe1e5] stripe-btn-active" title="Project">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
           </button>
-          <button id="btn-stripe-graph" onclick="switchLeftTab('graph')" class="w-8 h-8 rounded-lg flex items-center justify-center text-[var(--ij-text-muted)] hover:text-[#dfe1e5]" title="CodeGraph">
-            <svg class="w-4 h-4 text-[#c886e5]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"/></svg>
-          </button>
         </div>
         <div>
           <button onclick="switchBottomTab('terminal')" class="w-8 h-8 rounded-lg flex items-center justify-center text-[var(--ij-text-muted)] hover:text-[#dfe1e5]" title="Terminal">
@@ -162,33 +159,21 @@ pub const INDEX_HTML: &str = r#"<!DOCTYPE html>
           </div>
         </div>
 
-        <!-- Bottom Tool Window (CodeGraph, Terminal) -->
+        <!-- Bottom Tool Window (Terminal) -->
         <section class="h-56 bg-[var(--ij-bg-panel)] border-t border-[var(--ij-border-subtle)] flex flex-col shrink-0">
           <div class="h-7 bg-[#232428] border-b border-[var(--ij-border-subtle)] flex items-center justify-between px-2 text-xs">
             <div class="flex items-center space-x-1">
-              <button id="btab-graph" onclick="switchBottomTab('graph')" class="px-3 py-0.5 font-semibold text-[#dfe1e5] bg-[var(--ij-bg-panel)] rounded-t border-t-2 border-[var(--ij-accent-blue)]">
-                CodeGraph Symbols
-              </button>
-              <button id="btab-terminal" onclick="switchBottomTab('terminal')" class="px-3 py-0.5 font-medium text-[var(--ij-text-muted)] hover:text-[#dfe1e5]">
+              <button id="btab-terminal" onclick="switchBottomTab('terminal')" class="px-3 py-0.5 font-semibold text-[#dfe1e5] bg-[var(--ij-bg-panel)] rounded-t border-t-2 border-[var(--ij-accent-blue)]">
                 Terminal Log
               </button>
             </div>
           </div>
 
-          <!-- CodeGraph Content -->
-          <div id="bview-graph" class="flex-1 p-2 overflow-y-auto text-xs space-y-1">
-            <div class="flex items-center justify-between mb-1">
-              <span class="text-[var(--ij-text-muted)]">CodeGraph AST Symbols (Indexed from Rust Source)</span>
-              <button onclick="loadSymbols()" class="text-[#3574f0] text-[11px] hover:underline">Reload</button>
-            </div>
-            <div id="symbols-list" class="grid grid-cols-2 md:grid-cols-3 gap-1"></div>
-          </div>
-
           <!-- Terminal Content -->
-          <div id="bview-terminal" class="hidden flex-1 p-2 bg-[#1e1f22] text-xs code-font overflow-y-auto text-[#bcbec4]">
+          <div id="bview-terminal" class="flex-1 p-2 bg-[#1e1f22] text-xs code-font overflow-y-auto text-[#bcbec4]">
             <div class="text-[#59a869]">CodeLiteX Embedded Server Active</div>
             <div class="text-[var(--ij-text-muted)]">Listening on http://127.0.0.1:4096</div>
-            <div class="text-[#dfe1e5] mt-1">Rust Core: code-lite-core (Ropey + Multi-cursor) | SQLite: project.db (WAL Mode)</div>
+            <div class="text-[#dfe1e5] mt-1">Rust Core: code-lite-core (Ropey + Multi-cursor)</div>
           </div>
         </section>
       </main>
@@ -198,8 +183,6 @@ pub const INDEX_HTML: &str = r#"<!DOCTYPE html>
     <footer class="h-5 bg-[#1e1f22] border-t border-[var(--ij-border-subtle)] flex items-center justify-between px-3 text-[10px] text-[var(--ij-text-muted)] shrink-0">
       <div class="flex items-center space-x-2">
         <span class="text-[#59a869]">● Connected</span>
-        <span>•</span>
-        <span>SQLite WAL: Active</span>
       </div>
       <div class="flex items-center space-x-2">
         <span id="status-cursor">Line: 1, Col: 1</span>
@@ -211,15 +194,11 @@ pub const INDEX_HTML: &str = r#"<!DOCTYPE html>
 
   <script>
     let activeFile = 'crates/code-lite-core/src/buffer.rs';
-    let openTabs = [
-      'crates/code-lite-core/src/buffer.rs',
-      'crates/code-lite-storage/src/graph_store.rs'
-    ];
+    let openTabs = ['crates/code-lite-core/src/buffer.rs'];
 
     async function init() {
       await loadWorkspace();
       await openFile(activeFile);
-      await loadSymbols();
       setupEditorListeners();
     }
 
@@ -342,22 +321,8 @@ pub const INDEX_HTML: &str = r#"<!DOCTYPE html>
       } catch (e) { console.error(e); }
     }
 
-    async function loadSymbols() {
-      try {
-        const res = await fetch('/api/graph/symbols?query=');
-        const symbols = await res.json();
-        const list = document.getElementById('symbols-list');
-        list.innerHTML = symbols.slice(0, 18).map(s => `
-          <div class="p-1 bg-[#1e1f22] rounded border border-[#393b40] text-[11px] truncate">
-            <span class="text-[#c886e5] font-semibold">${s.kind}</span>
-            <span class="text-[#dfe1e5] ml-1">${s.name}</span>
-          </div>
-        `).join('');
-      } catch (e) { console.error(e); }
-    }
-
     function switchBottomTab(tab) {
-      ['graph', 'terminal'].forEach(t => {
+      ['terminal'].forEach(t => {
         document.getElementById('bview-' + t).classList.add('hidden');
         document.getElementById('btab-' + t).className = 'px-3 py-0.5 font-medium text-[var(--ij-text-muted)] hover:text-[#dfe1e5]';
       });

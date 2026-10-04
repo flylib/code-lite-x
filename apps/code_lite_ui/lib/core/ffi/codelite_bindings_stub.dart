@@ -20,45 +20,13 @@ class CodeLiteBindings {
 
   Map<String, dynamic> editFile(String relPath, Map<String, dynamic> editPayload) => {};
 
-  List<dynamic> fetchSymbols([String query = '']) => [];
-
-  List<dynamic> findCallees(String query) => [];
-
-  List<dynamic> findCallers(String query) => [];
-
-  List<dynamic> findDefinition(String query) => [];
-
-  List<dynamic> findReferences(String query) => [];
-
-  Map<String, dynamic> getCodeContext(String query) => {};
-
   Map<String, dynamic> getViewportTokens(String filePath, int startLine, int endLine) => {'status': 'error', 'lines': []};
-
-  Map<String, dynamic> indexFile(String relPath) => {};
 
   bool initialize([String workspacePath = '.']) => false;
 
   bool reinitialize(String workspacePath) => false;
 
-  List<dynamic> lspCompletion(String filePath, int line, int col) => [];
-
-  List<dynamic> lspDidChange(String filePath, int version, String content) => [];
-
-  List<dynamic> lspDidOpen(String filePath, String language, String content) => [];
-
-  List<dynamic> lspFindReferences(String filePath, int line, int col, {bool includeDecl = true}) => [];
-
-  List<dynamic> lspGetDiagnostics(String filePath) => [];
-
-  List<dynamic> lspGotoDefinition(String filePath, int line, int col) => [];
-
-  Map<String, dynamic>? lspHover(String filePath, int line, int col) => null;
-
-  Map<String, dynamic>? lspRename(String filePath, int line, int col, String newName) => null;
-
   Map<String, dynamic> openFile(String relPath) => {};
-
-  List<dynamic> queryOutline(String relPath) => [];
 
   Map<String, dynamic> redo(String relPath) => {};
 

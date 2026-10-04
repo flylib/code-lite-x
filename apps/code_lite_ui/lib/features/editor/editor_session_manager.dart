@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import '../../core/client/api_client.dart';
+import '../../core/lsp/lsp.dart';
 import 'code_editor_controller.dart';
 import 'lsp_overlay.dart';
 
@@ -48,7 +51,49 @@ class EditorSessionManager extends ChangeNotifier {
   String? _secondaryActivePath;
   SplitDirection _splitDirection = SplitDirection.none;
 
-  EditorSessionManager({required this.client});
+  EditorSessionManager({required this.client}) {
+    _diagSub = client.lspDiagnostics.listen(_onDiagnostics);
+  }
+
+  StreamSubscription<LspDiagnosticsEvent>? _diagSub;
+  final Map<String, Timer> _didChangeTimers = {};
+
+  /// 诊断来得比标签页早(打开文件后服务器很快推送)时先存在这里,建标签时取用。
+  final Map<String, List<EditorDiagnostic>> _pendingDiagnostics = {};
+
+  /// 诊断变了就加一:状态栏和大纲只订阅这个,不随每次按键的会话通知重建。
+  final ValueNotifier<int> diagnosticsRevision = ValueNotifier(0);
+
+  /// 最近一次收到诊断的文件(大纲据此决定要不要刷新)。
+  String? lastDiagnosticsPath;
+
+  void _onDiagnostics(LspDiagnosticsEvent event) {
+    final diags = [for (final d in event.diagnostics) EditorDiagnostic.fromJson(d)];
+    final tab = _tabs[event.path];
+    if (tab == null) {
+      _pendingDiagnostics[event.path] = diags;
+      return;
+    }
+    tab.diagnostics = diags;
+    lastDiagnosticsPath = event.path;
+    diagnosticsRevision.value++;
+    notifyListeners();
+  }
+
+  /// 编辑停顿 300ms 再把全文发给语言服务器,避免每个按键都触发一次分析。
+  void _scheduleDidChange(String path, String text) {
+    _didChangeTimers[path]?.cancel();
+    _didChangeTimers[path] = Timer(const Duration(milliseconds: 300), () {
+      _didChangeTimers.remove(path);
+      client.lspDidChange(path, text);
+    });
+  }
+
+  void _closeDocument(String path) {
+    _didChangeTimers.remove(path)?.cancel();
+    _pendingDiagnostics.remove(path);
+    client.lspDidClose(path);
+  }
 
   Map<String, EditorTabState> get tabs => Map.unmodifiable(_tabs);
   List<String> get openPaths => List.unmodifiable(_tabOrder);
@@ -122,15 +167,13 @@ class EditorSessionManager extends ChangeNotifier {
     final rawContent = fileRes['content'] as String?;
     final isFallback = rawContent == null || rawContent.startsWith('// CodeLiteX:');
     final content = (!isFallback ? rawContent : (defaultContent ?? rawContent ?? ''));
-    final lang = path.endsWith('.dart') ? 'dart' : 'rust';
-    final rawDiags = await client.lspDidOpen(path, lang, content);
-    final diags = rawDiags.map((d) => EditorDiagnostic.fromJson(d as Map<String, dynamic>)).toList();
-
+    // 诊断由语言服务器异步推送(见 _onDiagnostics),这里不等。
     final tab = EditorTabState(
       filePath: path,
       initialContent: content,
-      diagnostics: diags,
+      diagnostics: _pendingDiagnostics.remove(path) ?? const [],
     );
+    client.lspDidOpen(path, content);
 
     // Wire controller callbacks to client & UI
     tab.controller.onTextChanged = (newText) {
@@ -138,6 +181,7 @@ class EditorSessionManager extends ChangeNotifier {
         'type': 'replace_all',
         'text': newText,
       });
+      _scheduleDidChange(path, newText);
       notifyListeners();
     };
 
@@ -173,6 +217,7 @@ class EditorSessionManager extends ChangeNotifier {
 
     final tab = _tabs.remove(path);
     _tabOrder.remove(path);
+    _closeDocument(path);
     tab?.dispose();
 
     if (_activePath == path) {
@@ -193,6 +238,9 @@ class EditorSessionManager extends ChangeNotifier {
 
   /// 丢弃全部标签(切换/关闭项目)。未保存的修改一并丢弃,调用方先确认。
   void closeAll() {
+    for (final path in _tabs.keys) {
+      _closeDocument(path);
+    }
     for (final tab in _tabs.values) {
       tab.dispose();
     }
@@ -262,6 +310,11 @@ class EditorSessionManager extends ChangeNotifier {
 
   @override
   void dispose() {
+    _diagSub?.cancel();
+    for (final t in _didChangeTimers.values) {
+      t.cancel();
+    }
+    diagnosticsRevision.dispose();
     for (final tab in _tabs.values) {
       tab.dispose();
     }

@@ -20,47 +20,6 @@ void main() {
         expect(fileRes['status'], equals('ok'));
         expect((fileRes['content'] as String).contains('code_lite_ui'), isTrue);
 
-        final symbols = ffi.fetchSymbols();
-        expect(symbols, isA<List>());
-
-        // Test Phase 1 CodeGraph bindings
-        final indexRes = ffi.indexFile('lib/main.dart');
-        expect(indexRes['status'], equals('ok'));
-
-        final outline = ffi.queryOutline('lib/main.dart');
-        expect(outline, isA<List>());
-        expect(outline.isNotEmpty, isTrue);
-
-        final defs = ffi.findDefinition('main');
-        expect(defs, isA<List>());
-
-        final ctx = ffi.getCodeContext('main');
-        expect(ctx.containsKey('symbol_key'), isTrue);
-        expect(ctx['name'], equals('main'));
-
-        final callers = ffi.findCallers('main');
-        expect(callers, isA<List>());
-
-        // Test Phase 2 LSP bindings (P2.1 - P2.6)
-        const sampleCode = 'pub fn add(a: i32, b: i32) -> i32 { a + b }\nfn test() { let r = add(1, 2); }';
-        final lspDiags = ffi.lspDidOpen('src/math.rs', 'rust', sampleCode);
-        expect(lspDiags, isA<List>());
-
-        final lspDef = ffi.lspGotoDefinition('src/math.rs', 1, 23);
-        expect(lspDef, isA<List>());
-
-        final lspRefs = ffi.lspFindReferences('src/math.rs', 0, 8);
-        expect(lspRefs, isA<List>());
-
-        final lspHover = ffi.lspHover('src/math.rs', 0, 8);
-        expect(lspHover, isNotNull);
-
-        final lspComps = ffi.lspCompletion('src/math.rs', 1, 20);
-        expect(lspComps, isA<List>());
-
-        final lspRename = ffi.lspRename('src/math.rs', 0, 8, 'sum');
-        expect(lspRename, isNotNull);
-
         // Test Phase 4 Viewport Tokens, Search & Terminal
         final tokens = ffi.getViewportTokens('pubspec.yaml', 0, 10);
         expect(tokens['status'], equals('ok'));
@@ -129,13 +88,6 @@ void main() {
 
       final file = await client.fetchFile('Cargo.toml');
       expect(file.containsKey('content'), isTrue);
-
-      // Test ApiClient LSP methods
-      final diags = await client.lspGetDiagnostics('src/math.rs');
-      expect(diags, isA<List>());
-
-      final completions = await client.lspCompletion('src/math.rs', 0, 0);
-      expect(completions, isA<List>());
 
       // Test ApiClient Phase 4 methods
       final vp = await client.getViewportTokens('pubspec.yaml', 0, 5);

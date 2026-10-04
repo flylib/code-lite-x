@@ -71,6 +71,7 @@ class _CodeLiteAppState extends State<CodeLiteApp> {
     _workspace.removeListener(_onWorkspaceChanged);
     _gitLog.dispose();
     _terminals.dispose();
+    _client.dispose(); // 关掉语言服务器进程
     _layout.dispose();
     _workspace.dispose();
     _sessions.dispose();

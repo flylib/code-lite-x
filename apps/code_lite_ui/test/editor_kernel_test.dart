@@ -177,7 +177,7 @@ void main() {
 
   group('EditorSessionManager Multi-Tab Independence Tests', () {
     test('Maintains separate buffer, cursor, and scroll state per tab', () async {
-      final client = ApiClient();
+      final client = _NoLspClient();
       final session = EditorSessionManager(client: client);
 
       // Open tab 1
@@ -261,7 +261,7 @@ void main() {
 
   group('Phase 8.3: Tab Reorder & Split Pane Tests', () {
     test('EditorSessionManager reorders tabs', () async {
-      final client = ApiClient();
+      final client = _NoLspClient();
       final session = EditorSessionManager(client: client);
 
       await session.openFile('a.rs', defaultContent: 'a');
@@ -282,7 +282,7 @@ void main() {
     });
 
     test('EditorSessionManager split pane horizontal and vertical workflow', () async {
-      final client = ApiClient();
+      final client = _NoLspClient();
       final session = EditorSessionManager(client: client);
 
       await session.openFile('main.rs', defaultContent: 'fn main() {}');
@@ -314,7 +314,7 @@ void main() {
     });
 
     test('EditorSessionManager dirty check on closeTab', () async {
-      final client = ApiClient();
+      final client = _NoLspClient();
       final session = EditorSessionManager(client: client);
 
       final tab = await session.openFile('test.rs', defaultContent: 'initial');
@@ -342,7 +342,7 @@ void main() {
       await tester.binding.setSurfaceSize(const Size(1200, 800));
       addTearDown(() => tester.binding.setSurfaceSize(null));
 
-      final client = ApiClient();
+      final client = _NoLspClient();
       final session = EditorSessionManager(client: client);
       await session.openFile('primary.rs', defaultContent: 'fn primary() {}');
       await session.openFile('secondary.rs', defaultContent: 'fn secondary() {}');
@@ -487,7 +487,7 @@ void main() {
 }
 
 /// gutter 测试用:直接给出 diff hunks,不依赖真实 git 仓库。
-class _GutterClient extends ApiClient {
+class _GutterClient extends _NoLspClient {
   @override
   Future<List<Map<String, dynamic>>> gitFileDiffHunks(String filePath) async => [
         {'line': 2, 'kind': 'added', 'new_content': '    let op = self.get(op_id)?;'},
@@ -498,4 +498,19 @@ class _GutterClient extends ApiClient {
 
   @override
   Future<Map<String, dynamic>> gitRevertFile(String filePath) async => {'status': 'ok'};
+}
+
+/// 编辑器 widget 测试不该拉起真实的语言服务器(进程与超时计时器会挂在测试的假时钟上)。
+class _NoLspClient extends ApiClient {
+  @override
+  Future<void> lspDidOpen(String path, String text) async {}
+
+  @override
+  Future<void> lspDidChange(String path, String text) async {}
+
+  @override
+  Future<void> lspDidClose(String path) async {}
+
+  @override
+  Future<List<Map<String, dynamic>>> documentSymbols(String path, String text) async => const [];
 }

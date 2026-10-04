@@ -8,15 +8,14 @@ No previous sessions found.
 
 # CodeLiteX (Code Editor + Git Management IDE)
 
-CodeLiteX 是一款高性能的原生跨平台代码编辑器，内置 Git 管理，并提供代码图谱（CodeGraph）、LSP、全局搜索、交互终端与自动更新能力。
+CodeLiteX 是一款高性能的原生跨平台代码编辑器，内置 Git 管理，并提供全局搜索、交互终端与自动更新能力；LSP 与文件大纲（outline）在 Flutter 侧实现（`apps/code_lite_ui/lib/core/lsp/`）。
 工作空间根目录 `/Users/dev/rust/code-lite-x/` 下包含 Rust Core 原生能力层与 Flutter 桌面端交互层：
 
 | 模块 / 目录 | 角色 | 技术栈 | 交付产物 | 架构定位 |
 | :--- | :--- | :--- | :--- | :--- |
-| `crates/` | Rust Core 核心引擎 | Rust 2021 (Ropey, Tree-sitter/Syn, Rusqlite, Parking Lot) | `libcodelite.dylib` (7.0M), `code-lite-app` (2.9M) | 视口虚拟化、CodeGraph、LSP、PTY 终端、自动更新、SQLite(正逐模块迁到 Dart:Git、文件树、全局搜索已迁完) |
+| `crates/` | Rust Core 核心引擎 | Rust 2021 (Ropey, Parking Lot, portable-pty) | `libcodelite.dylib` (7.0M), `code-lite-app` (2.9M) | 视口虚拟化、PTY 终端、自动更新(正逐模块迁到 Dart:Git、文件树、全局搜索、LSP 已迁完;无本地数据库) |
 | `apps/code_lite_ui/` | 桌面端图形界面 | Flutter 3.35+ (Dart 3.9) + FFI | macOS / Linux / Windows 桌面 GUI | IntelliJ Darcula 风格编辑器、Git 操作台、全局搜索模态框、交互终端 |
 | `scripts/` | 构建与原生打包 | Bash + cargo + flutter CLI + install_name_tool | `CodeLiteX.app` / `dist/release/macos/` | 自动化独立发布构建、动态库嵌入与 rpath/代码签名修复 |
-| `.codelite/` | 本地索引存储 | SQLite 3 (`workspace.db`) | SQLite WAL 数据库文件 | 存储 CodeGraph 符号图谱与 LSP 诊断缓存 |
 
 > [!NOTE]
 > - **严格的 FFI 隔离**：Flutter UI 与 Rust Core 之间**仅通过 C-ABI FFI 动态链接库通信**。UI 层严禁直接引入 Rust 原生源码，统一通过 `ApiClient` → `CodeLiteBindings` 访问底层能力。
@@ -36,20 +35,15 @@ CodeLiteX 是一款高性能的原生跨平台代码编辑器，内置 Git 管�
      export PATH="$HOME/.cargo/bin:$PATH" && cargo <cmd> --offline
      ```
    - 严禁擅自引入未经本地离线验证的重型外部 crate，保证工作区在断网环境下 100% 可编译、可运行、可测试。
-3. **SymbolKey 稳定哈希标识准则**：
-   - 严禁依赖 SQLite 的自增主键 `symbols.id = AUTOINCREMENT` 作为全局引用标识；
-   - 所有符号必须基于确定性算法生成稳定键：
-     $$\text{symbol\_key} = \text{hash}(\text{workspace\_id} + \text{file\_path} + \text{language} + \text{kind} + \text{fully\_qualified\_name})$$
-   - 文件增量更新时，仅按 `symbol_key` 精确重建受影响的 AST 子树与 Call Graph。
-4. **UI 视觉与防御性布局规范**：
+3. **UI 视觉与防御性布局规范**：
    - 遵循 IntelliJ IDEA Darcula 工业级暗色主题规范（`IntelliJTheme`）；
    - 在任何嵌套 `Row` 或面板标题区域，文本标签**必须使用 `Expanded`/`Flexible` 包裹并设置 `overflow: TextOverflow.ellipsis`**，避免因屏幕缩放或视口收窄触发 RenderFlex 溢出；
    - 图标按钮优先使用轻量 `InkWell` 或 ShrinkWrap 约束，严禁出现默认 48px 强制触控区域挤占紧凑桌面布局。
-5. **配置与敏感信息红线**：
+4. **配置与敏感信息红线**：
    严禁将以下信息提交至 Git：
    - 第三方服务 API Key / Token
    - 私钥、证书与生产环境凭证
-   - 本地临时数据库 `.codelite/*.db*` 及构建产物 `target/`, `dist/`
+   - 旧版本遗留的本地数据库 `.codelite/*.db*` 及构建产物 `target/`, `dist/`
 
 ---
 
@@ -75,10 +69,7 @@ bash scripts/build_macos_release.sh
 # 针对特定 crate 运行测试
 cargo test --offline -p code-lite-core       # 视口虚拟化 Tokenizer、Buffer、Cursor
 cargo test --offline -p code-lite-fs         # 自动更新(tree/search 仅剩守护进程在用,App 已改用 Dart 实现)
-cargo test --offline -p code-lite-graph      # 增量 AST 解析、稳定 SymbolKey、上下文提取
-cargo test --offline -p code-lite-lsp        # 原生 LSP 协议、虚拟服务端工作流
 cargo test --offline -p code-lite-rpc        # 共享 JSON-RPC 2.0 协议、Framing、Correlation
-cargo test --offline -p code-lite-storage    # SQLite 符号图谱与诊断持久化
 cargo test --offline -p code-lite-terminal   # PTY 交互终端会话
 cargo test --offline -p code-lite-ffi        # C-ABI 导出、JSON-RPC 路由与集成测试
 
@@ -106,11 +97,12 @@ cargo build --release --offline -p code-lite-app
 * `lib/core/ffi/`：底层动态链接库封装（`codelite_bindings.dart`），负责指针内存安全编解码（`_toCString` / `_fromCString`）；
 * `lib/core/fs/`：纯 Dart 工作区文件树扫描与全局搜索/替换（`workspace_fs.dart`），在后台 Isolate 中执行；
 * `lib/core/git/`：纯 Dart Git 引擎（`git_service.dart`），通过 `Process.run` 调用系统 `git` 命令行；Git 不再经过 Rust FFI；
+* `lib/core/lsp/`：Dart 实现的 LSP 客户端与文件大纲（outline）；Rust 侧不再有 LSP / 代码图谱；
 * `lib/core/client/`：高层业务客户端（`api_client.dart`），封装异步 Future/Stream，并在 FFI 动态库未加载时无缝回退至离线 Mock 逻辑；
 * `lib/core/theme/`：全局主题与样式（`intellij_theme.dart`），锁定 JetBrains Darcula 经典配比；
 * `lib/features/editor/`：代码编辑器区域，集成百万行视口虚拟化语法 Token 渲染与多光标编辑；
 * `lib/features/tree/`：左侧工作区文件树（`project_explorer.dart`）；
-* `lib/features/bottom_tools/`：底部工具箱（`bottom_tools_widget.dart`），整合真实 Git 分支控制台、CodeGraph 浏览器与交互终端；
+* `lib/features/bottom_tools/`：底部工具箱（`bottom_tools_widget.dart`），整合真实 Git 分支控制台与交互终端；
 * `lib/features/search/`：全局搜索模态框（`global_search_modal.dart`，支持 `Cmd+Shift+F` 快速唤起）。
 
 ### 状态流转与交互规范
@@ -126,9 +118,6 @@ cargo build --release --offline -p code-lite-app
 ```
 crates/
  ├── code-lite-core      # 编辑器基础数据结构：Piece Table / Buffer、Cursor、视口行 Tokenizer
- ├── code-lite-storage   # SQLite 存储基座：files、symbols、call_graph、import_graph、index_jobs、diagnostics
- ├── code-lite-graph     # 代码图谱：AST 增量解析、稳定 SymbolKey、引用追踪、调用链与符号上下文
- ├── code-lite-lsp       # 原生 LSP 协议解析、JSON-RPC Transport、Virtual LSP Server
  ├── code-lite-rpc       # 共享 JSON-RPC 2.0 传输层：协议模型、Framing 与 Request 关联
  ├── code-lite-fs        # 自动更新;工作区扫描/搜索仅供守护进程使用,随守护进程一起退役
  ├── code-lite-terminal  # PTY 交互终端会话管理

@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../fs/workspace_fs.dart' as fs;
 import '../git/git.dart';
+import '../lsp/lsp.dart';
 // web 没有 dart:ffi —— 条件导入让 web 拿到桩(isAvailable 恒 false),
 // 原生拿到真实的 FFI 绑定。两者类名与签名一致。
 import '../ffi/codelite_bindings_stub.dart'
@@ -14,14 +16,19 @@ class ApiClient {
   final String baseUrl;
   final CodeLiteBindings _ffi = CodeLiteBindings.instance;
 
-  /// 当前工作区根目录与它的 Git;切换项目时随 [openWorkspace] 一起更新。
+  /// 当前工作区根目录,以及挂在它上面的 Git 与语言服务器;切换项目时随 [openWorkspace] 一起更新。
   String _root;
   GitService _git;
+  LspService _lsp;
+  StreamSubscription<LspDiagnosticsEvent>? _lspSub;
+  final StreamController<LspDiagnosticsEvent> _lspEvents = StreamController.broadcast();
 
   ApiClient({this.baseUrl = 'http://127.0.0.1:4096', String initialRoot = '.'})
       : _root = initialRoot,
-        _git = GitService(initialRoot) {
+        _git = GitService(initialRoot),
+        _lsp = LspService(initialRoot) {
     _ffi.initialize(initialRoot);
+    _attachLsp();
   }
 
   bool get isFfiAvailable => _ffi.isAvailable;
@@ -30,6 +37,11 @@ class ApiClient {
   bool openWorkspace(String path) {
     _root = path;
     _git = GitService(path);
+    // 旧项目的语言服务器在后台关掉,不阻塞切换。
+    final oldLsp = _lsp;
+    _lsp = LspService(path);
+    _attachLsp();
+    oldLsp.dispose();
     return _ffi.reinitialize(path);
   }
 
@@ -144,150 +156,35 @@ class ApiClient {
     return {'status': 'ok', 'line': line, 'col': col};
   }
 
-  /// Searches symbols in SQLite CodeGraph.
-  Future<List<dynamic>> fetchSymbols([String query = '']) async {
-    if (_ffi.isAvailable) {
-      final res = _ffi.fetchSymbols(query);
-      if (res.isNotEmpty) return res;
-    }
-
-    try {
-      final uri = Uri.parse('$baseUrl/api/graph/symbols').replace(
-        queryParameters: {'query': query},
-      );
-      final response = await http.get(uri);
-      if (response.statusCode == 200) {
-        return jsonDecode(response.body) as List<dynamic>;
-      }
-    } catch (_) {}
-    return [];
-  }
-
-  /// Indexes a file into CodeGraph.
-  Future<Map<String, dynamic>> indexFile(String path) async {
-    if (_ffi.isAvailable) {
-      return _ffi.indexFile(path);
-    }
-    return {'status': 'ok', 'path': path};
-  }
-
-  /// Queries the AST outline tree for a file.
-  Future<List<dynamic>> queryOutline(String path) async {
-    if (_ffi.isAvailable) {
-      final res = _ffi.queryOutline(path);
-      if (res.isNotEmpty) return res;
-    }
-    return [
-      {'name': path.split('/').last, 'kind': 'file', 'line_start': 1, 'children': []}
-    ];
-  }
-
-  /// Finds definitions for a symbol.
-  Future<List<dynamic>> findDefinition(String query) async {
-    if (_ffi.isAvailable) {
-      return _ffi.findDefinition(query);
-    }
-    return [];
-  }
-
-  /// Finds references for a symbol.
-  Future<List<dynamic>> findReferences(String query) async {
-    if (_ffi.isAvailable) {
-      return _ffi.findReferences(query);
-    }
-    return [];
-  }
-
-  /// Retrieves a symbol's code context (definition, callers, callees) from CodeGraph.
-  Future<Map<String, dynamic>> getCodeContext(String query) async {
-    if (_ffi.isAvailable) {
-      return _ffi.getCodeContext(query);
-    }
-    return {};
-  }
-
-  /// Finds callers for a symbol.
-  Future<List<dynamic>> findCallers(String query) async {
-    if (_ffi.isAvailable) {
-      return _ffi.findCallers(query);
-    }
-    return [];
-  }
-
-  /// Finds callees called by a symbol.
-  Future<List<dynamic>> findCallees(String query) async {
-    if (_ffi.isAvailable) {
-      return _ffi.findCallees(query);
-    }
-    return [];
-  }
-
   // ---------------------------------------------------------------------------
-  // LSP Cognitive Infrastructure (P2.1 - P2.6)
+  // LSP:纯 Dart 客户端(LspService),按语言拉起 rust-analyzer / gopls / dart 等;
+  // 没装语言服务器时用括号检查与正则大纲兜底。CodeGraph 已移除。
   // ---------------------------------------------------------------------------
 
-  /// Notifies LSP of document open and returns diagnostics.
-  Future<List<dynamic>> lspDidOpen(String filePath, String language, String content) async {
-    if (_ffi.isAvailable) {
-      return _ffi.lspDidOpen(filePath, language, content);
-    }
-    return [];
+  /// 所有语言服务器推送的诊断(路径为工作区相对路径)。切换项目后仍是同一个流。
+  Stream<LspDiagnosticsEvent> get lspDiagnostics => _lspEvents.stream;
+
+  Future<void> lspDidOpen(String path, String text) => _lsp.didOpen(path, text);
+
+  Future<void> lspDidChange(String path, String text) => _lsp.didChange(path, text);
+
+  Future<void> lspDidClose(String path) => _lsp.didClose(path);
+
+  /// 结构大纲:LSP documentSymbol,拿不到时退回正则解析。
+  Future<List<Map<String, dynamic>>> documentSymbols(String path, String text) => _lsp.documentSymbols(path, text);
+
+  Future<Map<String, dynamic>> lspStatus() => _lsp.status();
+
+  void _attachLsp() {
+    _lspSub?.cancel();
+    _lspSub = _lsp.diagnostics.listen(_lspEvents.add);
   }
 
-  /// Notifies LSP of document edits and returns updated diagnostics.
-  Future<List<dynamic>> lspDidChange(String filePath, int version, String content) async {
-    if (_ffi.isAvailable) {
-      return _ffi.lspDidChange(filePath, version, content);
-    }
-    return [];
-  }
-
-  /// Retrieves current diagnostics for a file.
-  Future<List<dynamic>> lspGetDiagnostics(String filePath) async {
-    if (_ffi.isAvailable) {
-      return _ffi.lspGetDiagnostics(filePath);
-    }
-    return [];
-  }
-
-  /// Jumps to symbol definition at line and col.
-  Future<List<dynamic>> lspGotoDefinition(String filePath, int line, int col) async {
-    if (_ffi.isAvailable) {
-      return _ffi.lspGotoDefinition(filePath, line, col);
-    }
-    return [];
-  }
-
-  /// Finds all references for symbol at line and col.
-  Future<List<dynamic>> lspFindReferences(String filePath, int line, int col, {bool includeDecl = true}) async {
-    if (_ffi.isAvailable) {
-      return _ffi.lspFindReferences(filePath, line, col, includeDecl: includeDecl);
-    }
-    return [];
-  }
-
-  /// Retrieves Hover documentation & type signature.
-  Future<Map<String, dynamic>?> lspHover(String filePath, int line, int col) async {
-    if (_ffi.isAvailable) {
-      return _ffi.lspHover(filePath, line, col);
-    }
-    return null;
-  }
-
-  /// Requests smart code completions.
-  Future<List<dynamic>> lspCompletion(String filePath, int line, int col) async {
-    if (_ffi.isAvailable) {
-      return _ffi.lspCompletion(filePath, line, col);
-    }
-    return [];
-  }
-
-  /// Executes atomic rename refactoring across the workspace.
-  Future<Map<String, dynamic>?> lspRename(String filePath, int line, int col, String newName) async {
-    if (_ffi.isAvailable) {
-      return _ffi.lspRename(filePath, line, col, newName);
-    }
-    return null;
+  /// 关掉所有语言服务器进程(应用退出时调用)。
+  Future<void> dispose() async {
+    await _lspSub?.cancel();
+    await _lsp.dispose();
+    await _lspEvents.close();
   }
 
   /// Fetches viewport-virtualized syntax tokens for high performance line streaming.

@@ -50,27 +50,6 @@ void main() {
           'version': 2,
           'content': 'fn main() { println!(); }',
         },
-        'lsp.completion': {
-          'items': [
-            {
-              'label': 'println!',
-              'kind': 'Function',
-              'detail': 'macro',
-              'insert_text': 'println!("{}")',
-            }
-          ],
-        },
-        'lsp.diagnostics': {
-          'diagnostics': [
-            {
-              'line': 1,
-              'start_col': 0,
-              'end_col': 10,
-              'severity': 'Warning',
-              'message': 'unused variable',
-            }
-          ],
-        },
       });
 
       final client = CoreApiClient(transport: mock);
@@ -103,24 +82,8 @@ void main() {
       expect(redo.success, isTrue);
       expect(redo.version, 2);
 
-      // 5. lspCompletion
-      final completions = await client.lspCompletion(
-        path: 'src/main.rs',
-        line: 1,
-        character: 5,
-      );
-      expect(completions.items.length, 1);
-      expect(completions.items.first.label, 'println!');
-      expect(completions.items.first.kind, 'Function');
-
-      // 6. lspDiagnostics
-      final diags = await client.lspDiagnostics(path: 'src/main.rs');
-      expect(diags.diagnostics.length, 1);
-      expect(diags.diagnostics.first.severity, 'Warning');
-      expect(diags.diagnostics.first.message, 'unused variable');
-
-      // Verify all 6 methods were recorded
-      expect(mock.recordedCalls.length, 6);
+      // Verify all 4 methods were recorded
+      expect(mock.recordedCalls.length, 4);
     });
 
     test('JsonRpcException handles error payloads properly', () async {

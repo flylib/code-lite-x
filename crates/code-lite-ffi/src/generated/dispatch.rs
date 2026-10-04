@@ -60,32 +60,6 @@ pub fn dispatch_rpc(ctx: *mut CodeLiteContext, req: &JsonRpcRequest) -> JsonRpcR
                 Err(err) => JsonRpcResponse::err(req.id, error_codes::SERVER_ERROR, err),
             }
         }
-        "lsp.completion" => {
-            let params: LspCompletionParams = match req.params.as_ref() {
-                Some(val) => match serde_json::from_value(val.clone()) {
-                    Ok(p) => p,
-                    Err(e) => return JsonRpcResponse::err(req.id, error_codes::INVALID_PARAMS, e.to_string()),
-                },
-                None => return JsonRpcResponse::err(req.id, error_codes::INVALID_PARAMS, "Missing required params"),
-            };
-            match crate::handlers::lsp::handle_completion(ctx, params) {
-                Ok(res) => JsonRpcResponse::success(req.id, serde_json::to_value(res).unwrap()),
-                Err(err) => JsonRpcResponse::err(req.id, error_codes::SERVER_ERROR, err),
-            }
-        }
-        "lsp.diagnostics" => {
-            let params: LspDiagnosticsParams = match req.params.as_ref() {
-                Some(val) => match serde_json::from_value(val.clone()) {
-                    Ok(p) => p,
-                    Err(e) => return JsonRpcResponse::err(req.id, error_codes::INVALID_PARAMS, e.to_string()),
-                },
-                None => return JsonRpcResponse::err(req.id, error_codes::INVALID_PARAMS, "Missing required params"),
-            };
-            match crate::handlers::lsp::handle_diagnostics(ctx, params) {
-                Ok(res) => JsonRpcResponse::success(req.id, serde_json::to_value(res).unwrap()),
-                Err(err) => JsonRpcResponse::err(req.id, error_codes::SERVER_ERROR, err),
-            }
-        }
         _ => JsonRpcResponse::err(
             req.id,
             error_codes::METHOD_NOT_FOUND,

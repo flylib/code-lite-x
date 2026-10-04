@@ -105,9 +105,9 @@ Section: devel
 Priority: optional
 Architecture: ${ARCH}
 Maintainer: CodeLiteX Team <team@codelitex.org>
-Description: AI-Native Next-Gen IDE with CodeGraph & Three-Tier Runtime
- CodeLiteX is a high-performance cross-platform programming IDE combining
- Rust Core engine, CodeGraph, and native UI.
+Description: Native code editor with built-in Git management
+ CodeLiteX is a high-performance cross-platform code editor combining
+ a Rust Core engine with a native Flutter UI.
 EOF
 
 cp -f "$SO_SOURCE" "$DEB_ROOT/usr/lib/codelitex/libcodelite.so"

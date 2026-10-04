@@ -156,11 +156,12 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
       _ownsController = true;
     }
 
-    _controller.onTextChanged = (newText) {
-      widget.onCodeChanged(newText);
-      _imeBridge.syncState();
-    };
+    _controller.addTextListener(_onControllerText);
+  }
 
+  void _onControllerText(String newText) {
+    widget.onCodeChanged(newText);
+    _imeBridge.syncState();
   }
 
   void _initScrollControllers() {
@@ -212,6 +213,7 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
     }
 
     if (widget.controller != oldWidget.controller) {
+      _controller.removeTextListener(_onControllerText);
       if (_ownsController) _controller.dispose();
       _initController();
       _imeBridge = ImeTextInputBridge(controller: _controller, focusNode: _focusNode);
@@ -240,6 +242,7 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
     _secondaryImeBridge?.detach();
     _focusNode.dispose();
     _secondaryFocusNode.dispose();
+    _controller.removeTextListener(_onControllerText);
     if (_ownsController) _controller.dispose();
     if (_ownsVerticalScroll) _verticalScroll.dispose();
     if (_ownsHorizontalScroll) _horizontalScroll.dispose();

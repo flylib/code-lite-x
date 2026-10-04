@@ -40,41 +40,6 @@ fields = [
     { name = "content", type = "string" },
 ]
 
-[[types]]
-name = "CompletionItem"
-description = "Code completion suggestion"
-fields = [
-    { name = "label", type = "string" },
-    { name = "kind", type = "string" },
-    { name = "detail", type = "string" },
-    { name = "insert_text", type = "string" },
-]
-
-[[types]]
-name = "CompletionList"
-description = "List of code completions"
-fields = [
-    { name = "items", type = "list[CompletionItem]" },
-]
-
-[[types]]
-name = "DiagnosticItem"
-description = "Code diagnostic item (error, warning, hint)"
-fields = [
-    { name = "line", type = "int" },
-    { name = "start_col", type = "int" },
-    { name = "end_col", type = "int" },
-    { name = "severity", type = "string" },
-    { name = "message", type = "string" },
-]
-
-[[types]]
-name = "DiagnosticList"
-description = "List of diagnostics for a file"
-fields = [
-    { name = "diagnostics", type = "list[DiagnosticItem]" },
-]
-
 [[methods]]
 name = "file.open"
 description = "Open and read a file buffer"
@@ -115,26 +80,4 @@ params = [
     { name = "path", type = "string" },
 ]
 returns = "UndoRedoResult"
-streaming = false
-
-[[methods]]
-name = "lsp.completion"
-description = "Query code completions at cursor position"
-handler = "crate::handlers::lsp::handle_completion"
-params = [
-    { name = "path", type = "string" },
-    { name = "line", type = "int" },
-    { name = "character", type = "int" },
-]
-returns = "CompletionList"
-streaming = false
-
-[[methods]]
-name = "lsp.diagnostics"
-description = "Query active diagnostics for a file"
-handler = "crate::handlers::lsp::handle_diagnostics"
-params = [
-    { name = "path", type = "string" },
-]
-returns = "DiagnosticList"
 streaming = false

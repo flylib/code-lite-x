@@ -13,7 +13,36 @@ import '../platform/workspace_io.dart' as io;
 class WorkspaceStore extends ChangeNotifier {
   WorkspaceStore({required ApiClient client, required EditorSessionManager sessions})
       : _client = client,
-        _sessions = sessions;
+        _sessions = sessions {
+    _sessions.diagnosticsRevision.addListener(_onDiagnosticsChanged);
+  }
+
+  /// 诊断更新说明语言服务器重新分析过当前文件:状态栏的错误数要变,大纲也顺带刷新。
+  void _onDiagnosticsChanged() {
+    final active = _sessions.activePath;
+    if (active != null && _sessions.lastDiagnosticsPath == active) {
+      _refreshOutline(active);
+    }
+    notifyListeners();
+  }
+
+  Future<void> _refreshOutline(String path) async {
+    final tab = _sessions.tabs[path];
+    if (tab == null) return;
+    final outline = await _client.documentSymbols(path, tab.controller.text);
+    if (_sessions.activePath != path) return; // 期间切了标签,丢弃
+    _outline = outline;
+    if (_activeSymbol != null && !outline.any((o) => o['name'] == _activeSymbol)) {
+      _activeSymbol = outline.isEmpty ? null : outline.first['name'] as String?;
+    }
+    notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _sessions.diagnosticsRevision.removeListener(_onDiagnosticsChanged);
+    super.dispose();
+  }
 
   final ApiClient _client;
   final EditorSessionManager _sessions;
@@ -137,7 +166,7 @@ class WorkspaceStore extends ChangeNotifier {
 
   Future<void> openFile(String path) async {
     final tab = await _sessions.openFile(path);
-    final outline = await _client.queryOutline(path);
+    final outline = await _client.documentSymbols(path, tab.controller.text);
 
     _outline = outline;
     _activeSymbol = outline.isEmpty ? null : outline.first['name'] as String?;
