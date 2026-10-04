@@ -4,6 +4,7 @@ import 'package:code_lite_ui/core/client/api_client.dart';
 import 'package:code_lite_ui/core/git/git_service.dart';
 import 'package:code_lite_ui/features/commit/commit_panel.dart';
 import 'package:code_lite_ui/features/commit/diff_tab.dart';
+import 'package:code_lite_ui/features/editor/code_editor_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -137,6 +138,77 @@ void main() {
       expect(openedPath, 'src/a.txt');
       expect(openedLine, 3);
       await tester.pumpWidget(const SizedBox());
+      await tester.runAsync(client.dispose);
+    });
+
+    // 「>>」把一段改动恢复成 HEAD:修改、纯新增、纯删除三种块,文件未打开时写回磁盘。
+    testWidgets('DiffTab >> reverts modify / insert / delete blocks on disk', (tester) async {
+      // HEAD: one two three ;  当前: ONE two three four ,再删掉 two
+      write('src/a.txt', 'ONE\nthree\nfour\n');
+      final client = ApiClient(initialRoot: repo.path);
+      final arrows = find.byTooltip('恢复为 HEAD 版本');
+      Future<void> settle() async {
+        await tester.runAsync(() async {
+          for (var i = 0; i < 20; i++) {
+            await Future<void>.delayed(const Duration(milliseconds: 30));
+            await tester.pump();
+          }
+        });
+      }
+
+      await tester.runAsync(() async {
+        await tester.pumpWidget(MaterialApp(
+          home: Scaffold(
+            body: DiffTab(client: client, repoPath: 'src/a.txt', findOpenController: (_) => null, onOpenSource: (_, __) {}),
+          ),
+        ));
+      });
+      await settle();
+      expect(arrows, findsNWidgets(2)); // ONE/one+two 合成一块修改(+删除),four 新增
+
+      // 写盘是真 IO:点击放进 runAsync,否则 Future 卡在 FakeAsync 区里
+      await tester.runAsync(() => tester.tap(arrows.first));
+      await settle();
+      expect(File('${repo.path}/src/a.txt').readAsStringSync(), 'one\ntwo\nthree\nfour\n');
+      expect(arrows, findsOneWidget);
+
+      // 写盘是真 IO:点击放进 runAsync,否则 Future 卡在 FakeAsync 区里
+      await tester.runAsync(() => tester.tap(arrows.first));
+      await settle();
+      expect(File('${repo.path}/src/a.txt').readAsStringSync(), 'one\ntwo\nthree\n');
+      expect(find.text('没有差异'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+      await tester.runAsync(client.dispose);
+    });
+
+    testWidgets('DiffTab >> edits the open editor buffer (undoable) instead of the disk', (tester) async {
+      write('src/a.txt', 'one\nTWO\nthree\n');
+      final client = ApiClient(initialRoot: repo.path);
+      final ctrl = CodeEditorController(initialText: 'one\nTWO\nthree\n');
+      await tester.runAsync(() async {
+        await tester.pumpWidget(MaterialApp(
+          home: Scaffold(
+            body: DiffTab(
+              client: client,
+              repoPath: 'src/a.txt',
+              findOpenController: (p) => p == 'src/a.txt' ? ctrl : null,
+              onOpenSource: (_, __) {},
+            ),
+          ),
+        ));
+        for (var i = 0; i < 20; i++) {
+          await Future<void>.delayed(const Duration(milliseconds: 30));
+          await tester.pump();
+        }
+      });
+      await tester.tap(find.byTooltip('恢复为 HEAD 版本'));
+      await tester.pump();
+      expect(ctrl.text, 'one\ntwo\nthree\n');
+      expect(File('${repo.path}/src/a.txt').readAsStringSync(), 'one\nTWO\nthree\n', reason: '磁盘不动,由用户保存');
+      expect(ctrl.undo(), isTrue);
+      expect(ctrl.text, 'one\nTWO\nthree\n');
+      await tester.pumpWidget(const SizedBox());
+      ctrl.dispose();
       await tester.runAsync(client.dispose);
     });
 

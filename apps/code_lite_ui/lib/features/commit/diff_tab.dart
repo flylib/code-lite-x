@@ -9,8 +9,8 @@ import 'line_diff.dart';
 
 const double _rowHeight = 20;
 
-/// 中间两列行号(各 36)加间隔 4。
-const double _gutterWidth = 76;
+/// 中间:左行号 36 + 「>>」恢复按钮 20 + 间隔 4 + 右行号 36。
+const double _gutterWidth = 96;
 const TextStyle _code = TextStyle(
   fontFamily: 'Menlo',
   fontFamilyFallback: ['monospace'],
@@ -144,8 +144,12 @@ class _DiffTabState extends State<DiffTab> {
     return lines;
   }
 
+  /// 当前版本末尾是否有换行(拆行时去掉了,写回时要还原)。
+  bool _rightTrailingNewline = true;
+
   void _recompute(String? current) {
     if (!mounted || current == null) return;
+    _rightTrailingNewline = current.isEmpty || current.endsWith('\n');
     setState(() {
       _right = _split(current);
       _rows = sideBySideDiff(_left, _right);
@@ -256,6 +260,48 @@ class _DiffTabState extends State<DiffTab> {
     );
   }
 
+  /// 「>>」:把 [block] 这段改动恢复成左侧 HEAD 的内容。
+  /// 文件已在编辑器里打开时改编辑器(可 ⌘Z 撤销、由用户决定何时保存),否则直接写回磁盘。
+  Future<void> _revertBlock(int block) async {
+    final start = _blocks[block];
+    var end = start;
+    while (end < _rows.length && _rows[end].kind != DiffRowKind.equal) {
+      end++;
+    }
+    final rows = _rows.sublist(start, end);
+    final leftLines = [for (final r in rows) if (r.left != null) _left[r.left!]];
+    final rightIdx = [for (final r in rows) if (r.right != null) r.right!];
+    // 纯删除的块右侧没有行:插入点是这块之后第一个右侧行(没有就是末尾)。
+    var insertAt = rightIdx.isNotEmpty ? rightIdx.first : _right.length;
+    if (rightIdx.isEmpty) {
+      for (var r = end; r < _rows.length; r++) {
+        if (_rows[r].right != null) {
+          insertAt = _rows[r].right!;
+          break;
+        }
+      }
+    }
+    final newRight = [
+      ..._right.sublist(0, insertAt),
+      ...leftLines,
+      ..._right.sublist(insertAt + rightIdx.length),
+    ];
+    final text = newRight.isEmpty ? '' : '${newRight.join('\n')}${_rightTrailingNewline ? '\n' : ''}';
+
+    final live = _live;
+    if (live != null) {
+      live.replaceAllText(text); // 文本监听会触发重算
+      return;
+    }
+    final res = await widget.client.saveFile(_sourcePath, text);
+    if (!mounted) return;
+    if (res['status'] != 'ok') {
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(content: Text('恢复失败: ${res['error']}')));
+      return;
+    }
+    _recompute(text);
+  }
+
   int _blockOf(int row) {
     var b = -1;
     for (var k = 0; k < _blocks.length && _blocks[k] <= row; k++) {
@@ -266,6 +312,8 @@ class _DiffTabState extends State<DiffTab> {
 
   Widget _buildRow(int i, {required bool isCurrent}) {
     final r = _rows[i];
+    // 每段改动的第一行放「>>」。
+    final blockStart = _blocks.indexOf(i);
     final leftText = r.left == null ? null : _left[r.left!];
     final rightText = r.right == null ? null : _right[r.right!];
     final span = r.kind == DiffRowKind.modify ? changedSpan(leftText!, rightText!) : null;
@@ -300,7 +348,27 @@ class _DiffTabState extends State<DiffTab> {
         Container(
           width: _gutterWidth,
           color: isCurrent && r.kind != DiffRowKind.equal ? IntelliJTheme.hoverBg : null,
-          child: Row(children: [number(r.left), const SizedBox(width: 4), number(r.right)]),
+          child: Row(
+            children: [
+              number(r.left),
+              SizedBox(
+                width: 20,
+                child: blockStart < 0
+                    ? null
+                    : Tooltip(
+                        message: '恢复为 HEAD 版本',
+                        waitDuration: const Duration(milliseconds: 400),
+                        child: InkWell(
+                          onTap: () => _revertBlock(blockStart),
+                          borderRadius: BorderRadius.circular(3),
+                          child: const Icon(Icons.keyboard_double_arrow_right, size: 15, color: IntelliJTheme.textSecondary),
+                        ),
+                      ),
+              ),
+              const SizedBox(width: 4),
+              number(r.right),
+            ],
+          ),
         ),
         Expanded(
           child: GestureDetector(
