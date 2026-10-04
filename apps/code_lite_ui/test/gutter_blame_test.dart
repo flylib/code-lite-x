@@ -8,6 +8,7 @@ import 'package:code_lite_ui/features/editor/editor_appearance.dart';
 import 'package:code_lite_ui/features/editor/editor_view_widget.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -218,6 +219,12 @@ void main() {
         ),
       ));
       expect(find.text('2026/4/24  ronnie wood'), findsOneWidget);
+      // 不弹悬停提示;列宽按实际字体计算,作者名不被截断。
+      expect(find.byType(Tooltip), findsNothing);
+      for (final t in tester.widgetList<Text>(find.byType(Text))) {
+        final box = tester.renderObject<RenderParagraph>(find.byWidget(t));
+        expect(box.didExceedMaxLines, isFalse, reason: '"${t.data}" was truncated');
+      }
 
       await tester.tap(find.text('2026/4/24  ronnie wood'), buttons: kSecondaryButton);
       await tester.pumpAndSettle();

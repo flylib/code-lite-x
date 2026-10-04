@@ -163,14 +163,20 @@ class BlameColumn extends StatelessWidget {
     final d = data;
     var width = 60.0;
     if (d != null) {
-      // 按最长的一条定宽,所有行左对齐成一列。
-      var longest = '';
-      for (final c in d.commits.values) {
-        final l = blameLabel(c, appearance);
-        if (l.length > longest.length) longest = l;
+      // 按像素最宽的一条定宽(比例字体下字符数最多的不一定最宽,比如 "2026/1/11" 比 "2026/6/23" 窄)。
+      final style = DefaultTextStyle.of(context).style.merge(_style);
+      final scaler = MediaQuery.textScalerOf(context);
+      var widest = 0.0;
+      for (final label in {for (final c in d.commits.values) blameLabel(c, appearance)}) {
+        final tp = TextPainter(
+          text: TextSpan(text: label, style: style),
+          textDirection: TextDirection.ltr,
+          textScaler: scaler,
+        )..layout();
+        if (tp.width > widest) widest = tp.width;
       }
-      final tp = TextPainter(text: TextSpan(text: longest, style: _style), textDirection: TextDirection.ltr)..layout();
-      width = (tp.width + 20).clamp(60.0, 320.0);
+      // 左右内边距各 8,再留 4 像素余量防取整误差。
+      width = (widest + 20).ceilToDouble().clamp(60.0, 360.0);
     }
     return ContextMenuRegion(
       menuBuilder: (pos) {
@@ -196,18 +202,12 @@ class BlameColumn extends StatelessWidget {
                 children: List.generate(totalLines, (i) {
                   final c = d.at(i);
                   final label = blameLabel(c, appearance);
-                  final row = Container(
+                  return Container(
                     height: _lineHeight,
                     color: blameBackground(c, d, appearance),
                     padding: const EdgeInsets.symmetric(horizontal: 8),
                     alignment: Alignment.centerLeft,
                     child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: _style),
-                  );
-                  if (c == null || c.isUncommitted) return row;
-                  return Tooltip(
-                    waitDuration: const Duration(milliseconds: 600),
-                    message: '${c.short}  ${c.author} <${c.email}>\n${_date(c.time)}\n\n${c.summary}',
-                    child: row,
                   );
                 }),
               ),
