@@ -84,7 +84,6 @@ dependencies = [
 name = "code-lite-ffi"
 version = "0.1.0"
 dependencies = [
- "code-lite-fs",
  "code-lite-terminal",
  "serde",
  "serde_json",
@@ -96,8 +95,6 @@ version = "0.1.0"
 dependencies = [
  "regex",
  "serde",
- "serde_json",
- "thiserror 2.0.20",
 ]
 
 [[package]]

@@ -5,15 +5,10 @@
 pub mod entry;
 pub mod search;
 pub mod tree;
-pub mod updater;
 
 pub use entry::FileSystemEntry;
 pub use search::{SearchOptions, SearchResult, WorkspaceSearcher};
 pub use tree::WorkspaceTree;
-pub use updater::{
-    compare_semver, sha256_digest, ApplyReport, PlatformArtifact, PlatformKind, PlatformRelease,
-    UpdateCheckResult, UpdateStrategy, UpdaterEngine, UpdaterError, VersionManifest,
-};
 
 pub fn version() -> &'static str {
     env!("CARGO_PKG_VERSION")

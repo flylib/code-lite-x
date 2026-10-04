@@ -35,10 +35,4 @@ class CodeLiteBindings {
 
   Map<String, dynamic> ptyClose(String id) => {'status': 'error', 'error': 'FFI not available'};
 
-  Map<String, dynamic> updaterApply(String stagingDir, String targetDir, List<String> files, {String? platform}) => {'status': 'error', 'error': 'FFI not available'};
-
-  Map<String, dynamic> updaterCheck(String currentVersion, String manifestJson, {String? platform}) => {'status': 'error', 'error': 'FFI not available'};
-
-  Map<String, dynamic> updaterStage(String stagingDir, String fileName, String content, String expectedSha256) => {'status': 'error', 'error': 'FFI not available'};
-
 }

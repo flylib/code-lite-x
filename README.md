@@ -27,13 +27,12 @@ A modern, high-performance code editor with built-in Git management, built in Ru
 
 - **LSP and file outline** live in the Flutter app (`apps/code_lite_ui/lib/core/lsp/`). The Rust core has no LSP client, code graph or local database.
 
-- **`code-lite-fs`**: File system and updater.
+- **`code-lite-fs`**: Directory tree and search, used only by the daemon.
   - Fast directory tree traversal with ignore rules (`.git`, `target`, `node_modules`, `.codelite`).
   - Multi-threaded / regex workspace search & replace.
-  - Cross-platform differential auto-updater.
 
 - **`code-lite-terminal`**: PTY-backed interactive terminal sessions.
-- **`code-lite-ffi`**: C-ABI dynamic library (`libcodelite`) consumed by the Flutter desktop UI — now only the PTY terminal and the updater.
+- **`code-lite-ffi`**: C-ABI dynamic library (`libcodelite`) consumed by the Flutter desktop UI — now only the PTY terminal.
 - **`code-lite-app`**: Lightweight standalone daemon with a minimal web UI.
 
 ---

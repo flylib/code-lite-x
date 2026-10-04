@@ -81,14 +81,8 @@ typedef _PtyCloseDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> 
 
 
 
-typedef _UpdaterCheckC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> currentVersion, Pointer<Char> manifestJson, Pointer<Char> platform);
-typedef _UpdaterCheckDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> currentVersion, Pointer<Char> manifestJson, Pointer<Char> platform);
 
-typedef _UpdaterStageC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> stagingDir, Pointer<Char> fileName, Pointer<Char> content, Pointer<Char> expectedSha256);
-typedef _UpdaterStageDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> stagingDir, Pointer<Char> fileName, Pointer<Char> content, Pointer<Char> expectedSha256);
 
-typedef _UpdaterApplyC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> stagingDir, Pointer<Char> targetDir, Pointer<Char> filesJson, Pointer<Char> platform);
-typedef _UpdaterApplyDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> stagingDir, Pointer<Char> targetDir, Pointer<Char> filesJson, Pointer<Char> platform);
 
 
 
@@ -120,9 +114,6 @@ class CodeLiteBindings {
   late final _PtyResizeDart _ptyResize;
   late final _PtySnapshotDart _ptySnapshot;
   late final _PtyCloseDart _ptyClose;
-  late final _UpdaterCheckDart _updaterCheck;
-  late final _UpdaterStageDart _updaterStage;
-  late final _UpdaterApplyDart _updaterApply;
 
   Pointer<Void>? get contextPointer => _ctx;
 
@@ -167,9 +158,6 @@ class CodeLiteBindings {
     _ptyResize = _dylib!.lookupFunction<_PtyResizeC, _PtyResizeDart>('codelite_pty_resize');
     _ptySnapshot = _dylib!.lookupFunction<_PtySnapshotC, _PtySnapshotDart>('codelite_pty_snapshot');
     _ptyClose = _dylib!.lookupFunction<_PtyCloseC, _PtyCloseDart>('codelite_pty_close');
-    _updaterCheck = _dylib!.lookupFunction<_UpdaterCheckC, _UpdaterCheckDart>('codelite_updater_check');
-    _updaterStage = _dylib!.lookupFunction<_UpdaterStageC, _UpdaterStageDart>('codelite_updater_stage');
-    _updaterApply = _dylib!.lookupFunction<_UpdaterApplyC, _UpdaterApplyDart>('codelite_updater_apply');
   }
 
   /// 销毁当前上下文并以新的工作区根重新初始化(File → Open)。
@@ -259,55 +247,6 @@ class CodeLiteBindings {
   // ---------------------------------------------------------------------------
   // Context Engine & Memory (Phase 10)
   // ---------------------------------------------------------------------------
-
-  Map<String, dynamic> updaterCheck(String currentVersion, String manifestJson, {String? platform}) {
-    if (!isAvailable) return {'status': 'error', 'error': 'FFI not available'};
-    final pVer = _toCString(currentVersion);
-    final pMan = _toCString(manifestJson);
-    final pPlat = _toCString(platform ?? (Platform.isMacOS ? 'macos' : (Platform.isLinux ? 'linux' : 'windows')));
-    try {
-      final ptr = _updaterCheck(_ctx!, pVer.pointer, pMan.pointer, pPlat.pointer);
-      return _parseJsonMap(_fromCString(ptr));
-    } finally {
-      _freeAllocatedString(pVer);
-      _freeAllocatedString(pMan);
-      _freeAllocatedString(pPlat);
-    }
-  }
-
-  Map<String, dynamic> updaterStage(String stagingDir, String fileName, String content, String expectedSha256) {
-    if (!isAvailable) return {'status': 'error', 'error': 'FFI not available'};
-    final pStage = _toCString(stagingDir);
-    final pFile = _toCString(fileName);
-    final pContent = _toCString(content);
-    final pSha = _toCString(expectedSha256);
-    try {
-      final ptr = _updaterStage(_ctx!, pStage.pointer, pFile.pointer, pContent.pointer, pSha.pointer);
-      return _parseJsonMap(_fromCString(ptr));
-    } finally {
-      _freeAllocatedString(pStage);
-      _freeAllocatedString(pFile);
-      _freeAllocatedString(pContent);
-      _freeAllocatedString(pSha);
-    }
-  }
-
-  Map<String, dynamic> updaterApply(String stagingDir, String targetDir, List<String> files, {String? platform}) {
-    if (!isAvailable) return {'status': 'error', 'error': 'FFI not available'};
-    final pStage = _toCString(stagingDir);
-    final pTarget = _toCString(targetDir);
-    final pFiles = _toCString(jsonEncode(files));
-    final pPlat = _toCString(platform ?? (Platform.isMacOS ? 'macos' : (Platform.isLinux ? 'linux' : 'windows')));
-    try {
-      final ptr = _updaterApply(_ctx!, pStage.pointer, pTarget.pointer, pFiles.pointer, pPlat.pointer);
-      return _parseJsonMap(_fromCString(ptr));
-    } finally {
-      _freeAllocatedString(pStage);
-      _freeAllocatedString(pTarget);
-      _freeAllocatedString(pFiles);
-      _freeAllocatedString(pPlat);
-    }
-  }
 
   // ---------------------------------------------------------------------------
   // Memory and Conversion Helpers

@@ -22,7 +22,6 @@ import 'features/search/global_search_modal.dart';
 import 'features/status_bar/status_bar_widget.dart';
 import 'features/terminal/terminal_store.dart';
 import 'features/title_bar/title_bar_widget.dart';
-import 'features/update/update_modal.dart';
 
 /// 应用根:建 store,挂 scope,之后不再持有可变 UI 状态。
 ///
@@ -116,8 +115,6 @@ class _Workbench extends StatelessWidget {
       bindings: <ShortcutActivator, VoidCallback>{
         const SingleActivator(LogicalKeyboardKey.keyF, meta: true, shift: true): () => _openSearch(context),
         const SingleActivator(LogicalKeyboardKey.keyF, control: true, shift: true): () => _openSearch(context),
-        const SingleActivator(LogicalKeyboardKey.keyU, meta: true): () => _openUpdates(context),
-        const SingleActivator(LogicalKeyboardKey.keyU, control: true): () => _openUpdates(context),
       },
       child: Focus(
         autofocus: true,
@@ -266,10 +263,6 @@ class _Workbench extends StatelessWidget {
       client: client,
       onNavigate: (path, line) => workspace.openFile(path),
     );
-  }
-
-  void _openUpdates(BuildContext context) {
-    UpdateModal.show(context, client: client, currentVersion: '0.1.0');
   }
 
 }

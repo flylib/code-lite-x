@@ -8,12 +8,12 @@ No previous sessions found.
 
 # CodeLiteX (Code Editor + Git Management IDE)
 
-CodeLiteX 是一款高性能的原生跨平台代码编辑器，内置 Git 管理，并提供全局搜索、交互终端与自动更新能力；LSP 与文件大纲（outline）在 Flutter 侧实现（`apps/code_lite_ui/lib/core/lsp/`）。
+CodeLiteX 是一款高性能的原生跨平台代码编辑器，内置 Git 管理，并提供全局搜索与交互终端；LSP 与文件大纲（outline）在 Flutter 侧实现（`apps/code_lite_ui/lib/core/lsp/`）。
 工作空间根目录 `/Users/dev/rust/code-lite-x/` 下包含 Rust Core 原生能力层与 Flutter 桌面端交互层：
 
 | 模块 / 目录 | 角色 | 技术栈 | 交付产物 | 架构定位 |
 | :--- | :--- | :--- | :--- | :--- |
-| `crates/` | Rust Core 核心引擎 | Rust 2021 (portable-pty, vt100) | `libcodelite.dylib`, `code-lite-app` | PTY 终端、自动更新(正逐模块迁到 Dart:Git、文件树、全局搜索、LSP、编辑器内核已迁完;无本地数据库) |
+| `crates/` | Rust Core 核心引擎 | Rust 2021 (portable-pty, vt100) | `libcodelite.dylib`, `code-lite-app` | PTY 终端(正逐模块迁到 Dart:Git、文件树、全局搜索、LSP、编辑器内核已迁完;无本地数据库) |
 | `apps/code_lite_ui/` | 桌面端图形界面 | Flutter 3.35+ (Dart 3.9) + FFI | macOS / Linux / Windows 桌面 GUI | IntelliJ Darcula 风格编辑器、Git 操作台、全局搜索模态框、交互终端 |
 | `scripts/` | 构建与原生打包 | Bash + cargo + flutter CLI + install_name_tool | `CodeLiteX.app` / `dist/release/macos/` | 自动化独立发布构建、动态库嵌入与 rpath/代码签名修复 |
 
@@ -68,9 +68,9 @@ bash scripts/build_macos_release.sh
 ```bash
 # 针对特定 crate 运行测试
 cargo test --offline -p code-lite-core       # 仅守护进程使用的文本缓冲(App 编辑器已是纯 Dart)
-cargo test --offline -p code-lite-fs         # 自动更新(tree/search 仅剩守护进程在用,App 已改用 Dart 实现)
+cargo test --offline -p code-lite-fs         # 工作区扫描/搜索(仅守护进程使用,App 已改用 Dart 实现)
 cargo test --offline -p code-lite-terminal   # PTY 交互终端会话
-cargo test --offline -p code-lite-ffi        # C-ABI 导出(终端、自动更新)
+cargo test --offline -p code-lite-ffi        # C-ABI 导出(终端)
 
 # 编译独立后台守护进程
 cargo build --release --offline -p code-lite-app
@@ -114,9 +114,9 @@ cargo build --release --offline -p code-lite-app
 ```
 crates/
  ├── code-lite-core      # 文本缓冲(仅守护进程使用;App 的编辑器内核已迁到 Dart)
- ├── code-lite-fs        # 自动更新;工作区扫描/搜索仅供守护进程使用,随守护进程一起退役
+ ├── code-lite-fs        # 工作区扫描/搜索,仅供守护进程使用,随守护进程一起退役
  ├── code-lite-terminal  # PTY 交互终端会话管理
- ├── code-lite-ffi       # C-ABI 动态链接导出层(终端、自动更新)
+ ├── code-lite-ffi       # C-ABI 动态链接导出层(终端)
  └── code-lite-app       # 原生轻量化独立后台守护进程 (Daemon)
 ```
 
