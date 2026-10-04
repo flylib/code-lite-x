@@ -188,7 +188,7 @@ class _Workbench extends StatelessWidget {
                     Expanded(
                       child: Column(
                         children: [
-                          Expanded(child: _EditorRegion(client: client)),
+                          Expanded(child: _EditorRegion(client: client, gitLog: gitLog)),
                           ListenableBuilder(
                             listenable: layout,
                             builder: (context, _) {
@@ -273,9 +273,25 @@ class _Workbench extends StatelessWidget {
 /// 编辑区。只订阅会话层 —— 换标签、分屏会重建这里,
 /// 但项目树、底部日志、右侧面板不动。
 class _EditorRegion extends StatelessWidget {
-  const _EditorRegion({required this.client});
+  const _EditorRegion({required this.client, required this.gitLog});
 
   final ApiClient client;
+  final GitLogStore gitLog;
+
+  /// Blame 菜单的 Show in File History:打开底部 Git 窗口,按该文件筛选并选中这个提交。
+  Future<void> _showInHistory(BuildContext context, String hash, String path) async {
+    final layout = context.layoutRead;
+    if (!layout.isBottomOpen || layout.bottomTab != BottomToolTab.git) {
+      layout.selectBottomTab(BottomToolTab.git);
+    }
+    gitLog.ensureLoaded();
+    gitLog.setPaths([path]);
+    // setPaths 会异步重载,等新列表出来再定位(最多等 10 秒)。
+    for (var i = 0; i < 200 && gitLog.loading; i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    }
+    await gitLog.reveal(hash);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -289,6 +305,8 @@ class _EditorRegion extends StatelessWidget {
 
         return EditorViewWidget(
           projectName: workspace.projectName,
+          appearance: sessions.appearance,
+          onShowInHistory: (hash, path) => _showInHistory(context, hash, path),
           openTabs: sessions.openPaths,
           activeFile: sessions.activePath ?? '',
           codeContent: active?.controller.text ?? '',

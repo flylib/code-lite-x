@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../core/client/api_client.dart';
 import '../../core/lsp/lsp.dart';
 import 'code_editor_controller.dart';
+import 'editor_appearance.dart';
 import 'lsp_overlay.dart';
 
 /// Holds independent buffer, viewport, cursor, and diagnostic state for an open editor tab.
@@ -64,6 +65,9 @@ class EditorSessionManager extends ChangeNotifier {
 
   /// 诊断来得比标签页早(打开文件后服务器很快推送)时先存在这里,建标签时取用。
   final Map<String, List<EditorDiagnostic>> _pendingDiagnostics = {};
+
+  /// 编辑器外观(行号 / 缩进参考线 / 面包屑 / blame 显示项),所有标签与分屏共用。
+  final EditorAppearance appearance = EditorAppearance();
 
   /// 诊断变了就加一:状态栏和大纲只订阅这个,不随每次按键的会话通知重建。
   final ValueNotifier<int> diagnosticsRevision = ValueNotifier(0);
@@ -284,6 +288,7 @@ class EditorSessionManager extends ChangeNotifier {
       t.cancel();
     }
     diagnosticsRevision.dispose();
+    appearance.dispose();
     for (final tab in _tabs.values) {
       tab.dispose();
     }

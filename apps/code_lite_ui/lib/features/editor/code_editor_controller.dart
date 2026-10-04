@@ -185,6 +185,7 @@ class CodeEditorController extends ChangeNotifier {
       selectionAfter: _selection,
       time: DateTime.now(),
     );
+    _shiftBookmarks(before, edit.offset, edit.removed, edit.inserted);
     if (!_mergeIntoTop(edit)) {
       _undoStack.add(edit);
       if (_undoStack.length > _maxHistory) _undoStack.removeAt(0);
@@ -243,6 +244,7 @@ class CodeEditorController extends ChangeNotifier {
     if (_undoStack.isEmpty) return false;
     final e = _undoStack.removeLast();
     _redoStack.add(e);
+    _shiftBookmarks(_text, e.offset, e.inserted, e.removed);
     _applyHistory(
       _text.replaceRange(e.offset, e.offset + e.inserted.length, e.removed),
       e.selectionBefore,
@@ -254,6 +256,7 @@ class CodeEditorController extends ChangeNotifier {
     if (_redoStack.isEmpty) return false;
     final e = _redoStack.removeLast();
     _undoStack.add(e);
+    _shiftBookmarks(_text, e.offset, e.removed, e.inserted);
     _applyHistory(
       _text.replaceRange(e.offset, e.offset + e.removed.length, e.inserted),
       e.selectionAfter,
@@ -331,6 +334,90 @@ class CodeEditorController extends ChangeNotifier {
     _cursorVisible = true;
     _startBlink();
     notifyListeners();
+  }
+
+  // ---------------------------------------------------------------------------
+  // 书签(行号栏 Add Bookmark / Mnemonic Bookmark)
+  //
+  // 放在 controller 里而不是视图里:插入 / 删除行(包括撤销重做)时书签要跟着代码走,
+  // 而每一次文本变化都经过这里,能拿到准确的改动位置。
+  // ---------------------------------------------------------------------------
+
+  /// 行号(0 起) → 助记符(null 表示普通书签)。
+  final Map<int, String?> _bookmarks = {};
+
+  Map<int, String?> get bookmarks => Map.unmodifiable(_bookmarks);
+
+  bool hasBookmark(int line) => _bookmarks.containsKey(line);
+
+  /// F3:有书签就去掉,没有就加一个普通书签。
+  void toggleBookmark(int line) {
+    if (_bookmarks.containsKey(line)) {
+      _bookmarks.remove(line);
+    } else {
+      _bookmarks[line] = null;
+    }
+    notifyListeners();
+  }
+
+  /// 给某行设助记符(0-9 / A-Z);同一个助记符只能在一处,旧位置的会被挪过来。
+  void setMnemonicBookmark(int line, String mnemonic) {
+    _bookmarks.removeWhere((_, m) => m == mnemonic);
+    _bookmarks[line] = mnemonic;
+    notifyListeners();
+  }
+
+  void removeBookmark(int line) {
+    if (!_bookmarks.containsKey(line)) return;
+    _bookmarks.remove(line);
+    notifyListeners();
+  }
+
+  int? lineOfMnemonic(String mnemonic) {
+    for (final e in _bookmarks.entries) {
+      if (e.value == mnemonic) return e.key;
+    }
+    return null;
+  }
+
+  /// [text] 是改动前的文本:在 [offset] 处 [removed] 被换成 [inserted]。
+  /// 改动起始行之后的书签按增减的行数移动;被整行删掉的书签并到起始行(那里已有书签则丢弃)。
+  void _shiftBookmarks(String text, int offset, String removed, String inserted) {
+    if (_bookmarks.isEmpty) return;
+    // 从行首开始的整行增删有两种等价写法("c\n" 在行首 / "\nc" 在上一行末尾)。
+    // 统一成后者:删掉的书签行并到上一行,行首插入的新行把书签行往下推 —— 书签跟着内容走。
+    if (offset > 0 && text.codeUnitAt(offset - 1) == 0x0A) {
+      if (inserted.isEmpty && removed.endsWith('\n')) {
+        offset -= 1;
+        removed = '\n${removed.substring(0, removed.length - 1)}';
+      } else if (removed.isEmpty && inserted.endsWith('\n')) {
+        offset -= 1;
+        inserted = '\n${inserted.substring(0, inserted.length - 1)}';
+      }
+    }
+    final removedLines = '\n'.allMatches(removed).length;
+    final insertedLines = '\n'.allMatches(inserted).length;
+    if (removedLines == 0 && insertedLines == 0) return;
+    final startLine = '\n'.allMatches(text.substring(0, offset)).length;
+    final delta = insertedLines - removedLines;
+    final moved = <int, String?>{};
+    _bookmarks.forEach((line, mnemonic) {
+      final int target;
+      if (line <= startLine) {
+        target = line;
+      } else if (line <= startLine + removedLines) {
+        target = startLine;
+      } else {
+        target = line + delta;
+      }
+      // 并到同一行时保留助记书签,普通书签让位。
+      if (!moved.containsKey(target) || (moved[target] == null && mnemonic != null)) {
+        moved[target] = mnemonic;
+      }
+    });
+    _bookmarks
+      ..clear()
+      ..addAll(moved);
   }
 
   /// 载入整份文本(打开文件 / 从磁盘重新加载):清空撤销历史。

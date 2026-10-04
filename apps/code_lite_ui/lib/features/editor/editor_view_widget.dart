@@ -1,5 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
+import 'blame.dart';
+import 'context_menu_region.dart';
+import 'editor_appearance.dart';
 import '../../core/client/api_client.dart';
 import '../../core/theme/intellij_theme.dart';
 import 'code_editor_controller.dart';
@@ -38,9 +44,17 @@ class EditorViewWidget extends StatefulWidget {
   /// 面包屑的根:当前项目目录名。没打开项目时为空,不显示根节点。
   final String projectName;
 
+  /// 编辑器外观(行号 / 缩进参考线 / 面包屑 / blame 显示项),所有标签共用。
+  final EditorAppearance? appearance;
+
+  /// Blame 菜单的 Show in File History:打开 Git Log 并按文件筛选、选中该提交。
+  final void Function(String hash, String path)? onShowInHistory;
+
   const EditorViewWidget({
     super.key,
     this.projectName = '',
+    this.appearance,
+    this.onShowInHistory,
     required this.openTabs,
     required this.activeFile,
     required this.codeContent,
@@ -89,6 +103,11 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
 
   List<GitLineDiff> _diffHunks = [];
   GitLineDiff? _activeHunkOverlay;
+
+  late final EditorAppearance _appearance = widget.appearance ?? EditorAppearance();
+
+  /// 打开了 blame 注释的编辑器(按 controller 区分:分屏两侧各自开关)。
+  final Map<CodeEditorController, _BlameSession> _blame = {};
 
   @override
   void initState() {
@@ -239,6 +258,10 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
     _focusNode.dispose();
     _secondaryFocusNode.dispose();
     _controller.removeTextListener(_onControllerText);
+    for (final entry in _blame.entries) {
+      entry.value.dispose(entry.key);
+    }
+    if (widget.appearance == null) _appearance.dispose();
     if (_ownsController) _controller.dispose();
     if (_ownsVerticalScroll) _verticalScroll.dispose();
     if (_ownsHorizontalScroll) _horizontalScroll.dispose();
@@ -258,6 +281,30 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
     final isCmd = HardwareKeyboard.instance.isMetaPressed || HardwareKeyboard.instance.isControlPressed;
     final isShift = HardwareKeyboard.instance.isShiftPressed;
     final isAlt = HardwareKeyboard.instance.isAltPressed;
+    final isCtrl = HardwareKeyboard.instance.isControlPressed;
+    final isMeta = HardwareKeyboard.instance.isMetaPressed;
+
+    // 书签:F3 开关、⌥F3 助记书签、⌃数字 跳到对应助记书签(与 IntelliJ 一致)。
+    if (event.logicalKey == LogicalKeyboardKey.f3 && !isCmd && !isShift) {
+      final line = controller.cursorPosition.line;
+      if (isAlt) {
+        _editMnemonic(controller, line);
+      } else {
+        controller.toggleBookmark(line);
+      }
+      return KeyEventResult.handled;
+    }
+    if (isCtrl && !isMeta && !isAlt && !isShift) {
+      final label = event.logicalKey.keyLabel;
+      if (label.length == 1 && RegExp(r'[0-9]').hasMatch(label)) {
+        final target = controller.lineOfMnemonic(label);
+        if (target != null) {
+          _jumpToLine(controller, target);
+          imeBridge?.syncState();
+        }
+        return KeyEventResult.handled;
+      }
+    }
 
     // Shortcuts: Close active tab (Cmd+W / Ctrl+W)
     if (isCmd && event.logicalKey == LogicalKeyboardKey.keyW) {
@@ -459,6 +506,7 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
   @override
   Widget build(BuildContext context) {
     final listenables = <Listenable>[
+      _appearance,
       _controller,
       if (widget.secondaryTab != null) widget.secondaryTab!.controller,
     ];
@@ -716,6 +764,7 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
     required bool isPrimary,
   }) {
     final lines = controller.lines;
+    final guides = _appearance.showIndentGuides ? _indentLevels(lines) : null;
 
     Widget content = Column(
       children: [
@@ -737,7 +786,29 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _buildGutter(lines.length, diagnostics: diagnostics),
+                          if (_blame.containsKey(controller) && widget.apiClient != null)
+                            BlameColumn(
+                              data: _blame[controller]!.data,
+                              loading: _blame[controller]!.loading,
+                              appearance: _appearance,
+                              totalLines: lines.length,
+                              menuBuilder: (line, commit) => blameMenu(
+                                context: context,
+                                commit: commit,
+                                appearance: _appearance,
+                                client: widget.apiClient!,
+                                onClose: () => _toggleBlame(controller, filePath),
+                                onShowInHistory: widget.onShowInHistory,
+                              ),
+                            ),
+                          ContextMenuRegion(
+                            menuBuilder: (pos) => _gutterMenu(
+                              controller,
+                              filePath,
+                              ((pos.dy - 8) / 20).floor().clamp(0, lines.length - 1),
+                            ),
+                            child: _buildGutter(lines.length, diagnostics: diagnostics, controller: controller),
+                          ),
                           _buildGitDiffStripe(
                             lines.length,
                             hunks: isPrimary ? _diffHunks : const [],
@@ -795,6 +866,7 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
                                         return _buildCodeLine(
                                           entry.key,
                                           entry.value,
+                                          guideLevel: guides?[entry.key] ?? 0,
                                           controller: controller,
                                           filePath: filePath,
                                           diagnostics: diagnostics,
@@ -850,7 +922,9 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Expanded(
-            child: SingleChildScrollView(
+            child: !_appearance.showBreadcrumbs
+                ? const SizedBox.shrink()
+                : SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: Row(
                 children: [
@@ -932,9 +1006,16 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
     );
   }
 
-  Widget _buildGutter(int totalLines, {required List<EditorDiagnostic> diagnostics}) {
+  Widget _buildGutter(
+    int totalLines, {
+    required List<EditorDiagnostic> diagnostics,
+    required CodeEditorController controller,
+  }) {
+    final bookmarks = controller.bookmarks;
+    final showNumbers = _appearance.showLineNumbers;
     return Container(
-      width: 48,
+      // 关掉行号后仍留出书签 / 诊断标记的位置。
+      width: showNumbers ? 58 : 30,
       padding: const EdgeInsets.symmetric(vertical: 8),
       color: IntelliJTheme.editorBg,
       child: Column(
@@ -943,11 +1024,35 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
           final hasError = lineDiags.any((d) => d.isError);
           final hasWarning = lineDiags.any((d) => d.isWarning);
 
+          final hasBookmark = bookmarks.containsKey(index);
+          final mnemonic = bookmarks[index];
           return SizedBox(
             height: 20,
             child: Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
+                const SizedBox(width: 2),
+                SizedBox(
+                  width: 14,
+                  child: !hasBookmark
+                      ? null
+                      : mnemonic == null
+                          ? const Icon(Icons.bookmark, size: 13, color: Color(0xFF8C9AB8))
+                          : Container(
+                              height: 14,
+                              alignment: Alignment.center,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF3C4A63),
+                                borderRadius: BorderRadius.circular(3),
+                                border: Border.all(color: const Color(0xFF8C9AB8)),
+                              ),
+                              child: Text(
+                                mnemonic,
+                                style: const TextStyle(color: IntelliJTheme.textHigh, fontSize: 9, fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                ),
+                const Spacer(),
                 if (hasError)
                   Tooltip(
                     message: lineDiags.firstWhere((d) => d.isError).message,
@@ -974,14 +1079,15 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
                       ),
                     ),
                   ),
-                Text(
-                  '${index + 1}',
-                  style: const TextStyle(
-                    color: IntelliJTheme.textGutter,
-                    fontSize: 11,
-                    fontFamily: 'monospace',
+                if (showNumbers)
+                  Text(
+                    '${index + 1}',
+                    style: const TextStyle(
+                      color: IntelliJTheme.textGutter,
+                      fontSize: 11,
+                      fontFamily: 'monospace',
+                    ),
                   ),
-                ),
                 const SizedBox(width: 6),
               ],
             ),
@@ -989,6 +1095,145 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
         }),
       ),
     );
+  }
+
+  static const int _indentUnit = 4;
+
+  /// 每行的缩进层级(按 4 列一级,tab 记 4 列)。空行取上下非空行中较小的层级,
+  /// 这样代码块中间的空行也有连续的参考线。
+  static List<int> _indentLevels(List<String> lines) {
+    int indentOf(String l) {
+      var cols = 0;
+      for (final c in l.codeUnits) {
+        if (c == 0x20) {
+          cols++;
+        } else if (c == 0x09) {
+          cols += _indentUnit;
+        } else {
+          break;
+        }
+      }
+      return cols ~/ _indentUnit;
+    }
+
+    final levels = List<int?>.generate(lines.length, (i) => lines[i].trim().isEmpty ? null : indentOf(lines[i]));
+    final result = List<int>.filled(lines.length, 0);
+    int? prev;
+    for (var i = 0; i < lines.length; i++) {
+      final l = levels[i];
+      if (l != null) {
+        prev = l;
+        result[i] = l;
+        continue;
+      }
+      int? next;
+      for (var j = i + 1; j < lines.length; j++) {
+        if (levels[j] != null) {
+          next = levels[j];
+          break;
+        }
+      }
+      result[i] = (prev == null || next == null) ? 0 : (prev < next ? prev : next);
+    }
+    return result;
+  }
+
+  /// 行号栏右键菜单。
+  List<Widget> _gutterMenu(CodeEditorController controller, String filePath, int line) {
+    final hasBookmark = controller.hasBookmark(line);
+    final mnemonic = controller.bookmarks[line];
+    final blameOn = _blame.containsKey(controller);
+    return [
+      MenuItemButton(
+        onPressed: widget.apiClient == null ? null : () => _toggleBlame(controller, filePath),
+        child: Text(blameOn ? 'Close Annotations' : 'Annotate with Git Blame'),
+      ),
+      const MenuDivider(),
+      MenuItemButton(
+        shortcut: const SingleActivator(LogicalKeyboardKey.f3),
+        onPressed: () => controller.toggleBookmark(line),
+        child: Text(hasBookmark ? 'Remove Bookmark' : 'Add Bookmark'),
+      ),
+      MenuItemButton(
+        shortcut: const SingleActivator(LogicalKeyboardKey.f3, alt: true),
+        onPressed: () => _editMnemonic(controller, line),
+        child: Text(mnemonic == null ? 'Add Mnemonic Bookmark…' : 'Edit Mnemonic Bookmark…'),
+      ),
+      const MenuDivider(),
+      SubmenuButton(
+        menuChildren: [
+          CheckboxMenuButton(
+            value: _appearance.showLineNumbers,
+            onChanged: (_) => _appearance.toggleLineNumbers(),
+            child: const Text('Show Line Numbers'),
+          ),
+          CheckboxMenuButton(
+            value: _appearance.showIndentGuides,
+            onChanged: (_) => _appearance.toggleIndentGuides(),
+            child: const Text('Show Indent Guides'),
+          ),
+          CheckboxMenuButton(
+            value: _appearance.showBreadcrumbs,
+            onChanged: (_) => _appearance.toggleBreadcrumbs(),
+            child: const Text('Breadcrumbs'),
+          ),
+        ],
+        child: const Text('Appearance'),
+      ),
+    ];
+  }
+
+  Future<void> _editMnemonic(CodeEditorController controller, int line) async {
+    final current = controller.bookmarks[line];
+    final taken = {for (final m in controller.bookmarks.values) if (m != null) m};
+    final picked = await pickMnemonic(context, current: current, taken: taken);
+    if (picked == null || !mounted) return;
+    controller.setMnemonicBookmark(line, picked);
+  }
+
+  void _jumpToLine(CodeEditorController controller, int line) {
+    controller.setCursor(EditorPosition(line, 0));
+    final scroll = identical(controller, _controller) ? _verticalScroll : widget.secondaryTab?.verticalScroll;
+    if (scroll == null || !scroll.hasClients) return;
+    final target = (line * 20.0 - scroll.position.viewportDimension / 3).clamp(0.0, scroll.position.maxScrollExtent);
+    scroll.jumpTo(target);
+  }
+
+  /// 打开 / 关闭 blame 注释。打开期间文本变化会防抖重算(带上未保存的内容),行号始终对得上。
+  void _toggleBlame(CodeEditorController controller, String filePath) {
+    final existing = _blame.remove(controller);
+    if (existing != null) {
+      existing.dispose(controller);
+      setState(() {});
+      return;
+    }
+    final session = _BlameSession();
+    session.listener = (_) {
+      session.timer?.cancel();
+      session.timer = Timer(const Duration(milliseconds: 600), () => _loadBlame(controller, filePath, session));
+    };
+    controller.addTextListener(session.listener!);
+    setState(() => _blame[controller] = session);
+    _loadBlame(controller, filePath, session);
+  }
+
+  Future<void> _loadBlame(CodeEditorController controller, String filePath, _BlameSession session) async {
+    final client = widget.apiClient;
+    if (client == null) return;
+    setState(() => session.loading = true);
+    final data = await BlameData.load(client, filePath, contents: controller.isDirty ? controller.text : null);
+    if (!mounted || _blame[controller] != session) return;
+    setState(() {
+      session.loading = false;
+      session.data = data;
+    });
+    if (data == null) {
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        SnackBar(content: Text('无法获取 $filePath 的 Git Blame(文件不在 Git 仓库中或尚未提交)')),
+      );
+      _blame.remove(controller)?.dispose(controller);
+      setState(() {});
+    }
   }
 
   Widget _buildGitDiffStripe(
@@ -1181,6 +1426,7 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
     required CodeEditorController controller,
     required String filePath,
     required List<EditorDiagnostic> diagnostics,
+    int guideLevel = 0,
   }) {
     final lang = filePath.endsWith('.dart') ? 'dart' : 'rust';
     final spans = SyntaxHighlighter.highlightLine(lineText, language: lang);
@@ -1218,6 +1464,15 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
       child: Stack(
         clipBehavior: Clip.none,
         children: [
+          // 0. 缩进参考线:每个缩进层级一条细竖线(含空行,取上下文的层级)。
+          for (var k = 0; k < guideLevel; k++)
+            Positioned(
+              left: k * _indentUnit * _charWidth,
+              top: 0,
+              bottom: 0,
+              child: Container(width: 1, color: const Color(0xFF393B40)),
+            ),
+
           // 1. Selection Highlight Box
           if (isLineSelected && selEndCol > selStartCol)
             Positioned(
@@ -1323,5 +1578,18 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
         },
       ),
     );
+  }
+}
+
+class _BlameSession {
+  BlameData? data;
+  bool loading = false;
+  Timer? timer;
+  void Function(String)? listener;
+
+  void dispose(CodeEditorController controller) {
+    timer?.cancel();
+    final l = listener;
+    if (l != null) controller.removeTextListener(l);
   }
 }

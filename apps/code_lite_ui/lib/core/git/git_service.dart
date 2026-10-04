@@ -167,6 +167,8 @@ class GitService {
       case 'git.file_at':
         final (hash, path) = (p.str('hash'), p.str('path'));
         return _fileAt(hash, path);
+      case 'git.blame':
+        return _blame(p.str('path'), rev: p.optStr('rev'), contents: p.optStr('contents'));
       case 'git.create_patch':
         return {'patch': await _createPatch(p.str('hash'))};
       case 'git.cherry_pick':
@@ -744,8 +746,91 @@ class GitService {
   }
 
   // =========================================================================
+  // Blame(编辑器行号栏的 Annotate with Git Blame)
+  // =========================================================================
+
+  /// `git blame --porcelain`。[rev] 为空时注释工作区版本;[contents] 非空时把它当作文件当前内容
+  /// (`--contents -`),这样编辑器里没保存的改动也能对上行号 —— 未提交的行哈希为全 0。
+  ///
+  /// 返回 `{"lines":[hash per line, 0-based],"commits":{hash:{author,email,time,summary,
+  /// path,previous_hash?,previous_path?}}}`;提交信息只出现一次,按哈希去重。
+  Future<Map<String, dynamic>> _blame(String path, {String? rev, String? contents}) async {
+    final args = ['blame', '--porcelain'];
+    if (contents != null) args.addAll(['--contents', '-']);
+    if (rev != null && rev.isNotEmpty) {
+      if (rev.startsWith('-')) throw _ParamError('invalid rev');
+      args.add(rev);
+    }
+    args.addAll(['--', path]);
+    final out = await _rawWithStdin(args, contents);
+    if (!out.success) throw out.failure;
+
+    final lines = <String>[];
+    final commits = <String, Map<String, dynamic>>{};
+    Map<String, dynamic>? current;
+    for (final line in out.stdout.split('\n')) {
+      if (line.isEmpty) continue;
+      if (line.startsWith('\t')) continue; // 行内容本身,不需要
+      final header = RegExp(r'^([0-9a-f]{40}) \d+ (\d+)').firstMatch(line);
+      if (header != null) {
+        final hash = header.group(1)!;
+        final finalLine = int.parse(header.group(2)!) - 1;
+        while (lines.length <= finalLine) {
+          lines.add(hash);
+        }
+        lines[finalLine] = hash;
+        current = commits.putIfAbsent(hash, () => {'hash': hash});
+        continue;
+      }
+      final c = current;
+      if (c == null) continue;
+      final space = line.indexOf(' ');
+      final key = space < 0 ? line : line.substring(0, space);
+      final value = space < 0 ? '' : line.substring(space + 1);
+      switch (key) {
+        case 'author':
+          c['author'] = value;
+        case 'author-mail':
+          c['email'] = value.replaceAll(RegExp(r'^<|>$'), '');
+        case 'author-time':
+          c['time'] = int.tryParse(value) ?? 0;
+        case 'summary':
+          c['summary'] = value;
+        case 'filename':
+          c['path'] = value;
+        case 'previous':
+          final sp = value.indexOf(' ');
+          if (sp > 0) {
+            c['previous_hash'] = value.substring(0, sp);
+            c['previous_path'] = value.substring(sp + 1);
+          }
+      }
+    }
+    return {'lines': lines, 'commits': commits};
+  }
+
+  // =========================================================================
   // 内部工具
   // =========================================================================
+
+  /// 与 [_raw] 相同,但可以往 stdin 写入 [input](blame --contents -)。
+  Future<_GitOutput> _rawWithStdin(List<String> args, String? input) async {
+    if (input == null) return _raw(args);
+    try {
+      final proc = await Process.start('git', ['-C', root, ...args]);
+      final stdout = <int>[];
+      final stderr = <int>[];
+      final outDone = proc.stdout.listen(stdout.addAll).asFuture<void>();
+      final errDone = proc.stderr.listen(stderr.addAll).asFuture<void>();
+      proc.stdin.add(utf8.encode(input));
+      await proc.stdin.close();
+      final code = await proc.exitCode;
+      await Future.wait([outDone, errDone]);
+      return _GitOutput(code, stdout, utf8.decode(stderr, allowMalformed: true));
+    } on ProcessException catch (e) {
+      throw GitException('IO error: ${e.message} (os error ${e.errorCode})');
+    }
+  }
 
   /// 不检查退出码的原始调用。stdout 按 UTF-8 宽松解码(非法字节替换为 U+FFFD,与旧实现一致)。
   Future<_GitOutput> _raw(List<String> args, {Map<String, String>? env}) async {
