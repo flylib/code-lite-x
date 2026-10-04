@@ -3,20 +3,15 @@
 //! C-ABI dynamic library bindings (`libcodelite.dylib` / `libcodelite.so` / `codelite.dll`)
 //! for CodeLiteX, exposing Rust Core capabilities to the Flutter UI Shell.
 
-use code_lite_core::Editor;
-use parking_lot::Mutex;
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use serde::Serialize;
 use std::ffi::{c_char, CStr, CString};
 use std::path::PathBuf;
 
-pub mod generated;
-pub mod handlers;
 
-/// Opaque context holding all Rust Core subsystem handles.
+/// Rust Core 剩下的上下文:编辑器内核、Git、搜索、LSP 都已迁到 Dart,
+/// 这里只剩终端(PTY)与自动更新,随 Dart 迁移继续收缩。
 pub struct CodeLiteContext {
     pub workspace_root: PathBuf,
-    pub editors: Mutex<HashMap<String, Editor>>,
     /// 用户终端会话。随上下文销毁一起杀掉 shell(切换项目即关闭旧项目的终端)。
     pub terminals: code_lite_terminal::TerminalManager,
 }
@@ -66,7 +61,6 @@ pub unsafe extern "C" fn codelite_init(workspace_path: *const c_char) -> *mut Co
     // 纯内存上下文:不再在工作区下创建 .codelite/workspace.db(图谱与 LSP 缓存已移除)
     let ctx = Box::new(CodeLiteContext {
         workspace_root: PathBuf::from(path_str),
-        editors: Mutex::new(HashMap::new()),
         terminals: code_lite_terminal::TerminalManager::new(),
     });
 
@@ -112,359 +106,9 @@ pub extern "C" fn codelite_version() -> *const c_char {
     str_to_c_char(env!("CARGO_PKG_VERSION"))
 }
 
-/// Invokes a JSON-RPC 2.0 request against Rust Core subsystems.
-/// Dispatches through the auto-generated type-safe routing table.
-#[no_mangle]
-pub unsafe extern "C" fn codelite_jsonrpc_call(
-    ctx: *mut CodeLiteContext,
-    request_json: *const c_char,
-) -> *const c_char {
-    if ctx.is_null() {
-        let resp = code_lite_rpc::protocol::JsonRpcResponse::err(
-            0,
-            code_lite_rpc::protocol::error_codes::INTERNAL_ERROR,
-            "Context pointer is null",
-        );
-        return json_to_c_char(&resp);
-    }
-
-    let req_str = match c_str_to_str(request_json) {
-        Some(s) => s,
-        None => {
-            let resp = code_lite_rpc::protocol::JsonRpcResponse::err(
-                0,
-                code_lite_rpc::protocol::error_codes::PARSE_ERROR,
-                "Invalid request JSON C string pointer",
-            );
-            return json_to_c_char(&resp);
-        }
-    };
-
-    let req: code_lite_rpc::protocol::JsonRpcRequest = match serde_json::from_str(req_str) {
-        Ok(r) => r,
-        Err(e) => {
-            let resp = code_lite_rpc::protocol::JsonRpcResponse::err(
-                0,
-                code_lite_rpc::protocol::error_codes::PARSE_ERROR,
-                format!("JSON-RPC parse error: {}", e),
-            );
-            return json_to_c_char(&resp);
-        }
-    };
-
-    let resp = generated::dispatch::dispatch_rpc(ctx, &req);
-    json_to_c_char(&resp)
-}
-
 // ---------------------------------------------------------------------------
-// 2. Workspace File Tree & Text Editor Operations
+// 2. Terminal
 // ---------------------------------------------------------------------------
-
-/// Opens a file into the Rust text buffer, caching the `Editor` in memory.
-#[no_mangle]
-pub unsafe extern "C" fn codelite_file_open(
-    ctx: *mut CodeLiteContext,
-    rel_path: *const c_char,
-) -> *const c_char {
-    if ctx.is_null() {
-        return err_json("Context is null");
-    }
-    let ctx = &*ctx;
-
-    let rel = match c_str_to_str(rel_path) {
-        Some(s) => s,
-        None => return err_json("Invalid relative path pointer"),
-    };
-
-    let full_path = ctx.workspace_root.join(rel);
-    let content = match std::fs::read_to_string(&full_path) {
-        Ok(c) => c,
-        Err(e) => return err_json(&format!("Failed to read file: {}", e)),
-    };
-
-    let mut editors = ctx.editors.lock();
-    let mut editor = Editor::from_str(&content);
-    editor.mark_saved();
-    let line_count = editor.buffer().len_lines();
-    editors.insert(rel.to_string(), editor);
-
-    let result = serde_json::json!({
-        "status": "ok",
-        "path": rel,
-        "content": content,
-        "lines": line_count,
-        "is_dirty": false,
-    });
-    json_to_c_char(&result)
-}
-
-#[derive(Deserialize)]
-struct EditPayload {
-    #[serde(rename = "type")]
-    edit_type: String, // "insert", "delete", "replace_all"
-    text: Option<String>,
-}
-
-/// Applies an edit to an open file buffer in the Rust TextBuffer.
-#[no_mangle]
-pub unsafe extern "C" fn codelite_file_edit(
-    ctx: *mut CodeLiteContext,
-    rel_path: *const c_char,
-    edit_json: *const c_char,
-) -> *const c_char {
-    if ctx.is_null() {
-        return err_json("Context is null");
-    }
-    let ctx = &*ctx;
-
-    let rel = match c_str_to_str(rel_path) {
-        Some(s) => s,
-        None => return err_json("Invalid relative path pointer"),
-    };
-
-    let edit_str = match c_str_to_str(edit_json) {
-        Some(s) => s,
-        None => return err_json("Invalid edit JSON pointer"),
-    };
-
-    let payload: EditPayload = match serde_json::from_str(edit_str) {
-        Ok(p) => p,
-        Err(e) => return err_json(&format!("Invalid edit JSON format: {}", e)),
-    };
-
-    let mut editors = ctx.editors.lock();
-    let editor = match editors.get_mut(rel) {
-        Some(e) => e,
-        None => return err_json(&format!("File not open in editor: {}", rel)),
-    };
-
-    match payload.edit_type.as_str() {
-        "insert" => {
-            if let Some(text) = payload.text {
-                editor.insert_text(&text);
-            }
-        }
-        "delete" => {
-            editor.delete_backward();
-        }
-        "replace_all" => {
-            if let Some(text) = payload.text {
-                *editor = Editor::from_str(&text);
-            }
-        }
-        other => return err_json(&format!("Unknown edit type: {}", other)),
-    }
-
-    let result = serde_json::json!({
-        "status": "ok",
-        "path": rel,
-        "content": editor.text(),
-        "lines": editor.buffer().len_lines(),
-        "can_undo": editor.can_undo(),
-        "can_redo": editor.can_redo(),
-        "is_dirty": editor.is_dirty(),
-    });
-
-    json_to_c_char(&result)
-}
-
-/// Saves an open file buffer to disk, marking the editor history as clean (not dirty).
-#[no_mangle]
-pub unsafe extern "C" fn codelite_file_save(
-    ctx: *mut CodeLiteContext,
-    rel_path: *const c_char,
-) -> *const c_char {
-    if ctx.is_null() {
-        return err_json("Context is null");
-    }
-    let ctx = &*ctx;
-
-    let rel = match c_str_to_str(rel_path) {
-        Some(s) => s,
-        None => return err_json("Invalid relative path pointer"),
-    };
-
-    let full_path = if std::path::Path::new(rel).is_absolute() {
-        std::path::PathBuf::from(rel)
-    } else {
-        ctx.workspace_root.join(rel)
-    };
-
-    let mut editors = ctx.editors.lock();
-    let editor = match editors.get_mut(rel) {
-        Some(e) => e,
-        None => return err_json(&format!("File not open in editor: {}", rel)),
-    };
-
-    if let Err(e) = editor.save_to_file(&full_path) {
-        return err_json(&format!("Failed to save file '{}': {}", rel, e));
-    }
-
-    let result = serde_json::json!({
-        "status": "ok",
-        "path": rel,
-        "is_dirty": false,
-    });
-    json_to_c_char(&result)
-}
-
-/// Sets the cursor position or selection in an open editor buffer.
-#[no_mangle]
-pub unsafe extern "C" fn codelite_file_cursor_set(
-    ctx: *mut CodeLiteContext,
-    rel_path: *const c_char,
-    line: u32,
-    col: u32,
-    select: bool,
-) -> *const c_char {
-    if ctx.is_null() {
-        return err_json("Context is null");
-    }
-    let ctx = &*ctx;
-
-    let rel = match c_str_to_str(rel_path) {
-        Some(s) => s,
-        None => return err_json("Invalid relative path pointer"),
-    };
-
-    let mut editors = ctx.editors.lock();
-    let editor = match editors.get_mut(rel) {
-        Some(e) => e,
-        None => return err_json(&format!("File not open in editor: {}", rel)),
-    };
-
-    editor.set_cursor_point(code_lite_core::Point::new(line as usize, col as usize), select);
-    let head = editor.cursors().primary().head();
-
-    let result = serde_json::json!({
-        "status": "ok",
-        "path": rel,
-        "line": head.row,
-        "col": head.col,
-    });
-    json_to_c_char(&result)
-}
-
-/// Undoes the last edit via Rust `UndoManager`.
-#[no_mangle]
-pub unsafe extern "C" fn codelite_undo(
-    ctx: *mut CodeLiteContext,
-    rel_path: *const c_char,
-) -> *const c_char {
-    if ctx.is_null() {
-        return err_json("Context is null");
-    }
-    let ctx = &*ctx;
-
-    let rel = match c_str_to_str(rel_path) {
-        Some(s) => s,
-        None => return err_json("Invalid path"),
-    };
-
-    let mut editors = ctx.editors.lock();
-    let editor = match editors.get_mut(rel) {
-        Some(e) => e,
-        None => return err_json("File not open"),
-    };
-
-    let success = editor.undo();
-    let result = serde_json::json!({
-        "status": "ok",
-        "undone": success,
-        "content": editor.text(),
-        "can_undo": editor.can_undo(),
-        "can_redo": editor.can_redo(),
-        "is_dirty": editor.is_dirty(),
-    });
-    json_to_c_char(&result)
-}
-
-/// Redoes the undone edit via Rust `UndoManager`.
-#[no_mangle]
-pub unsafe extern "C" fn codelite_redo(
-    ctx: *mut CodeLiteContext,
-    rel_path: *const c_char,
-) -> *const c_char {
-    if ctx.is_null() {
-        return err_json("Context is null");
-    }
-    let ctx = &*ctx;
-
-    let rel = match c_str_to_str(rel_path) {
-        Some(s) => s,
-        None => return err_json("Invalid path"),
-    };
-
-    let mut editors = ctx.editors.lock();
-    let editor = match editors.get_mut(rel) {
-        Some(e) => e,
-        None => return err_json("File not open"),
-    };
-
-    let success = editor.redo();
-    let result = serde_json::json!({
-        "status": "ok",
-        "redone": success,
-        "content": editor.text(),
-        "can_undo": editor.can_undo(),
-        "can_redo": editor.can_redo(),
-        "is_dirty": editor.is_dirty(),
-    });
-    json_to_c_char(&result)
-}
-
-// ---------------------------------------------------------------------------
-// Phase 4: Viewport Tokens, Search/Replace, & Terminal Execution
-// ---------------------------------------------------------------------------
-
-/// calc_values viewport-virtualized syntax tokens for high performance line streaming.
-#[no_mangle]
-pub unsafe extern "C" fn codelite_get_viewport_tokens(
-    ctx: *mut CodeLiteContext,
-    file_path: *const c_char,
-    start_line: u32,
-    end_line: u32,
-) -> *const c_char {
-    if ctx.is_null() {
-        return err_json("Context is null");
-    }
-    let ctx = &*ctx;
-    let path = match c_str_to_str(file_path) {
-        Some(s) => s,
-        None => return err_json("Invalid file_path"),
-    };
-
-    let editors = ctx.editors.lock();
-    let tokens = if let Some(editor) = editors.get(path) {
-        code_lite_core::syntax::get_viewport_tokens(
-            editor.buffer(),
-            start_line as usize,
-            end_line as usize,
-        )
-    } else {
-        let full_path = ctx.workspace_root.join(path);
-        match std::fs::read_to_string(&full_path) {
-            Ok(content) => {
-                let buf = code_lite_core::TextBuffer::from_str(&content);
-                code_lite_core::syntax::get_viewport_tokens(
-                    &buf,
-                    start_line as usize,
-                    end_line as usize,
-                )
-            }
-            Err(e) => return err_json(&format!("Failed to read file: {}", e)),
-        }
-    };
-
-    let res = serde_json::json!({
-        "status": "ok",
-        "file_path": path,
-        "start_line": start_line,
-        "end_line": end_line,
-        "lines": tokens,
-    });
-    json_to_c_char(&res)
-}
 
 /// Executes a command in the workspace directory (simulated interactive terminal output).
 #[no_mangle]
@@ -741,81 +385,16 @@ mod tests {
     use std::ffi::CString;
 
     #[test]
-    fn test_ffi_lifecycle_and_editor_undo_redo() {
+    fn test_ffi_lifecycle_and_terminal_exec() {
         unsafe {
             let root = CString::new(".").unwrap();
             let ctx = codelite_init(root.as_ptr());
             assert!(!ctx.is_null());
 
-            // Version
             let ver_ptr = codelite_version();
-            let ver = CStr::from_ptr(ver_ptr).to_str().unwrap();
-            assert_eq!(ver, "0.1.0");
+            assert_eq!(CStr::from_ptr(ver_ptr).to_str().unwrap(), "0.1.0");
             codelite_string_free(ver_ptr as *mut c_char);
 
-            // Open file
-            let test_doc_rel = "test_ffi_editor.txt";
-            let test_doc_full = (*ctx).workspace_root.join(test_doc_rel);
-            std::fs::write(&test_doc_full, "initial content\n").unwrap();
-
-            let path = CString::new(test_doc_rel).unwrap();
-            let open_ptr = codelite_file_open(ctx, path.as_ptr());
-            let open_str = CStr::from_ptr(open_ptr).to_str().unwrap();
-            assert!(open_str.contains("initial content"));
-            assert!(open_str.contains("\"is_dirty\":false"));
-            codelite_string_free(open_ptr as *mut c_char);
-
-            // Cursor set (Phase 7)
-            let cur_ptr = codelite_file_cursor_set(ctx, path.as_ptr(), 0, 5, false);
-            let cur_str = CStr::from_ptr(cur_ptr).to_str().unwrap();
-            assert!(cur_str.contains("\"col\":5"));
-            codelite_string_free(cur_ptr as *mut c_char);
-
-            // Edit file
-            let edit_json = CString::new(r#"{"type":"insert","text":"// comment\n"}"#).unwrap();
-            let edit_ptr = codelite_file_edit(ctx, path.as_ptr(), edit_json.as_ptr());
-            let edit_str = CStr::from_ptr(edit_ptr).to_str().unwrap();
-            assert!(edit_str.contains("// comment"));
-            assert!(edit_str.contains("\"is_dirty\":true"));
-            codelite_string_free(edit_ptr as *mut c_char);
-
-            // Undo edit -> restores clean state
-            let undo_ptr = codelite_undo(ctx, path.as_ptr());
-            let undo_str = CStr::from_ptr(undo_ptr).to_str().unwrap();
-            assert!(undo_str.contains("\"undone\":true"));
-            assert!(undo_str.contains("\"is_dirty\":false"));
-            codelite_string_free(undo_ptr as *mut c_char);
-
-            // Redo edit -> dirty again
-            let redo_ptr = codelite_redo(ctx, path.as_ptr());
-            let redo_str = CStr::from_ptr(redo_ptr).to_str().unwrap();
-            assert!(redo_str.contains("\"redone\":true"));
-            assert!(redo_str.contains("\"is_dirty\":true"));
-            codelite_string_free(redo_ptr as *mut c_char);
-
-            // Save file (Phase 7) -> clean state
-            let save_ptr = codelite_file_save(ctx, path.as_ptr());
-            let save_str = CStr::from_ptr(save_ptr).to_str().unwrap();
-            assert!(save_str.contains("\"is_dirty\":false"));
-            codelite_string_free(save_ptr as *mut c_char);
-            let _ = std::fs::remove_file(&test_doc_full);
-
-            // Phase 4: Viewport Tokens, Workspace Search & Replace
-            let p4_rel = "test_tmp_phase4.rs";
-            let p4_full = (*ctx).workspace_root.join(p4_rel);
-            let s_tag = format!("sym_{}", "phase4_target_uniq");
-            std::fs::write(&p4_full, format!("fn {}() -> i32 {{ 42 }}\nfn main() {{ let x = {}(); }}\n", s_tag, s_tag)).unwrap();
-            let p4_c = CString::new(p4_rel).unwrap();
-
-            let vp_ptr = codelite_get_viewport_tokens(ctx, p4_c.as_ptr(), 0, 5);
-            let vp_str = CStr::from_ptr(vp_ptr).to_str().unwrap();
-            assert!(vp_str.contains("\"status\":\"ok\""));
-            assert!(vp_str.contains("lines"));
-            codelite_string_free(vp_ptr as *mut c_char);
-
-            let _ = std::fs::remove_file(&p4_full);
-
-            // Phase 4: Terminal Execution
             let cmd = CString::new("sh").unwrap();
             let args = CString::new(r#"["-c", "echo hello_codelitex"]"#).unwrap();
             let term_ptr = codelite_terminal_exec(ctx, cmd.as_ptr(), args.as_ptr());
@@ -824,74 +403,7 @@ mod tests {
             assert!(term_str.contains("hello_codelitex"));
             codelite_string_free(term_ptr as *mut c_char);
 
-            // Destroy
             codelite_destroy(ctx);
-        }
-    }
-
-    #[test]
-    fn test_jsonrpc_call_all_methods() {
-        unsafe {
-            let temp_dir = std::env::temp_dir().join(format!("codelite-rpc-test-{}", uuid::Uuid::new_v4()));
-            let _ = std::fs::create_dir_all(&temp_dir);
-            let p_c = CString::new(temp_dir.to_str().unwrap()).unwrap();
-            let ctx = codelite_init(p_c.as_ptr());
-            assert!(!ctx.is_null());
-
-            // 1. Test error handling: null context
-            let req_ping = CString::new(r#"{"jsonrpc":"2.0","id":1,"method":"unknown.method"}"#).unwrap();
-            let null_resp_ptr = codelite_jsonrpc_call(std::ptr::null_mut(), req_ping.as_ptr());
-            let null_resp_str = CStr::from_ptr(null_resp_ptr).to_str().unwrap();
-            assert!(null_resp_str.contains("-32603")); // INTERNAL_ERROR
-            codelite_string_free(null_resp_ptr as *mut c_char);
-
-            // 2. Test unknown method
-            let unk_resp_ptr = codelite_jsonrpc_call(ctx, req_ping.as_ptr());
-            let unk_resp_str = CStr::from_ptr(unk_resp_ptr).to_str().unwrap();
-            assert!(unk_resp_str.contains("-32601")); // METHOD_NOT_FOUND
-            codelite_string_free(unk_resp_ptr as *mut c_char);
-
-            // 3. Test invalid json
-            let invalid_json = CString::new("not valid json").unwrap();
-            let bad_ptr = codelite_jsonrpc_call(ctx, invalid_json.as_ptr());
-            let bad_str = CStr::from_ptr(bad_ptr).to_str().unwrap();
-            assert!(bad_str.contains("-32700")); // PARSE_ERROR
-            codelite_string_free(bad_ptr as *mut c_char);
-
-            // 4. Test file.open
-            let test_file = temp_dir.join("sample.rs");
-            std::fs::write(&test_file, "fn main() {\n    println!(\"Hello\");\n}\n").unwrap();
-            let open_req = CString::new(r#"{"jsonrpc":"2.0","id":2,"method":"file.open","params":{"path":"sample.rs"}}"#).unwrap();
-            let open_ptr = codelite_jsonrpc_call(ctx, open_req.as_ptr());
-            let open_str = CStr::from_ptr(open_ptr).to_str().unwrap();
-            assert!(open_str.contains("\"result\":{"));
-            assert!(open_str.contains("\"line_count\":4"));
-            assert!(open_str.contains("println!"));
-            codelite_string_free(open_ptr as *mut c_char);
-
-            // 5. Test file.edit
-            let edit_req = CString::new(r#"{"jsonrpc":"2.0","id":3,"method":"file.edit","params":{"path":"sample.rs","range":{"start_line":0,"start_col":0,"end_line":0,"end_col":0},"new_text":"// Added comment\n"}}"#).unwrap();
-            let edit_ptr = codelite_jsonrpc_call(ctx, edit_req.as_ptr());
-            let edit_str = CStr::from_ptr(edit_ptr).to_str().unwrap();
-            assert!(edit_str.contains("\"success\":true"));
-            codelite_string_free(edit_ptr as *mut c_char);
-
-            // 6. Test file.undo
-            let undo_req = CString::new(r#"{"jsonrpc":"2.0","id":4,"method":"file.undo","params":{"path":"sample.rs"}}"#).unwrap();
-            let undo_ptr = codelite_jsonrpc_call(ctx, undo_req.as_ptr());
-            let undo_str = CStr::from_ptr(undo_ptr).to_str().unwrap();
-            assert!(undo_str.contains("\"success\":true"));
-            codelite_string_free(undo_ptr as *mut c_char);
-
-            // 7. Test file.redo
-            let redo_req = CString::new(r#"{"jsonrpc":"2.0","id":5,"method":"file.redo","params":{"path":"sample.rs"}}"#).unwrap();
-            let redo_ptr = codelite_jsonrpc_call(ctx, redo_req.as_ptr());
-            let redo_str = CStr::from_ptr(redo_ptr).to_str().unwrap();
-            assert!(redo_str.contains("\"success\":true"));
-            codelite_string_free(redo_ptr as *mut c_char);
-
-            codelite_destroy(ctx);
-            let _ = std::fs::remove_dir_all(&temp_dir);
         }
     }
 

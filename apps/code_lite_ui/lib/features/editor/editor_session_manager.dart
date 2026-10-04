@@ -16,11 +16,15 @@ class EditorTabState {
   List<EditorDiagnostic> diagnostics;
   String? activeSymbol;
 
+  /// 打开失败的原因;非空时这个标签只读,不允许保存。
+  final String? loadError;
+
   EditorTabState({
     required this.filePath,
     required String initialContent,
     this.diagnostics = const [],
     this.activeSymbol,
+    this.loadError,
   })  : fileName = filePath.split('/').last,
         controller = CodeEditorController(initialText: initialContent),
         verticalScroll = ScrollController(),
@@ -162,35 +166,29 @@ class EditorSessionManager extends ChangeNotifier {
       return _tabs[path]!;
     }
 
-    // Fetch file from Rust Core or fallback
     final fileRes = await client.fetchFile(path);
-    final rawContent = fileRes['content'] as String?;
-    final isFallback = rawContent == null || rawContent.startsWith('// CodeLiteX:');
-    final content = (!isFallback ? rawContent : (defaultContent ?? rawContent ?? ''));
+    final loaded = fileRes['status'] != 'error';
+    final rawContent = fileRes['content'] as String? ?? '';
+    final content = loaded ? rawContent : (defaultContent ?? rawContent);
     // 诊断由语言服务器异步推送(见 _onDiagnostics),这里不等。
     final tab = EditorTabState(
       filePath: path,
       initialContent: content,
       diagnostics: _pendingDiagnostics.remove(path) ?? const [],
+      // 没读到真实内容(二进制 / 无权限 / web 预览)时记下原因:保存会被拒绝,
+      // 否则 ⌘S 会用占位文字覆盖掉磁盘上的真文件。
+      loadError: loaded ? null : (fileRes['error'] as String? ?? 'unable to open file'),
     );
-    client.lspDidOpen(path, content);
+    if (loaded) client.lspDidOpen(path, content);
 
-    // Wire controller callbacks to client & UI
+    // 文本就在 controller 里(Dart 是唯一的数据源),这里只需通知 LSP 和界面。
     tab.controller.onTextChanged = (newText) {
-      client.editFile(path, {
-        'type': 'replace_all',
-        'text': newText,
-      });
-      _scheduleDidChange(path, newText);
+      if (tab.loadError == null) _scheduleDidChange(path, newText);
       notifyListeners();
     };
 
     tab.controller.onDirtyChanged = (_) {
       notifyListeners();
-    };
-
-    tab.controller.onCursorChanged = (pos) {
-      client.setFileCursor(path, pos.line, pos.col);
     };
 
     _tabs[path] = tab;
@@ -254,58 +252,29 @@ class EditorSessionManager extends ChangeNotifier {
 
   bool get hasDirtyTabs => _tabs.values.any((t) => t.isDirty);
 
-  /// Saves the active file to disk via Rust Core FFI.
+  /// 把当前标签的文本写回磁盘。打开失败的标签拒绝保存(见 [EditorTabState.loadError])。
   Future<bool> saveActiveFile() async {
     final active = activeTab;
-    if (active == null) return false;
+    if (active == null || active.loadError != null) return false;
 
-    final res = await client.saveFile(active.filePath);
+    final text = active.controller.text;
+    final res = await client.saveFile(active.filePath, text);
     if (res['status'] == 'ok') {
-      active.controller.markSaved();
+      // 保存期间可能又敲了字:只有磁盘内容仍等于当前文本时才算"未修改"。
+      if (active.controller.text == text) active.controller.markSaved();
       notifyListeners();
       return true;
     }
     return false;
   }
 
-  /// Performs undo on the active tab via Rust Core.
+  /// 撤销 / 重做都在 controller 里完成(Dart 撤销历史)。
   Future<void> undoActive() async {
-    final active = activeTab;
-    if (active == null) return;
-
-    final res = await client.undo(active.filePath);
-    if (res.isNotEmpty && res['status'] == 'ok') {
-      final newContent = res['content'] as String?;
-      if (newContent != null) {
-        active.controller.setText(newContent, markDirty: (res['is_dirty'] as bool?) ?? false);
-      }
-      active.controller.setHistoryStatus(
-        canUndo: (res['can_undo'] as bool?) ?? false,
-        canRedo: (res['can_redo'] as bool?) ?? false,
-        isDirty: res['is_dirty'] as bool?,
-      );
-      notifyListeners();
-    }
+    if (activeTab?.controller.undo() ?? false) notifyListeners();
   }
 
-  /// Performs redo on the active tab via Rust Core.
   Future<void> redoActive() async {
-    final active = activeTab;
-    if (active == null) return;
-
-    final res = await client.redo(active.filePath);
-    if (res.isNotEmpty && res['status'] == 'ok') {
-      final newContent = res['content'] as String?;
-      if (newContent != null) {
-        active.controller.setText(newContent, markDirty: (res['is_dirty'] as bool?) ?? true);
-      }
-      active.controller.setHistoryStatus(
-        canUndo: (res['can_undo'] as bool?) ?? false,
-        canRedo: (res['can_redo'] as bool?) ?? false,
-        isDirty: res['is_dirty'] as bool?,
-      );
-      notifyListeners();
-    }
+    if (activeTab?.controller.redo() ?? false) notifyListeners();
   }
 
   @override

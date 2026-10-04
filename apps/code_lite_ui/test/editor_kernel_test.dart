@@ -344,8 +344,11 @@ void main() {
 
       final client = _NoLspClient();
       final session = EditorSessionManager(client: client);
-      await session.openFile('primary.rs', defaultContent: 'fn primary() {}');
-      await session.openFile('secondary.rs', defaultContent: 'fn secondary() {}');
+      // 打开文件是真实的磁盘 IO,在 widget 测试的假时钟里永远等不到,要放进 runAsync。
+      await tester.runAsync(() async {
+        await session.openFile('primary.rs', defaultContent: 'fn primary() {}');
+        await session.openFile('secondary.rs', defaultContent: 'fn secondary() {}');
+      });
       session.splitPane(SplitDirection.horizontal, 'secondary.rs');
 
       SplitDirection changedDirection = SplitDirection.none;

@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'package:http/http.dart' as http;
 
 import '../fs/workspace_fs.dart' as fs;
 import '../git/git.dart';
@@ -10,10 +9,9 @@ import '../lsp/lsp.dart';
 import '../ffi/codelite_bindings_stub.dart'
     if (dart.library.ffi) '../ffi/codelite_bindings.dart';
 
-/// Unified Client connecting Flutter UI to the Rust Core.
-/// Prioritizes direct C-ABI FFI (`libcodelite.dylib`) and falls back to HTTP IPC (`code-lite-app`).
+/// 界面访问底层能力的统一门面。Git、文件、搜索、LSP、编辑历史都已是纯 Dart;
+/// 仍经由 Rust FFI 的只剩终端(PTY)与自动更新。
 class ApiClient {
-  final String baseUrl;
   final CodeLiteBindings _ffi = CodeLiteBindings.instance;
 
   /// 当前工作区根目录,以及挂在它上面的 Git 与语言服务器;切换项目时随 [openWorkspace] 一起更新。
@@ -23,7 +21,7 @@ class ApiClient {
   StreamSubscription<LspDiagnosticsEvent>? _lspSub;
   final StreamController<LspDiagnosticsEvent> _lspEvents = StreamController.broadcast();
 
-  ApiClient({this.baseUrl = 'http://127.0.0.1:4096', String initialRoot = '.'})
+  ApiClient({String initialRoot = '.'})
       : _root = initialRoot,
         _git = GitService(initialRoot),
         _lsp = LspService(initialRoot) {
@@ -53,108 +51,20 @@ class ApiClient {
     return tree.isNotEmpty ? tree : _fallbackWorkspace();
   }
 
-  /// Opens a file from disk into the Rust TextBuffer.
+  /// 读取文件内容(纯 Dart)。web 预览读不了磁盘,给出占位内容。
   Future<Map<String, dynamic>> fetchFile(String relativePath) async {
-    if (_ffi.isAvailable) {
-      final res = _ffi.openFile(relativePath);
-      if (res.isNotEmpty && res['status'] == 'ok') {
-        return res;
-      }
-    }
-
-    try {
-      final uri = Uri.parse('$baseUrl/api/file').replace(
-        queryParameters: {'path': relativePath},
-      );
-      final response = await http.get(uri);
-      if (response.statusCode == 200) {
-        return jsonDecode(response.body) as Map<String, dynamic>;
-      }
-    } catch (_) {}
+    final res = await fs.readTextFile(_root, relativePath);
+    if (res['status'] == 'ok') return res;
     return {
       'path': relativePath,
-      'content': '// CodeLiteX: Rust Core offline or loading...',
+      'content': '// CodeLiteX: ${res['error'] ?? 'unable to open file'}',
       'lines': 1,
+      'status': 'error',
     };
   }
 
-  /// Applies an edit directly to the Rust buffer.
-  Future<Map<String, dynamic>> editFile(String relativePath, Map<String, dynamic> payload) async {
-    if (_ffi.isAvailable) {
-      final res = _ffi.editFile(relativePath, payload);
-      if (res.isNotEmpty) return res;
-    }
-    return {};
-  }
-
-  /// Undoes the last edit via Rust UndoManager.
-  Future<Map<String, dynamic>> undo(String path) async {
-    if (_ffi.isAvailable) {
-      final res = _ffi.undo(path);
-      if (res.isNotEmpty) return res;
-    }
-
-    try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/api/undo'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'path': path}),
-      );
-      if (response.statusCode == 200) {
-        return jsonDecode(response.body) as Map<String, dynamic>;
-      }
-    } catch (_) {}
-    return {};
-  }
-
-  /// Redoes the undone edit via Rust UndoManager.
-  Future<Map<String, dynamic>> redo(String path) async {
-    if (_ffi.isAvailable) {
-      final res = _ffi.redo(path);
-      if (res.isNotEmpty) return res;
-    }
-
-    try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/api/redo'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'path': path}),
-      );
-      if (response.statusCode == 200) {
-        return jsonDecode(response.body) as Map<String, dynamic>;
-      }
-    } catch (_) {}
-    return {};
-  }
-
-  /// Saves the specified open file buffer to disk atomically.
-  Future<Map<String, dynamic>> saveFile(String path) async {
-    if (_ffi.isAvailable) {
-      final res = _ffi.saveFile(path);
-      if (res.isNotEmpty) return res;
-    }
-
-    try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/api/save'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'path': path}),
-      );
-      if (response.statusCode == 200) {
-        return jsonDecode(response.body) as Map<String, dynamic>;
-      }
-    } catch (_) {}
-    return {'status': 'ok', 'is_dirty': false};
-  }
-
-  /// Syncs cursor position to the Rust Editor.
-  Future<Map<String, dynamic>> setFileCursor(String path, int line, int col, {bool select = false}) async {
-    if (_ffi.isAvailable) {
-      final res = _ffi.setFileCursor(path, line, col, select: select);
-      if (res.isNotEmpty) return res;
-    }
-    return {'status': 'ok', 'line': line, 'col': col};
-  }
+  /// 把编辑器里的文本写回磁盘(原子写入)。
+  Future<Map<String, dynamic>> saveFile(String path, String content) => fs.writeTextFile(_root, path, content);
 
   // ---------------------------------------------------------------------------
   // LSP:纯 Dart 客户端(LspService),按语言拉起 rust-analyzer / gopls / dart 等;
@@ -185,14 +95,6 @@ class ApiClient {
     await _lspSub?.cancel();
     await _lsp.dispose();
     await _lspEvents.close();
-  }
-
-  /// Fetches viewport-virtualized syntax tokens for high performance line streaming.
-  Future<Map<String, dynamic>> getViewportTokens(String filePath, int startLine, int endLine) async {
-    if (_ffi.isAvailable) {
-      return _ffi.getViewportTokens(filePath, startLine, endLine);
-    }
-    return {'status': 'ok', 'lines': []};
   }
 
   /// Searches the workspace(纯 Dart,后台 isolate,不卡界面)。

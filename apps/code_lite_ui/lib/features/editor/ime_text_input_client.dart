@@ -114,7 +114,7 @@ class ImeTextInputBridge implements TextInputClient {
         if (inserted.isNotEmpty) {
           controller.insertText(inserted);
         } else {
-          controller.setText(value.text, markDirty: true);
+          controller.replaceAllText(value.text);
         }
       } else {
         // Delta text diff

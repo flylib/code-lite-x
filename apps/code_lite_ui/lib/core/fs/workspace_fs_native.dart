@@ -52,6 +52,58 @@ Future<Map<String, dynamic>> replaceWorkspace(
     });
 
 // ---------------------------------------------------------------------------
+// 打开 / 保存(原 Rust codelite_file_open / file_save)
+// ---------------------------------------------------------------------------
+
+/// 读取工作区内的文本文件。返回 `{"status":"ok","path","content","line_count"}`;
+/// 二进制文件返回 `{"status":"error","error":...,"binary":true}`,不当文本打开。
+Future<Map<String, dynamic>> readTextFile(String root, String relPath) async {
+  final file = File(_join(root, relPath));
+  List<int> bytes;
+  try {
+    bytes = await file.readAsBytes();
+  } on FileSystemException catch (e) {
+    return {'status': 'error', 'error': 'Open failed: ${e.osError?.message ?? e.message}'};
+  }
+  final head = bytes.length < 8000 ? bytes.length : 8000;
+  for (var i = 0; i < head; i++) {
+    if (bytes[i] == 0) return {'status': 'error', 'error': '二进制文件,无法以文本打开', 'binary': true};
+  }
+  final content = utf8.decode(bytes, allowMalformed: true);
+  return {
+    'status': 'ok',
+    'path': relPath,
+    'content': content,
+    'line_count': content.isEmpty ? 1 : '\n'.allMatches(content).length + 1,
+  };
+}
+
+/// 保存:先写同目录临时文件再 rename,写到一半崩溃也不会留下截断的源文件。
+Future<Map<String, dynamic>> writeTextFile(String root, String relPath, String content) async {
+  final target = File(_join(root, relPath));
+  final tmp = File('${target.path}.codelite-save-${DateTime.now().microsecondsSinceEpoch}');
+  try {
+    await target.parent.create(recursive: true);
+    await tmp.writeAsString(content, flush: true);
+    // 保留原文件的权限位(比如可执行脚本),rename 会用临时文件的权限。
+    if (await target.exists()) {
+      final mode = (await target.stat()).mode & 0x1ff;
+      await Process.run('chmod', [mode.toRadixString(8), tmp.path]);
+    }
+    await tmp.rename(target.path);
+    return {'status': 'ok', 'path': relPath};
+  } on FileSystemException catch (e) {
+    try {
+      if (await tmp.exists()) await tmp.delete();
+    } catch (_) {}
+    return {'status': 'error', 'error': 'Save failed: ${e.osError?.message ?? e.message}'};
+  }
+}
+
+String _join(String root, String relPath) =>
+    relPath.startsWith('/') ? relPath : '$root${Platform.pathSeparator}$relPath';
+
+// ---------------------------------------------------------------------------
 // 文件树
 // ---------------------------------------------------------------------------
 

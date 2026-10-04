@@ -13,7 +13,7 @@ CodeLiteX 是一款高性能的原生跨平台代码编辑器，内置 Git 管�
 
 | 模块 / 目录 | 角色 | 技术栈 | 交付产物 | 架构定位 |
 | :--- | :--- | :--- | :--- | :--- |
-| `crates/` | Rust Core 核心引擎 | Rust 2021 (Ropey, Parking Lot, portable-pty) | `libcodelite.dylib` (7.0M), `code-lite-app` (2.9M) | 视口虚拟化、PTY 终端、自动更新(正逐模块迁到 Dart:Git、文件树、全局搜索、LSP 已迁完;无本地数据库) |
+| `crates/` | Rust Core 核心引擎 | Rust 2021 (portable-pty, vt100) | `libcodelite.dylib`, `code-lite-app` | PTY 终端、自动更新(正逐模块迁到 Dart:Git、文件树、全局搜索、LSP、编辑器内核已迁完;无本地数据库) |
 | `apps/code_lite_ui/` | 桌面端图形界面 | Flutter 3.35+ (Dart 3.9) + FFI | macOS / Linux / Windows 桌面 GUI | IntelliJ Darcula 风格编辑器、Git 操作台、全局搜索模态框、交互终端 |
 | `scripts/` | 构建与原生打包 | Bash + cargo + flutter CLI + install_name_tool | `CodeLiteX.app` / `dist/release/macos/` | 自动化独立发布构建、动态库嵌入与 rpath/代码签名修复 |
 
@@ -67,14 +67,10 @@ bash scripts/build_macos_release.sh
 ### Rust Core 独立子模块调试（`crates/`）
 ```bash
 # 针对特定 crate 运行测试
-cargo test --offline -p code-lite-core       # 视口虚拟化 Tokenizer、Buffer、Cursor
+cargo test --offline -p code-lite-core       # 仅守护进程使用的文本缓冲(App 编辑器已是纯 Dart)
 cargo test --offline -p code-lite-fs         # 自动更新(tree/search 仅剩守护进程在用,App 已改用 Dart 实现)
-cargo test --offline -p code-lite-rpc        # 共享 JSON-RPC 2.0 协议、Framing、Correlation
 cargo test --offline -p code-lite-terminal   # PTY 交互终端会话
-cargo test --offline -p code-lite-ffi        # C-ABI 导出、JSON-RPC 路由与集成测试
-
-# 运行 IDL 契约代码生成器
-cargo run -p xtask --offline -- codegen
+cargo test --offline -p code-lite-ffi        # C-ABI 导出(终端、自动更新)
 
 # 编译独立后台守护进程
 cargo build --release --offline -p code-lite-app
@@ -100,7 +96,7 @@ cargo build --release --offline -p code-lite-app
 * `lib/core/lsp/`：Dart 实现的 LSP 客户端与文件大纲（outline）；Rust 侧不再有 LSP / 代码图谱；
 * `lib/core/client/`：高层业务客户端（`api_client.dart`），封装异步 Future/Stream，并在 FFI 动态库未加载时无缝回退至离线 Mock 逻辑；
 * `lib/core/theme/`：全局主题与样式（`intellij_theme.dart`），锁定 JetBrains Darcula 经典配比；
-* `lib/features/editor/`：代码编辑器区域，集成百万行视口虚拟化语法 Token 渲染与多光标编辑；
+* `lib/features/editor/`：代码编辑器区域（纯 Dart：文本、撤销/重做历史、语法高亮、文件读写）；
 * `lib/features/tree/`：左侧工作区文件树（`project_explorer.dart`）；
 * `lib/features/bottom_tools/`：底部工具箱（`bottom_tools_widget.dart`），整合真实 Git 分支控制台与交互终端；
 * `lib/features/search/`：全局搜索模态框（`global_search_modal.dart`，支持 `Cmd+Shift+F` 快速唤起）。
@@ -117,19 +113,15 @@ cargo build --release --offline -p code-lite-app
 
 ```
 crates/
- ├── code-lite-core      # 编辑器基础数据结构：Piece Table / Buffer、Cursor、视口行 Tokenizer
- ├── code-lite-rpc       # 共享 JSON-RPC 2.0 传输层：协议模型、Framing 与 Request 关联
+ ├── code-lite-core      # 文本缓冲(仅守护进程使用;App 的编辑器内核已迁到 Dart)
  ├── code-lite-fs        # 自动更新;工作区扫描/搜索仅供守护进程使用,随守护进程一起退役
  ├── code-lite-terminal  # PTY 交互终端会话管理
- ├── code-lite-ffi       # C-ABI 动态链接导出层、JSON-RPC 派发表与 handlers 业务处理器
- ├── xtask               # IDL 契约驱动的代码生成器 (core_api.toml -> Rust dispatch & Dart client)
+ ├── code-lite-ffi       # C-ABI 动态链接导出层(终端、自动更新)
  └── code-lite-app       # 原生轻量化独立后台守护进程 (Daemon)
 ```
 
 ### 关键架构机制
-1. **视口虚拟化高亮 Token 流 (`code-lite-core::syntax`)**：
-   无需全文件语法解析，根据当前展示行号区间 `[start_line, end_line]`，流式生成词法分类 Token（Keyword, Type, Function, String, Comment 等），保证百万行代码 120 FPS 渲染。
-2. **内存管理规范 (`code-lite-ffi`)**：
+1. **内存管理规范 (`code-lite-ffi`)**：
    - 跨语言字符串严格遵循「Rust 分配、Rust 释放」原则；
    - 导出 `codelite_string_alloc` 与 `codelite_buffer_free`，禁止跨 FFI 边界由 Dart 侧释放 Rust 裸指针。
 

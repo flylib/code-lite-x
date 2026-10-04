@@ -12,3 +12,9 @@ Future<Map<String, dynamic>> replaceWorkspace(
   Map<String, dynamic>? options,
 ]) async =>
     const {'status': 'error', 'error': 'web 预览不支持全局替换'};
+
+Future<Map<String, dynamic>> readTextFile(String root, String relPath) async =>
+    {'status': 'error', 'error': 'web 预览不支持读取文件'};
+
+Future<Map<String, dynamic>> writeTextFile(String root, String relPath, String content) async =>
+    {'status': 'error', 'error': 'web 预览不支持保存文件'};

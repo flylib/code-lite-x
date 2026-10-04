@@ -305,8 +305,6 @@ class _EditorRegion extends StatelessWidget {
           onCloseTab: (path) => _closeTab(context, path),
           onCodeChanged: (_) {},
           onSave: workspace.save,
-          onUndo: workspace.undo,
-          onRedo: workspace.redo,
           isTabDirty: workspace.isDirty,
           apiClient: client,
           splitDirection: sessions.splitDirection,

@@ -18,21 +18,9 @@ class CodeLiteBindings {
   /// web 上永远没有原生库。
   bool get isAvailable => false;
 
-  Map<String, dynamic> editFile(String relPath, Map<String, dynamic> editPayload) => {};
-
-  Map<String, dynamic> getViewportTokens(String filePath, int startLine, int endLine) => {'status': 'error', 'lines': []};
-
   bool initialize([String workspacePath = '.']) => false;
 
   bool reinitialize(String workspacePath) => false;
-
-  Map<String, dynamic> openFile(String relPath) => {};
-
-  Map<String, dynamic> redo(String relPath) => {};
-
-  Map<String, dynamic> saveFile(String relPath) => {};
-
-  Map<String, dynamic> setFileCursor(String relPath, int line, int col, {bool select = false}) => {};
 
   Map<String, dynamic> terminalExec(String cmd, List<String> args) => {'status': 'error', 'error': 'Bindings unavailable'};
 
@@ -46,8 +34,6 @@ class CodeLiteBindings {
       {'status': 'error', 'error': 'FFI not available'};
 
   Map<String, dynamic> ptyClose(String id) => {'status': 'error', 'error': 'FFI not available'};
-
-  Map<String, dynamic> undo(String relPath) => {};
 
   Map<String, dynamic> updaterApply(String stagingDir, String targetDir, List<String> files, {String? platform}) => {'status': 'error', 'error': 'FFI not available'};
 

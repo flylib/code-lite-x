@@ -16,17 +16,12 @@ A modern, high-performance code editor with built-in Git management, built in Ru
        ┌──────────────┬───────────────┼───────────────┐
        ▼              ▼               ▼               ▼
   Editor Core        Git             LSP          Terminal
- (Ropey/Cursors) (Status/Log/Diff) (Diagnostics)   (PTY Shell)
+ (Dart, undo)  (Status/Log/Diff) (Diagnostics)   (PTY Shell)
 ```
 
 ### Core Crates
 
-- **`code-lite-core`**: High-performance text engine built on `ropey::Rope`.
-  - $O(\log N)$ insertions, deletions, and slice queries.
-  - Comprehensive coordinate system: `Point` (line, column), `Range`, character/byte offset conversions.
-  - Multi-cursor and selection navigation engine with overlapping cursor normalization.
-  - Transactional `UndoManager` supporting atomic batch edits, redo, and cursor state restoration.
-  - High-level `Editor` orchestrator.
+- **Editor core** lives in the Flutter app (`apps/code_lite_ui/lib/features/editor/`): text model, undo/redo history with typing coalescing, syntax highlighting and atomic file save are pure Dart. `code-lite-core` remains only for the daemon.
 
 - **Git** lives in the Flutter app (`apps/code_lite_ui/lib/core/git/git_service.dart`): a pure Dart wrapper over the system `git` CLI — status, stage/unstage, commit, diff hunks, log/graph and history rewriting. The Rust core is being migrated to Dart module by module; Git was first.
 
@@ -38,8 +33,7 @@ A modern, high-performance code editor with built-in Git management, built in Ru
   - Cross-platform differential auto-updater.
 
 - **`code-lite-terminal`**: PTY-backed interactive terminal sessions.
-- **`code-lite-rpc`**: Shared JSON-RPC 2.0 protocol models and framing.
-- **`code-lite-ffi`**: C-ABI dynamic library (`libcodelite`) consumed by the Flutter desktop UI.
+- **`code-lite-ffi`**: C-ABI dynamic library (`libcodelite`) consumed by the Flutter desktop UI — now only the PTY terminal and the updater.
 - **`code-lite-app`**: Lightweight standalone daemon with a minimal web UI.
 
 ---

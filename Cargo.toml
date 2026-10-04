@@ -6,8 +6,6 @@ members = [
     "crates/code-lite-terminal",
     "crates/code-lite-app",
     "crates/code-lite-ffi",
-    "crates/code-lite-rpc",
-    "crates/xtask",
 ]
 
 
@@ -22,7 +20,5 @@ ropey = "1.6"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 thiserror = "2.0"
-anyhow = "1.0"
-uuid = { version = "1.10", features = ["v4", "serde"] }
 parking_lot = "0.12"
 regex = "1.11"

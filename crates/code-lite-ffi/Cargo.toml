@@ -10,11 +10,7 @@ name = "codelite"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-code-lite-core = { path = "../code-lite-core" }
 code-lite-fs = { path = "../code-lite-fs" }
 serde = { workspace = true }
 serde_json = { workspace = true }
-parking_lot = { workspace = true }
-uuid = { workspace = true }
-code-lite-rpc = { path = "../code-lite-rpc" }
 code-lite-terminal = { path = "../code-lite-terminal" }

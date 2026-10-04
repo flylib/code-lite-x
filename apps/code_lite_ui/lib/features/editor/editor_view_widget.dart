@@ -22,8 +22,6 @@ class EditorViewWidget extends StatefulWidget {
   final ScrollController? verticalScroll;
   final ScrollController? horizontalScroll;
   final VoidCallback? onSave;
-  final VoidCallback? onUndo;
-  final VoidCallback? onRedo;
   final bool Function(String path)? isTabDirty;
   final ApiClient? apiClient;
 
@@ -55,8 +53,6 @@ class EditorViewWidget extends StatefulWidget {
     this.verticalScroll,
     this.horizontalScroll,
     this.onSave,
-    this.onUndo,
-    this.onRedo,
     this.isTabDirty,
     this.apiClient,
     this.splitDirection = SplitDirection.none,
@@ -288,19 +284,18 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
     }
 
     // Shortcuts: Undo
+    // 撤销历史在 controller 里,直接作用于当前面板 —— 分屏的副面板也能撤销。
     if (isCmd && !isShift && event.logicalKey == LogicalKeyboardKey.keyZ) {
-      if (isPrimary && widget.onUndo != null) {
-        widget.onUndo!.call();
-      }
+      controller.undo();
+      imeBridge?.syncState();
       return KeyEventResult.handled;
     }
 
     // Shortcuts: Redo
     if ((isCmd && isShift && event.logicalKey == LogicalKeyboardKey.keyZ) ||
         (isCmd && event.logicalKey == LogicalKeyboardKey.keyY)) {
-      if (isPrimary && widget.onRedo != null) {
-        widget.onRedo!.call();
-      }
+      controller.redo();
+      imeBridge?.syncState();
       return KeyEventResult.handled;
     }
 

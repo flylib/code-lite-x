@@ -16,15 +16,6 @@ void main() {
         final version = ffi.getVersion();
         expect(version, equals('0.1.0'));
 
-        final fileRes = ffi.openFile('pubspec.yaml');
-        expect(fileRes['status'], equals('ok'));
-        expect((fileRes['content'] as String).contains('code_lite_ui'), isTrue);
-
-        // Test Phase 4 Viewport Tokens, Search & Terminal
-        final tokens = ffi.getViewportTokens('pubspec.yaml', 0, 10);
-        expect(tokens['status'], equals('ok'));
-        expect(tokens['lines'], isA<List>());
-
         final termRes = ffi.terminalExec('echo', ['hello_from_dart_ffi']);
         expect(termRes['status'], equals('ok'));
         expect((termRes['stdout'] as String).contains('hello_from_dart_ffi'), isTrue);
@@ -86,12 +77,9 @@ void main() {
       final tree = await client.fetchWorkspaceTree();
       expect(tree.containsKey('name'), isTrue);
 
-      final file = await client.fetchFile('Cargo.toml');
-      expect(file.containsKey('content'), isTrue);
-
-      // Test ApiClient Phase 4 methods
-      final vp = await client.getViewportTokens('pubspec.yaml', 0, 5);
-      expect(vp.containsKey('status'), isTrue);
+      final file = await client.fetchFile('pubspec.yaml');
+      expect(file['status'], 'ok');
+      expect(file['content'] as String, contains('code_lite_ui'));
 
       final search = await client.searchWorkspace('flutter');
       expect(search.containsKey('status'), isTrue);
@@ -149,11 +137,11 @@ void main() {
       for (final dir in [a, b, a]) {
         expect(ffi.reinitialize(dir.path), isTrue, reason: 'reinitialize(${dir.path})');
         expect(ffi.isAvailable, isTrue);
-        // Rust 上下文确实换了根:只在该目录里存在的文件能打开,另一个打不开。
+        // Rust 上下文确实换了根:终端命令在新根目录下执行。
         final here = dir == a ? 'only_in_a.txt' : 'only_in_b.txt';
-        final other = dir == a ? 'only_in_b.txt' : 'only_in_a.txt';
-        expect(ffi.openFile(here)['status'], 'ok');
-        expect(ffi.openFile(other)['status'], isNot('ok'));
+        final ls = ffi.terminalExec('ls', const []);
+        expect(ls['status'], 'ok');
+        expect(ls['stdout'] as String, contains(here));
       }
     });
   });

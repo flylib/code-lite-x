@@ -22,20 +22,6 @@ typedef _BufferFreeC = Void Function(Pointer<Char> ptr, Size len);
 typedef _BufferFreeDart = void Function(Pointer<Char> ptr, int len);
 
 
-typedef _FileOpenC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> path);
-typedef _FileOpenDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> path);
-
-typedef _FileEditC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> path, Pointer<Char> json);
-typedef _FileEditDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> path, Pointer<Char> json);
-
-typedef _UndoRedoC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> path);
-typedef _UndoRedoDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> path);
-
-typedef _FileSaveC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> path);
-typedef _FileSaveDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> path);
-
-typedef _FileCursorSetC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> path, Uint32 line, Uint32 col, Bool select);
-typedef _FileCursorSetDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> path, int line, int col, bool select);
 
 
 
@@ -59,8 +45,10 @@ typedef _FileCursorSetDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<C
 
 
 
-typedef _GetViewportTokensC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> filePath, Uint32 startLine, Uint32 endLine);
-typedef _GetViewportTokensDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> filePath, int startLine, int endLine);
+
+
+
+
 
 
 
@@ -86,8 +74,6 @@ typedef _PtyCloseDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> 
 
 
 
-typedef _JsonRpcCallC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> requestJson);
-typedef _JsonRpcCallDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> requestJson);
 
 
 
@@ -128,20 +114,12 @@ class CodeLiteBindings {
   late final _StringAllocDart _stringAlloc;
   late final _StringFreeDart _stringFree;
   late final _BufferFreeDart _bufferFree;
-  late final _FileOpenDart _fileOpen;
-  late final _FileEditDart _fileEdit;
-  late final _UndoRedoDart _undo;
-  late final _UndoRedoDart _redo;
-  late final _FileSaveDart _fileSave;
-  late final _FileCursorSetDart _fileCursorSet;
-  late final _GetViewportTokensDart _getViewportTokens;
   late final _TerminalExecDart _terminalExec;
   late final _PtyOpenDart _ptyOpen;
   late final _PtyWriteDart _ptyWrite;
   late final _PtyResizeDart _ptyResize;
   late final _PtySnapshotDart _ptySnapshot;
   late final _PtyCloseDart _ptyClose;
-  late final _JsonRpcCallDart _jsonRpcCall;
   late final _UpdaterCheckDart _updaterCheck;
   late final _UpdaterStageDart _updaterStage;
   late final _UpdaterApplyDart _updaterApply;
@@ -183,20 +161,12 @@ class CodeLiteBindings {
     _stringAlloc = _dylib!.lookupFunction<_StringAllocC, _StringAllocDart>('codelite_string_alloc');
     _stringFree = _dylib!.lookupFunction<_StringFreeC, _StringFreeDart>('codelite_string_free');
     _bufferFree = _dylib!.lookupFunction<_BufferFreeC, _BufferFreeDart>('codelite_buffer_free');
-    _fileOpen = _dylib!.lookupFunction<_FileOpenC, _FileOpenDart>('codelite_file_open');
-    _fileEdit = _dylib!.lookupFunction<_FileEditC, _FileEditDart>('codelite_file_edit');
-    _undo = _dylib!.lookupFunction<_UndoRedoC, _UndoRedoDart>('codelite_undo');
-    _redo = _dylib!.lookupFunction<_UndoRedoC, _UndoRedoDart>('codelite_redo');
-    _fileSave = _dylib!.lookupFunction<_FileSaveC, _FileSaveDart>('codelite_file_save');
-    _fileCursorSet = _dylib!.lookupFunction<_FileCursorSetC, _FileCursorSetDart>('codelite_file_cursor_set');
-    _getViewportTokens = _dylib!.lookupFunction<_GetViewportTokensC, _GetViewportTokensDart>('codelite_get_viewport_tokens');
     _terminalExec = _dylib!.lookupFunction<_TerminalExecC, _TerminalExecDart>('codelite_terminal_exec');
     _ptyOpen = _dylib!.lookupFunction<_PtyOpenC, _PtyOpenDart>('codelite_pty_open');
     _ptyWrite = _dylib!.lookupFunction<_PtyWriteC, _PtyWriteDart>('codelite_pty_write');
     _ptyResize = _dylib!.lookupFunction<_PtyResizeC, _PtyResizeDart>('codelite_pty_resize');
     _ptySnapshot = _dylib!.lookupFunction<_PtySnapshotC, _PtySnapshotDart>('codelite_pty_snapshot');
     _ptyClose = _dylib!.lookupFunction<_PtyCloseC, _PtyCloseDart>('codelite_pty_close');
-    _jsonRpcCall = _dylib!.lookupFunction<_JsonRpcCallC, _JsonRpcCallDart>('codelite_jsonrpc_call');
     _updaterCheck = _dylib!.lookupFunction<_UpdaterCheckC, _UpdaterCheckDart>('codelite_updater_check');
     _updaterStage = _dylib!.lookupFunction<_UpdaterStageC, _UpdaterStageDart>('codelite_updater_stage');
     _updaterApply = _dylib!.lookupFunction<_UpdaterApplyC, _UpdaterApplyDart>('codelite_updater_apply');
@@ -223,70 +193,6 @@ class CodeLiteBindings {
     return _fromCString(ptr);
   }
 
-  /// Dispatches a JSON-RPC 2.0 request via Rust C-ABI `codelite_jsonrpc_call`.
-  String? jsonRpcCall(Pointer<Void> ctx, String requestJson) {
-    if (!isAvailable && ctx.address == 0) return null;
-    final reqPtr = _toCString(requestJson);
-    try {
-      final ptr = _jsonRpcCall(ctx, reqPtr.pointer);
-      return _fromCString(ptr);
-    } finally {
-      _freeAllocatedString(reqPtr);
-    }
-  }
-
-  Map<String, dynamic> openFile(String relPath) {
-    if (!isAvailable) return {};
-    final pathPtr = _toCString(relPath);
-    final ptr = _fileOpen(_ctx!, pathPtr.pointer);
-    _freeAllocatedString(pathPtr);
-    return _parseJsonMap(_fromCString(ptr));
-  }
-
-  Map<String, dynamic> editFile(String relPath, Map<String, dynamic> editPayload) {
-    if (!isAvailable) return {};
-    final pathPtr = _toCString(relPath);
-    final jsonPtr = _toCString(jsonEncode(editPayload));
-    final ptr = _fileEdit(_ctx!, pathPtr.pointer, jsonPtr.pointer);
-    _freeAllocatedString(pathPtr);
-    _freeAllocatedString(jsonPtr);
-    return _parseJsonMap(_fromCString(ptr));
-  }
-
-  Map<String, dynamic> undo(String relPath) {
-    if (!isAvailable) return {};
-    final pathPtr = _toCString(relPath);
-    final ptr = _undo(_ctx!, pathPtr.pointer);
-    _freeAllocatedString(pathPtr);
-    return _parseJsonMap(_fromCString(ptr));
-  }
-
-  Map<String, dynamic> redo(String relPath) {
-    if (!isAvailable) return {};
-    final pathPtr = _toCString(relPath);
-    final ptr = _redo(_ctx!, pathPtr.pointer);
-    _freeAllocatedString(pathPtr);
-    return _parseJsonMap(_fromCString(ptr));
-  }
-
-  /// Saves an open editor buffer to disk atomically, resetting is_dirty to false.
-  Map<String, dynamic> saveFile(String relPath) {
-    if (!isAvailable) return {};
-    final pathPtr = _toCString(relPath);
-    final ptr = _fileSave(_ctx!, pathPtr.pointer);
-    _freeAllocatedString(pathPtr);
-    return _parseJsonMap(_fromCString(ptr));
-  }
-
-  /// Sets cursor position and selection state in the Rust Editor.
-  Map<String, dynamic> setFileCursor(String relPath, int line, int col, {bool select = false}) {
-    if (!isAvailable) return {};
-    final pathPtr = _toCString(relPath);
-    final ptr = _fileCursorSet(_ctx!, pathPtr.pointer, line, col, select);
-    _freeAllocatedString(pathPtr);
-    return _parseJsonMap(_fromCString(ptr));
-  }
-
   // ---------------------------------------------------------------------------
   // LSP (Language Server Protocol) Cognitive Capabilities (P2.1 - P2.6)
   // ---------------------------------------------------------------------------
@@ -294,14 +200,6 @@ class CodeLiteBindings {
   // ---------------------------------------------------------------------------
   // Phase 4: Viewport Tokens, Workspace Search & Terminal Execution
   // ---------------------------------------------------------------------------
-
-  Map<String, dynamic> getViewportTokens(String filePath, int startLine, int endLine) {
-    if (!isAvailable) return {'status': 'error', 'lines': []};
-    final filePtr = _toCString(filePath);
-    final ptr = _getViewportTokens(_ctx!, filePtr.pointer, startLine, endLine);
-    _freeAllocatedString(filePtr);
-    return _parseJsonMap(_fromCString(ptr));
-  }
 
   Map<String, dynamic> terminalExec(String cmd, List<String> args) {
     if (!isAvailable) return {'status': 'error', 'error': 'Bindings unavailable'};

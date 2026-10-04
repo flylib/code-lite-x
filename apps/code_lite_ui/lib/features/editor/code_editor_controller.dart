@@ -100,6 +100,7 @@ class CodeEditorController extends ChangeNotifier {
   void removeTextListener(void Function(String newText) listener) => _textListeners.remove(listener);
 
   void _emitTextChanged() {
+    if (!_applyingHistory) _recordEdit();
     onTextChanged?.call(_text);
     for (final l in List.of(_textListeners)) {
       l(_text);
@@ -127,22 +128,189 @@ class CodeEditorController extends ChangeNotifier {
   bool get cursorVisible => _cursorVisible;
   TextRange get composingRange => _composingRange;
 
-  void setHistoryStatus({required bool canUndo, required bool canRedo, bool? isDirty}) {
-    _canUndo = canUndo;
-    _canRedo = canRedo;
-    if (isDirty != null && _isDirty != isDirty) {
-      _isDirty = isDirty;
-      onDirtyChanged?.call(_isDirty);
+  // ---------------------------------------------------------------------------
+  // 撤销 / 重做(原在 Rust code-lite-core,迁到 Dart)
+  //
+  // 不逐个改各编辑方法:所有编辑最后都经过 _emitTextChanged,在那里对比"历史已知文本"
+  // 与新文本,取公共前后缀得到这一步改了什么。连续输入 / 连续退格在 1 秒内合并成一步,
+  // 和 IntelliJ 一样;换行、光标跳动、保存都会切断合并。
+  // ---------------------------------------------------------------------------
+
+  static const int _maxHistory = 1000;
+  static const Duration _groupWindow = Duration(seconds: 1);
+
+  final List<_TextEdit> _undoStack = [];
+  final List<_TextEdit> _redoStack = [];
+
+  /// 历史记录所知的文本(上一次记录之后的样子),用来和新文本做差。
+  String _historyText = '';
+
+  /// 编辑开始前的选区:撤销时把光标放回这里。光标移动时同步更新。
+  EditorSelection _historySelection = const EditorSelection.collapsed(EditorPosition.zero);
+
+  /// 上次保存时的文本:撤销回到这里就不再算"已修改"。
+  String _savedText = '';
+  bool _applyingHistory = false;
+  bool _breakGroup = false;
+
+  void _recordEdit() {
+    final before = _historyText;
+    final after = _text;
+    if (before == after) return;
+    final minLen = before.length < after.length ? before.length : after.length;
+    var prefix = 0;
+    while (prefix < minLen && before.codeUnitAt(prefix) == after.codeUnitAt(prefix)) {
+      prefix++;
     }
+    var suffix = 0;
+    while (suffix < minLen - prefix &&
+        before.codeUnitAt(before.length - 1 - suffix) == after.codeUnitAt(after.length - 1 - suffix)) {
+      suffix++;
+    }
+    final removed = before.substring(prefix, before.length - suffix);
+    final inserted = after.substring(prefix, after.length - suffix);
+    // 单字符增删落在一串相同字符里时,前后缀比对给出的是这串的最右端(删 "llo" 的
+    // 第一个 l 会被认成删第二个),位置一错连续 Delete 就合不上。用光标消歧:
+    // 删除后光标就在删除点,插入后光标在插入点之后。
+    if (removed.length == 1 && inserted.isEmpty) {
+      prefix = _disambiguate(before, prefix, removed.codeUnitAt(0), _offsetOf(_selection.head));
+    } else if (inserted.length == 1 && removed.isEmpty) {
+      prefix = _disambiguate(after, prefix, inserted.codeUnitAt(0), _offsetOf(_selection.head) - 1);
+    }
+    final edit = _TextEdit(
+      offset: prefix,
+      removed: removed,
+      inserted: inserted,
+      selectionBefore: _historySelection,
+      selectionAfter: _selection,
+      time: DateTime.now(),
+    );
+    if (!_mergeIntoTop(edit)) {
+      _undoStack.add(edit);
+      if (_undoStack.length > _maxHistory) _undoStack.removeAt(0);
+    }
+    _redoStack.clear();
+    _historyText = after;
+    _historySelection = _selection;
+    _breakGroup = false;
+    _syncHistoryState();
+  }
+
+  /// [text] 中 [p] 处的字符 [unit] 若属于一串相同字符,把位置挪到 [cursor](在这串范围内时)。
+  int _disambiguate(String text, int p, int unit, int cursor) {
+    var lo = p;
+    while (lo > 0 && text.codeUnitAt(lo - 1) == unit) {
+      lo--;
+    }
+    return (lo < p && cursor >= lo && cursor <= p) ? cursor : p;
+  }
+
+  int _offsetOf(EditorPosition pos) {
+    var offset = 0;
+    for (var i = 0; i < pos.line && i < _lines.length; i++) {
+      offset += _lines[i].length + 1;
+    }
+    return offset + pos.col;
+  }
+
+  /// 连续输入、连续退格、连续 Delete 合并成一步撤销。
+  bool _mergeIntoTop(_TextEdit e) {
+    if (_breakGroup || _undoStack.isEmpty || _redoStack.isNotEmpty) return false;
+    final top = _undoStack.last;
+    if (e.time.difference(top.time) > _groupWindow) return false;
+    _TextEdit? merged;
+    final typing = top.removed.isEmpty && e.removed.isEmpty;
+    final deleting = top.inserted.isEmpty && e.inserted.isEmpty && e.removed.length == 1 && e.removed != '\n';
+    if (typing &&
+        e.inserted.length == 1 &&
+        e.inserted != '\n' &&
+        !top.inserted.endsWith('\n') &&
+        e.offset == top.offset + top.inserted.length) {
+      merged = top.copyWith(inserted: top.inserted + e.inserted, selectionAfter: e.selectionAfter, time: e.time);
+    } else if (deleting && e.offset + 1 == top.offset) {
+      // 退格:往前吃
+      merged = top.copyWith(offset: e.offset, removed: e.removed + top.removed, selectionAfter: e.selectionAfter, time: e.time);
+    } else if (deleting && e.offset == top.offset) {
+      // Delete:往后吃
+      merged = top.copyWith(removed: top.removed + e.removed, selectionAfter: e.selectionAfter, time: e.time);
+    }
+    if (merged == null) return false;
+    _undoStack[_undoStack.length - 1] = merged;
+    return true;
+  }
+
+  bool undo() {
+    if (_undoStack.isEmpty) return false;
+    final e = _undoStack.removeLast();
+    _redoStack.add(e);
+    _applyHistory(
+      _text.replaceRange(e.offset, e.offset + e.inserted.length, e.removed),
+      e.selectionBefore,
+    );
+    return true;
+  }
+
+  bool redo() {
+    if (_redoStack.isEmpty) return false;
+    final e = _redoStack.removeLast();
+    _undoStack.add(e);
+    _applyHistory(
+      _text.replaceRange(e.offset, e.offset + e.removed.length, e.inserted),
+      e.selectionAfter,
+    );
+    return true;
+  }
+
+  void _applyHistory(String newText, EditorSelection selection) {
+    _text = newText;
+    _lines = newText.isEmpty ? [''] : newText.split('\n');
+    _selection = EditorSelection(anchor: _clampPosition(selection.anchor), head: _clampPosition(selection.head));
+    _preferredCol = _selection.head.col;
+    _historyText = newText;
+    _historySelection = _selection;
+    _breakGroup = true;
+    _applyingHistory = true;
+    try {
+      _emitTextChanged(); // 会话层照常同步(LSP didChange 等),但不再记入历史
+    } finally {
+      _applyingHistory = false;
+    }
+    _syncHistoryState();
+    onCursorChanged?.call(_selection.head);
+    _resetBlink();
     notifyListeners();
   }
 
-  void markSaved() {
-    if (_isDirty) {
-      _isDirty = false;
-      onDirtyChanged?.call(false);
-      notifyListeners();
+  void _syncHistoryState() {
+    _canUndo = _undoStack.isNotEmpty;
+    _canRedo = _redoStack.isNotEmpty;
+    final dirty = _text != _savedText;
+    if (dirty != _isDirty) {
+      _isDirty = dirty;
+      onDirtyChanged?.call(dirty);
     }
+  }
+
+  /// 保存成功后调用:当前文本成为"未修改"的基准,并切断输入合并。
+  void markSaved() {
+    _savedText = _text;
+    _breakGroup = true;
+    _syncHistoryState();
+    notifyListeners();
+  }
+
+  /// 作为一次编辑替换全文(进入撤销历史、通知会话层),用于输入法等整段改写。
+  /// 与 [setText] 不同:后者是"载入",会清空历史。
+  void replaceAllText(String newText) {
+    if (newText == _text) return;
+    _text = newText;
+    _lines = newText.isEmpty ? [''] : newText.split('\n');
+    _selection = EditorSelection.collapsed(_clampPosition(_selection.head));
+    _preferredCol = _selection.head.col;
+    _emitTextChanged();
+    onCursorChanged?.call(_selection.head);
+    _resetBlink();
+    notifyListeners();
   }
 
   void setComposingRange(TextRange range) {
@@ -165,15 +333,24 @@ class CodeEditorController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Sets the entire document text.
+  /// 载入整份文本(打开文件 / 从磁盘重新加载):清空撤销历史。
+  /// [markDirty] 为 false 时这份文本就是"已保存"的基准。要作为一次可撤销的编辑,用 [replaceAllText]。
   void setText(String newText, {bool markDirty = false}) {
     _text = newText;
     _lines = newText.isEmpty ? [''] : newText.split('\n');
     _selection = EditorSelection.collapsed(_clampPosition(_selection.head));
     _preferredCol = _selection.head.col;
-    if (markDirty && !_isDirty) {
-      _isDirty = true;
-      onDirtyChanged?.call(true);
+    _undoStack.clear();
+    _redoStack.clear();
+    _historyText = newText;
+    _historySelection = _selection;
+    if (!markDirty) _savedText = newText;
+    final dirty = markDirty || newText != _savedText;
+    _canUndo = false;
+    _canRedo = false;
+    if (dirty != _isDirty) {
+      _isDirty = dirty;
+      onDirtyChanged?.call(dirty);
     }
     _resetBlink();
     notifyListeners();
@@ -190,6 +367,8 @@ class CodeEditorController extends ChangeNotifier {
     } else {
       _selection = EditorSelection.collapsed(clamped);
     }
+    _historySelection = _selection;
+    _breakGroup = true;
     _resetBlink();
     onCursorChanged?.call(clamped);
     notifyListeners();
@@ -201,6 +380,8 @@ class CodeEditorController extends ChangeNotifier {
     final clampedHead = _clampPosition(head);
     _preferredCol = clampedHead.col;
     _selection = EditorSelection(anchor: clampedAnchor, head: clampedHead);
+    _historySelection = _selection;
+    _breakGroup = true;
     _resetBlink();
     onCursorChanged?.call(clampedHead);
     notifyListeners();
@@ -679,4 +860,33 @@ class CodeEditorController extends ChangeNotifier {
     _blinkTimer?.cancel();
     super.dispose();
   }
+}
+
+/// 一步可撤销的编辑:在 [offset] 处把 [removed] 换成了 [inserted](UTF-16 下标)。
+class _TextEdit {
+  const _TextEdit({
+    required this.offset,
+    required this.removed,
+    required this.inserted,
+    required this.selectionBefore,
+    required this.selectionAfter,
+    required this.time,
+  });
+
+  final int offset;
+  final String removed;
+  final String inserted;
+  final EditorSelection selectionBefore;
+  final EditorSelection selectionAfter;
+  final DateTime time;
+
+  _TextEdit copyWith({int? offset, String? removed, String? inserted, EditorSelection? selectionAfter, DateTime? time}) =>
+      _TextEdit(
+        offset: offset ?? this.offset,
+        removed: removed ?? this.removed,
+        inserted: inserted ?? this.inserted,
+        selectionBefore: selectionBefore,
+        selectionAfter: selectionAfter ?? this.selectionAfter,
+        time: time ?? this.time,
+      );
 }
