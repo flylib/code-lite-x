@@ -205,8 +205,10 @@ class GitLogStore extends ChangeNotifier {
   bool _loaded = false;
   Timer? _textDebounce;
   int _loadToken = 0;
+  int _detailsToken = 0;
 
-  bool get isAvailable => _client.isFfiAvailable;
+  /// Git 现在是纯 Dart 实现,只有 web 预览(没有 dart:io)用不了。
+  bool get isAvailable => !kIsWeb;
   bool get hasFilters => text.isNotEmpty || branch != null || author != null || date != DateFilter.all || paths.isNotEmpty;
 
   GitCommit? commit(String hash) {
@@ -226,12 +228,11 @@ class GitLogStore extends ChangeNotifier {
   }
 
   Future<void> refresh() async {
-    _loadBranches();
-    await _loadCommits(reset: true);
+    await Future.wait([_loadBranches(), _loadCommits(reset: true)]);
   }
 
-  void _loadBranches() {
-    final res = _client.gitCall('git.branches');
+  Future<void> _loadBranches() async {
+    final res = await _client.gitCall('git.branches');
     if (res['status'] != 'ok') return;
     currentBranch = res['current'] as String?;
     detached = res['detached'] == true;
@@ -263,7 +264,7 @@ class GitLogStore extends ChangeNotifier {
       'skip': reset ? 0 : commits.length,
     };
     // 大仓库的 git log 可能要几百毫秒,放后台。
-    final res = await _client.gitCallAsync('git.log', params);
+    final res = await _client.gitCall('git.log', params);
     if (token != _loadToken) return; // 期间筛选又变了,丢弃过期结果
 
     loading = false;
@@ -281,7 +282,7 @@ class GitLogStore extends ChangeNotifier {
 
     if (selected == null || _index[selected] == null) {
       // 默认选中第一条(与 IntelliJ 打开 Log 的行为一致)。
-      selectCommit(commits.isEmpty ? null : commits.first.hash);
+      await selectCommit(commits.isEmpty ? null : commits.first.hash);
     } else {
       notifyListeners();
     }
@@ -305,13 +306,16 @@ class GitLogStore extends ChangeNotifier {
     await _loadCommits(reset: false);
   }
 
-  void selectCommit(String? hash) {
+  /// 先立刻高亮选中行,再异步加载详情;快速连点时只采用最后一次的结果。
+  Future<void> selectCommit(String? hash) async {
+    final token = ++_detailsToken;
     selected = hash;
     details = null;
-    if (hash != null) {
-      final res = _client.gitCall('git.commit_details', {'hash': hash});
-      if (res['status'] == 'ok') details = GitCommitDetails.fromJson(res);
-    }
+    notifyListeners();
+    if (hash == null) return;
+    final res = await _client.gitCall('git.commit_details', {'hash': hash});
+    if (token != _detailsToken) return;
+    if (res['status'] == 'ok') details = GitCommitDetails.fromJson(res);
     notifyListeners();
   }
 
@@ -321,7 +325,7 @@ class GitLogStore extends ChangeNotifier {
       await loadMore();
     }
     if (_index[hash] == null) return false;
-    selectCommit(hash);
+    await selectCommit(hash);
     return true;
   }
 
@@ -393,8 +397,8 @@ class GitLogStore extends ChangeNotifier {
     _loadCommits(reset: true);
   }
 
-  void loadAuthors() {
-    final res = _client.gitCall('git.authors');
+  Future<void> loadAuthors() async {
+    final res = await _client.gitCall('git.authors');
     if (res['status'] == 'ok') {
       authors = [for (final a in (res['authors'] as List? ?? const [])) a as String];
       notifyListeners();
@@ -413,7 +417,7 @@ class GitLogStore extends ChangeNotifier {
 
   // --- 读取类辅助(对话框用) ---
 
-  Map<String, dynamic> call(String method, [Map<String, dynamic> params = const {}]) =>
+  Future<Map<String, dynamic>> call(String method, [Map<String, dynamic> params = const {}]) =>
       _client.gitCall(method, params);
 
   /// 执行一个会改动仓库的操作:后台跑、显示进度、完成后刷新分支和日志。
@@ -422,7 +426,7 @@ class GitLogStore extends ChangeNotifier {
     if (busy != null) return '有操作正在进行: $busy';
     busy = label;
     notifyListeners();
-    final res = await _client.gitCallAsync(method, params);
+    final res = await _client.gitCall(method, params);
     busy = null;
     await refresh();
     return res['status'] == 'ok' ? null : (res['error'] as String? ?? '$label 失败');

@@ -77,13 +77,6 @@ void main() {
         expect(termRes['status'], equals('ok'));
         expect((termRes['stdout'] as String).contains('hello_from_dart_ffi'), isTrue);
 
-        final gitStat = ffi.getGitStatus();
-        expect(gitStat.containsKey('branch'), isTrue);
-        expect(gitStat.containsKey('changes'), isTrue);
-
-        final gitDiff = ffi.getGitDiff();
-        expect(gitDiff.containsKey('diff'), isTrue);
-
         // Test Phase 11 Auto-Updater bindings (codelite_updater_check, updater_stage, updater_apply)
         const updateManifest = '''
 {

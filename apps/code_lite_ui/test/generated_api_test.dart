@@ -71,11 +71,6 @@ void main() {
             }
           ],
         },
-        'git.status': {
-          'branch': 'main',
-          'is_clean': true,
-          'changes': [],
-        },
       });
 
       final client = CoreApiClient(transport: mock);
@@ -124,14 +119,8 @@ void main() {
       expect(diags.diagnostics.first.severity, 'Warning');
       expect(diags.diagnostics.first.message, 'unused variable');
 
-      // 7. gitStatus
-      final git = await client.gitStatus(workspacePath: '/tmp/repo');
-      expect(git.branch, 'main');
-      expect(git.isClean, isTrue);
-      expect(git.changes, isEmpty);
-
-      // Verify all 7 methods were recorded
-      expect(mock.recordedCalls.length, 7);
+      // Verify all 6 methods were recorded
+      expect(mock.recordedCalls.length, 6);
     });
 
     test('JsonRpcException handles error payloads properly', () async {
@@ -185,11 +174,6 @@ void main() {
 
         final redo = await client.fileRedo(path: 'hello.txt');
         expect(redo.success, isTrue);
-
-        // 4. gitStatus
-        Process.runSync('git', ['-C', tempDir.path, 'init']);
-        final git = await client.gitStatus(workspacePath: tempDir.path);
-        expect(git.branch, isNotNull);
 
         bindings.dispose();
       } finally {

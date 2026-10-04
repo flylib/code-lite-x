@@ -75,24 +75,6 @@ fields = [
     { name = "diagnostics", type = "list[DiagnosticItem]" },
 ]
 
-[[types]]
-name = "GitFileChange"
-description = "Git status file modification"
-fields = [
-    { name = "path", type = "string" },
-    { name = "status", type = "string" },
-    { name = "staged", type = "bool" },
-]
-
-[[types]]
-name = "GitStatusResult"
-description = "Git working tree status"
-fields = [
-    { name = "branch", type = "string" },
-    { name = "is_clean", type = "bool" },
-    { name = "changes", type = "list[GitFileChange]" },
-]
-
 [[methods]]
 name = "file.open"
 description = "Open and read a file buffer"
@@ -155,14 +137,4 @@ params = [
     { name = "path", type = "string" },
 ]
 returns = "DiagnosticList"
-streaming = false
-
-[[methods]]
-name = "git.status"
-description = "Query Git status of the workspace repository"
-handler = "crate::handlers::git::handle_status"
-params = [
-    { name = "workspace_path", type = "string" },
-]
-returns = "GitStatusResult"
 streaming = false

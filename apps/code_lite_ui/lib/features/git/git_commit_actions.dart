@@ -170,7 +170,7 @@ class GitCommitActions {
 
   /// 改写历史前的提醒:提交已推送时,改写后需要强制推送。
   Future<bool> _guardRewrite(String hash, String what) async {
-    final res = store.call('git.is_pushed', {'hash': hash});
+    final res = await store.call('git.is_pushed', {'hash': hash});
     if (res['pushed'] != true) return true;
     return _confirm(
       what,
@@ -181,7 +181,7 @@ class GitCommitActions {
   }
 
   Future<void> editMessage(String hash) async {
-    final res = store.call('git.commit_details', {'hash': hash});
+    final res = await store.call('git.commit_details', {'hash': hash});
     if (res['status'] != 'ok') return _toast(res['error'] as String? ?? '读取提交失败', error: true);
     if (!await _guardRewrite(hash, 'Edit Commit Message')) return;
     final message = await promptText(
@@ -207,7 +207,7 @@ class GitCommitActions {
 
   Future<void> squashInto(GitCommit c) async {
     if (!await _guardRewrite(c.hash, 'Squash Into')) return;
-    final res = store.call('git.commit_details', {'hash': c.hash});
+    final res = await store.call('git.commit_details', {'hash': c.hash});
     final message = await promptText(
       title: 'Squash Into ${c.short}',
       label: '把当前已暂存的修改合并进这个提交,并使用下面的提交信息',
@@ -226,7 +226,7 @@ class GitCommitActions {
   }
 
   Future<void> interactiveRebase(GitCommit c) async {
-    final plan = store.call('git.rebase_plan', {'hash': c.hash});
+    final plan = await store.call('git.rebase_plan', {'hash': c.hash});
     if (plan['status'] != 'ok') return _toast(plan['error'] as String? ?? '无法生成 rebase 计划', error: true);
     if (!await _guardRewrite(c.hash, 'Interactive Rebase')) return;
     if (!context.mounted) return;
@@ -293,7 +293,7 @@ class GitCommitActions {
     final rev = await promptText(title: 'Go to Hash/Branch/Tag', label: '输入提交哈希、分支名或标签名');
     if (rev == null || rev.trim().isEmpty) return;
     // 任意修订名(哈希 / 分支 / 标签)都可以当 log 的起点,取第一条就是它本身。
-    final res = store.call('git.log', {'branch': rev.trim(), 'limit': 1});
+    final res = await store.call('git.log', {'branch': rev.trim(), 'limit': 1});
     final commits = res['commits'] as List?;
     final hash = commits == null || commits.isEmpty ? null : commits.first['hash'] as String?;
     if (hash == null || !await store.reveal(hash)) {
@@ -304,7 +304,7 @@ class GitCommitActions {
   // --- 只读查看 -------------------------------------------------------------
 
   Future<void> showCommitFileDiff(String hash, GitFileChange change) async {
-    final res = store.call('git.commit_file_diff', {
+    final res = await store.call('git.commit_file_diff', {
       'hash': hash,
       'path': change.path,
       if (change.oldPath != null) 'old_path': change.oldPath,
@@ -318,7 +318,7 @@ class GitCommitActions {
   }
 
   Future<void> createPatch(GitCommit c) async {
-    final res = store.call('git.create_patch', {'hash': c.hash});
+    final res = await store.call('git.create_patch', {'hash': c.hash});
     if (res['status'] != 'ok') return _toast(res['error'] as String? ?? '生成 patch 失败', error: true);
     final patch = res['patch'] as String? ?? '';
     if (!context.mounted) return;
@@ -348,7 +348,7 @@ class GitCommitActions {
   }
 
   Future<void> compareWithLocal(GitCommit c) async {
-    final res = store.call('git.compare_local', {'hash': c.hash});
+    final res = await store.call('git.compare_local', {'hash': c.hash});
     if (res['status'] != 'ok') return _toast(res['error'] as String? ?? '比较失败', error: true);
     final files = [for (final f in (res['files'] as List? ?? const [])) GitFileChange.fromJson(f as Map<String, dynamic>)];
     if (!context.mounted) return;
@@ -357,8 +357,8 @@ class GitCommitActions {
       child: _FileBrowser(
         paths: [for (final f in files) f.path],
         statuses: {for (final f in files) f.path: f.status},
-        load: (path) {
-          final d = store.call('git.compare_local_diff', {'hash': c.hash, 'path': path});
+        load: (path) async {
+          final d = await store.call('git.compare_local_diff', {'hash': c.hash, 'path': path});
           return DiffView(diff: d['diff'] as String? ?? (d['error'] as String? ?? ''));
         },
       ),
@@ -366,7 +366,7 @@ class GitCommitActions {
   }
 
   Future<void> showRepositoryAt(GitCommit c) async {
-    final res = store.call('git.tree_at', {'hash': c.hash});
+    final res = await store.call('git.tree_at', {'hash': c.hash});
     if (res['status'] != 'ok') return _toast(res['error'] as String? ?? '读取文件树失败', error: true);
     final paths = [for (final p in (res['paths'] as List? ?? const [])) p as String];
     if (!context.mounted) return;
@@ -374,8 +374,8 @@ class GitCommitActions {
       title: 'Repository at ${c.short} — ${c.subject}',
       child: _FileBrowser(
         paths: paths,
-        load: (path) {
-          final f = store.call('git.file_at', {'hash': c.hash, 'path': path});
+        load: (path) async {
+          final f = await store.call('git.file_at', {'hash': c.hash, 'path': path});
           if (f['binary'] == true) return const Center(child: Text('二进制文件', style: _kMuted));
           return PlainTextView(text: f['content'] as String? ?? (f['error'] as String? ?? ''));
         },
@@ -866,7 +866,7 @@ class _FileBrowser extends StatefulWidget {
 
   final List<String> paths;
   final Map<String, String> statuses;
-  final Widget Function(String path) load;
+  final Future<Widget> Function(String path) load;
 
   @override
   State<_FileBrowser> createState() => _FileBrowserState();
@@ -874,6 +874,7 @@ class _FileBrowser extends StatefulWidget {
 
 class _FileBrowserState extends State<_FileBrowser> {
   String? _selected;
+  final Map<String, Future<Widget>> _loaded = {};
   String _query = '';
 
   @override
@@ -934,7 +935,12 @@ class _FileBrowserState extends State<_FileBrowser> {
         Expanded(
           child: _selected == null
               ? const Center(child: Text('选择左侧文件', style: _kMuted))
-              : KeyedSubtree(key: ValueKey(_selected), child: widget.load(_selected!)),
+              : FutureBuilder<Widget>(
+                  key: ValueKey(_selected),
+                  // 缓存:在筛选框里打字会重建本组件,不该每次都重新跑 git。
+                  future: _loaded.putIfAbsent(_selected!, () => widget.load(_selected!)),
+                  builder: (context, snap) => snap.data ?? const Center(child: Text('加载中…', style: _kMuted)),
+                ),
         ),
       ],
     );

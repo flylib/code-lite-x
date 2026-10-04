@@ -70,7 +70,6 @@ class WorkspaceStore extends ChangeNotifier {
     if (!await io.directoryExists(path)) return false;
     final previous = _rootPath;
     final hadCore = _client.isFfiAvailable;
-    await _client.whenIdle();
     if (!_client.openWorkspace(path) && hadCore) {
       if (previous != null) _client.openWorkspace(previous);
       return false;

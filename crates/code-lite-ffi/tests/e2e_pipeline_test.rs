@@ -1,8 +1,8 @@
 //! End-to-End Integration Test Pipeline
 //!
 //! Tests cross-layer integration from external caller perspective:
-//! Workspace Init -> file.open (RPC) -> file.edit (RPC) -> lsp.diagnostics (RPC)
-//! -> git.status (RPC) -> Cleanup.
+//! Workspace Init -> file.open (RPC) -> file.edit (RPC) -> lsp.diagnostics (RPC) -> Cleanup.
+//! (Git 已迁到 Dart 的 GitService,不再经过 Rust。)
 
 use codelite::*;
 use serde_json::Value;
@@ -17,7 +17,7 @@ unsafe fn c_to_str(ptr: *const std::ffi::c_char) -> String {
 }
 
 #[test]
-fn test_e2e_workspace_edit_lsp_git_pipeline() {
+fn test_e2e_workspace_edit_lsp_pipeline() {
     unsafe {
         // 1. Setup isolated temporary workspace
         let temp_dir = std::env::temp_dir().join(format!("codelite-e2e-{}", uuid::Uuid::new_v4()));
@@ -27,13 +27,6 @@ fn test_e2e_workspace_edit_lsp_git_pipeline() {
         let main_file = src_dir.join("main.rs");
         let initial_code = "fn main() {\n    let answer = 42;\n    println!(\"{}\", answer);\n}\n";
         fs::write(&main_file, initial_code).expect("Write initial code");
-
-        // Initialize Git repo in workspace
-        let _ = std::process::Command::new("git")
-            .arg("-C")
-            .arg(&temp_dir)
-            .arg("init")
-            .output();
 
         // 2. Initialize CodeLite Context
         let root_c = CString::new(temp_dir.to_str().unwrap()).unwrap();
@@ -78,19 +71,6 @@ fn test_e2e_workspace_edit_lsp_git_pipeline() {
         let diag_val: Value = serde_json::from_str(&diag_str).expect("Valid JSON response");
         assert_eq!(diag_val["id"], 3);
         assert!(diag_val["result"]["diagnostics"].is_array());
-
-        // 6. Step 4: git.status via JSON-RPC,未暂存的 src/main.rs 应出现在改动列表里
-        let git_req = CString::new(format!(
-            r#"{{"jsonrpc":"2.0","id":4,"method":"git.status","params":{{"workspace_path":"{}"}}}}"#,
-            temp_dir.to_str().unwrap()
-        ))
-        .unwrap();
-        let git_resp = codelite_jsonrpc_call(ctx, git_req.as_ptr());
-        let git_str = c_to_str(git_resp);
-        let git_val: Value = serde_json::from_str(&git_str).expect("Valid JSON response");
-        assert_eq!(git_val["id"], 4);
-        assert!(git_val["result"]["changes"].is_array());
-        assert!(git_str.contains("src"));
 
         // 7. Teardown
         codelite_destroy(ctx);

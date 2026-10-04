@@ -36,10 +36,11 @@ A modern, high-performance code editor with built-in Git management, built in Ru
   - CodeGraph persistent relations: `files`, `symbols`, `symbol_references`, `call_graph`, `import_graph`, resumable `index_jobs`.
   - LSP `diagnostics` cache.
 
-- **`code-lite-fs`**: File system, Git and updater.
+- **Git** lives in the Flutter app (`apps/code_lite_ui/lib/core/git/git_service.dart`): a pure Dart wrapper over the system `git` CLI — status, stage/unstage, commit, diff hunks, log/graph and history rewriting. The Rust core is being migrated to Dart module by module; Git was first.
+
+- **`code-lite-fs`**: File system and updater.
   - Fast directory tree traversal with ignore rules (`.git`, `target`, `node_modules`, `.codelite`).
   - Multi-threaded / regex workspace search & replace.
-  - `GitEngine` (wraps the system `git` CLI): status, stage/unstage, commit, diff hunks, history/log.
   - Cross-platform differential auto-updater.
 
 - **`code-lite-graph`**: Incremental AST parsing, stable `SymbolKey`, outline / definitions / references / callers / callees.

@@ -399,7 +399,7 @@ void main() {
       await tester.binding.setSurfaceSize(const Size(1000, 700));
       addTearDown(() => tester.binding.setSurfaceSize(null));
 
-      final client = ApiClient();
+      final client = _GutterClient();
       final ctrl = CodeEditorController(initialText: 'line 1\nlet op = self.get(op_id)?;\nline 3\nline 4\nline 5\nline 6');
       String revertedPath = '';
 
@@ -484,4 +484,18 @@ void main() {
       ctrl.dispose();
     });
   });
+}
+
+/// gutter 测试用:直接给出 diff hunks,不依赖真实 git 仓库。
+class _GutterClient extends ApiClient {
+  @override
+  Future<List<Map<String, dynamic>>> gitFileDiffHunks(String filePath) async => [
+        {'line': 2, 'kind': 'added', 'new_content': '    let op = self.get(op_id)?;'},
+        {'line': 3, 'kind': 'added', 'new_content': '    if op.status == OpStatus::Reverted {'},
+        {'line': 5, 'kind': 'modified', 'original_content': '        // old code', 'new_content': '        let path = Path::new(&op.file_path);'},
+        {'line': 6, 'kind': 'modified', 'original_content': '        // old code', 'new_content': '        match op.op_type {'},
+      ];
+
+  @override
+  Future<Map<String, dynamic>> gitRevertFile(String filePath) async => {'status': 'ok'};
 }

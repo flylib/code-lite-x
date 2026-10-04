@@ -4,7 +4,7 @@ import 'package:code_lite_ui/core/client/api_client.dart';
 import 'package:code_lite_ui/features/git/git_log_store.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-/// 端到端:真实 git 仓库 → Rust GitEngine → FFI → GitLogStore。
+/// 端到端:真实 git 仓库 → Dart GitService → GitLogStore。
 void main() {
   final client = ApiClient();
   late Directory repo;
@@ -40,7 +40,6 @@ void main() {
   });
 
   test('loads branches, commits with graph, and details', () async {
-    if (!client.isFfiAvailable) return; // 没编出 dylib 时跳过
     final store = GitLogStore(client);
     await store.refresh();
 
@@ -55,7 +54,7 @@ void main() {
     // 默认选中第一条,并带出详情。
     expect(store.selected, store.commits.first.hash);
     final initial = store.commits.last;
-    store.selectCommit(initial.hash);
+    await store.selectCommit(initial.hash);
     expect(store.details!.message, 'feat: 初始提交');
     expect(store.details!.files.single.path, 'a.txt');
     expect(store.details!.files.single.status, 'A');
@@ -63,7 +62,6 @@ void main() {
   });
 
   test('filters by text, branch and paths', () async {
-    if (!client.isFfiAvailable) return;
     final store = GitLogStore(client);
     await store.refresh();
 
@@ -84,7 +82,6 @@ void main() {
   });
 
   test('write operations go through the store and refresh the log', () async {
-    if (!client.isFfiAvailable) return;
     final store = GitLogStore(client);
     await store.refresh();
     final head = store.commits.first;
@@ -105,7 +102,6 @@ void main() {
   });
 
   test('corrupt history still shows the readable commits with a warning', () async {
-    if (!client.isFfiAvailable) return;
     // setUp 的仓库:merge ← fix ← 初始;弄坏最老的那个提交对象。
     final initial = (await Process.run('git', ['rev-list', '--max-parents=0', 'HEAD'], workingDirectory: repo.path))
         .stdout

@@ -1,5 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+
+import '../git/git.dart';
 // web 没有 dart:ffi —— 条件导入让 web 拿到桩(isAvailable 恒 false),
 // 原生拿到真实的 FFI 绑定。两者类名与签名一致。
 import '../ffi/codelite_bindings_stub.dart'
@@ -11,17 +13,21 @@ class ApiClient {
   final String baseUrl;
   final CodeLiteBindings _ffi = CodeLiteBindings.instance;
 
-  ApiClient({this.baseUrl = 'http://127.0.0.1:4096', String initialRoot = '.'}) {
+  /// 当前工作区的 Git;切换项目时随 [openWorkspace] 换成新根目录。
+  GitService _git;
+
+  ApiClient({this.baseUrl = 'http://127.0.0.1:4096', String initialRoot = '.'}) : _git = GitService(initialRoot) {
     _ffi.initialize(initialRoot);
   }
 
   bool get isFfiAvailable => _ffi.isAvailable;
 
   /// 把 Rust Core 重新指向另一个工作区根目录(File → Open)。
-  bool openWorkspace(String path) => _ffi.reinitialize(path);
+  bool openWorkspace(String path) {
+    _git = GitService(path);
+    return _ffi.reinitialize(path);
+  }
 
-  /// 后台 isolate 里的调用还持有旧上下文指针;切换工作区前必须等它们结束。
-  Future<void> whenIdle() => _ffi.whenIdle();
 
   /// Fetches the project workspace file tree.
   Future<Map<String, dynamic>> fetchWorkspaceTree() async {
@@ -331,78 +337,38 @@ class ApiClient {
       _ffi.ptySnapshot(id, sinceSeq: sinceSeq, scrollback: scrollback);
   Map<String, dynamic> ptyClose(String id) => _ffi.ptyClose(id);
 
+  // ---------------------------------------------------------------------------
+  // Git:纯 Dart 实现(GitService 调用系统 git 命令行),不再经过 Rust FFI。
+  // ---------------------------------------------------------------------------
+
   /// Git Log 工具窗的所有读写操作。返回 `{"status":"ok", ...}` 或 `{"status":"error","error":...}`。
-  /// 同步 FFI:git 命令通常在几十毫秒内,写操作(rebase 等)由调用方显示进度。
-  Map<String, dynamic> gitCall(String method, [Map<String, dynamic> params = const {}]) =>
-      _ffi.gitCall(method, params);
-
-  /// 慢操作(push、rebase、cherry-pick)用这个:在后台 isolate 执行,界面不卡。
-  Future<Map<String, dynamic>> gitCallAsync(String method, [Map<String, dynamic> params = const {}]) =>
-      _ffi.gitCallAsync(method, params);
-
-  // ---------------------------------------------------------------------------
-  // Phase 5: Streaming AI Chat, History Persistence & Git Operations
-  // ---------------------------------------------------------------------------
+  /// git 进程本身是异步的,慢操作(push、rebase)也不会卡界面。
+  Future<Map<String, dynamic>> gitCall(String method, [Map<String, dynamic> params = const {}]) =>
+      _git.call(method, params);
 
   /// Retrieves Git status (branch, staged/unstaged changes).
-  Future<Map<String, dynamic>> getGitStatus() async {
-    if (_ffi.isAvailable) {
-      return _ffi.getGitStatus();
-    }
-    return {'branch': 'main', 'changes': []};
-  }
+  Future<Map<String, dynamic>> getGitStatus() => _git.status();
 
   /// Computes Git diff for a file.
-  Future<Map<String, dynamic>> getGitDiff({String? filePath, bool staged = false}) async {
-    if (_ffi.isAvailable) {
-      return _ffi.getGitDiff(filePath: filePath, staged: staged);
-    }
-    return {'status': 'ok', 'diff': ''};
-  }
+  Future<Map<String, dynamic>> getGitDiff({String? filePath, bool staged = false}) =>
+      _git.diff(path: filePath, staged: staged);
 
   /// Stages a file for commit.
-  Future<Map<String, dynamic>> gitStage(String filePath) async {
-    if (_ffi.isAvailable) {
-      return _ffi.gitStage(filePath);
-    }
-    return {'status': 'error'};
-  }
+  Future<Map<String, dynamic>> gitStage(String filePath) => _git.stage(filePath);
 
   /// Unstages a file.
-  Future<Map<String, dynamic>> gitUnstage(String filePath) async {
-    if (_ffi.isAvailable) {
-      return _ffi.gitUnstage(filePath);
-    }
-    return {'status': 'error'};
-  }
+  Future<Map<String, dynamic>> gitUnstage(String filePath) => _git.unstage(filePath);
 
   /// Commits staged changes with message.
-  Future<Map<String, dynamic>> gitCommit(String message) async {
-    if (_ffi.isAvailable) {
-      return _ffi.gitCommit(message);
-    }
-    return {'status': 'error'};
-  }
+  Future<Map<String, dynamic>> gitCommit(String message) => _git.commit(message);
 
-  /// Retrieves diff hunks (added, modified, deleted) for a file (Phase 8.3 Git Gutter).
+  /// Retrieves diff hunks (added, modified, deleted) for a file (editor Git gutter).
   Future<List<Map<String, dynamic>>> gitFileDiffHunks(String filePath) async {
-    if (_ffi.isAvailable) {
-      final res = _ffi.gitFileDiffHunks(filePath);
-      if (res['status'] == 'ok' && res['hunks'] is List) {
-        final list = (res['hunks'] as List).map((e) => Map<String, dynamic>.from(e as Map)).toList();
-        if (list.isNotEmpty) return list;
-      }
+    final res = await _git.fileDiffHunks(filePath);
+    if (res['status'] == 'ok' && res['hunks'] is List) {
+      return (res['hunks'] as List).map((e) => Map<String, dynamic>.from(e as Map)).toList();
     }
-    // Mock fallback diff hunks for testing and offline preview
-    if (filePath.contains('op_store.rs') || filePath.contains('main.rs')) {
-      return [
-        {'line': 2, 'kind': 'added', 'new_content': '    let op = self.get(op_id)?;'},
-        {'line': 3, 'kind': 'added', 'new_content': '    if op.status == OpStatus::Reverted {'},
-        {'line': 5, 'kind': 'modified', 'original_content': '        // old code', 'new_content': '        let path = Path::new(&op.file_path);'},
-        {'line': 6, 'kind': 'modified', 'original_content': '        // old code', 'new_content': '        match op.op_type {'},
-      ];
-    }
-    return [];
+    return const [];
   }
 
   /// Retrieves strongly typed Git diff hunks for a file.
@@ -412,12 +378,7 @@ class ApiClient {
   }
 
   /// Reverts changes in working tree for a specific file.
-  Future<Map<String, dynamic>> gitRevertFile(String filePath) async {
-    if (_ffi.isAvailable) {
-      return _ffi.gitRevertFile(filePath);
-    }
-    return {'status': 'ok'};
-  }
+  Future<Map<String, dynamic>> gitRevertFile(String filePath) => _git.revertFile(filePath);
 
   Map<String, dynamic> _fallbackWorkspace() {
     return {

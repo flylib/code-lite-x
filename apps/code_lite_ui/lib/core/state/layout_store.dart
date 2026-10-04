@@ -19,7 +19,8 @@ class LayoutStore extends ChangeNotifier {
   RightTool _rightTool = RightTool.none;
   BottomToolTab _bottomTab = BottomToolTab.git;
   bool _isLeftOpen = true;
-  bool _isBottomOpen = true;
+  // 底部工具窗默认收起:打开 Git 窗口会立刻跑 git log,不该为用户还没要看的面板付这个代价。
+  bool _isBottomOpen = false;
   double _bottomHeight = 300;
 
   /// 底部工具窗高度,拖动分隔条调整。Git Log 这类视图在 220 高度下只看得到几行。

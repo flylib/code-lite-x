@@ -270,60 +270,6 @@ class DiagnosticList {
   };
 }
 
-/// Git status file modification
-class GitFileChange {
-  final String path;
-  final String status;
-  final bool staged;
-
-  const GitFileChange({
-    required this.path,
-    required this.status,
-    required this.staged,
-  });
-
-  factory GitFileChange.fromJson(Map<String, dynamic> json) {
-    return GitFileChange(
-      path: json['path'] as String? ?? '',
-      status: json['status'] as String? ?? '',
-      staged: json['staged'] as bool? ?? false,
-    );
-  }
-
-  Map<String, dynamic> toJson() => {
-    'path': path,
-    'status': status,
-    'staged': staged,
-  };
-}
-
-/// Git working tree status
-class GitStatusResult {
-  final String branch;
-  final bool isClean;
-  final List<GitFileChange> changes;
-
-  const GitStatusResult({
-    required this.branch,
-    required this.isClean,
-    required this.changes,
-  });
-
-  factory GitStatusResult.fromJson(Map<String, dynamic> json) {
-    return GitStatusResult(
-      branch: json['branch'] as String? ?? '',
-      isClean: json['is_clean'] as bool? ?? false,
-      changes: (json['changes'] as List<dynamic>?)?.map((e) => GitFileChange.fromJson(e as Map<String, dynamic>)).toList() ?? [],
-    );
-  }
-
-  Map<String, dynamic> toJson() => {
-    'branch': branch,
-    'is_clean': isClean,
-    'changes': changes.map((e) => e.toJson()).toList(),
-  };
-}
-
 /// Strongly typed CoreApiClient generated from core_api.toml IDL contract.
 class CoreApiClient {
   final JsonRpcTransport transport;
@@ -409,17 +355,6 @@ class CoreApiClient {
     };
     final res = await transport.sendRequest("lsp.diagnostics", params);
     return DiagnosticList.fromJson(res as Map<String, dynamic>);
-  }
-
-  /// Query Git status of the workspace repository
-  Future<GitStatusResult> gitStatus({
-    required String workspacePath,
-  }) async {
-    final params = <String, dynamic>{
-      'workspace_path': workspacePath,
-    };
-    final res = await transport.sendRequest("git.status", params);
-    return GitStatusResult.fromJson(res as Map<String, dynamic>);
   }
 
 }

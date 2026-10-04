@@ -86,19 +86,6 @@ pub fn dispatch_rpc(ctx: *mut CodeLiteContext, req: &JsonRpcRequest) -> JsonRpcR
                 Err(err) => JsonRpcResponse::err(req.id, error_codes::SERVER_ERROR, err),
             }
         }
-        "git.status" => {
-            let params: GitStatusParams = match req.params.as_ref() {
-                Some(val) => match serde_json::from_value(val.clone()) {
-                    Ok(p) => p,
-                    Err(e) => return JsonRpcResponse::err(req.id, error_codes::INVALID_PARAMS, e.to_string()),
-                },
-                None => return JsonRpcResponse::err(req.id, error_codes::INVALID_PARAMS, "Missing required params"),
-            };
-            match crate::handlers::git::handle_status(ctx, params) {
-                Ok(res) => JsonRpcResponse::success(req.id, serde_json::to_value(res).unwrap()),
-                Err(err) => JsonRpcResponse::err(req.id, error_codes::SERVER_ERROR, err),
-            }
-        }
         _ => JsonRpcResponse::err(
             req.id,
             error_codes::METHOD_NOT_FOUND,

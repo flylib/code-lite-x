@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -57,7 +59,7 @@ class _GitLogWindowState extends State<GitLogWindow> {
               _Header(onHide: widget.onHide, onRefresh: store.refresh),
               Expanded(
                 child: !store.isAvailable
-                    ? const Center(child: Text('Git 需要 Rust Core(当前为离线预览)', style: _kMuted))
+                    ? const Center(child: Text('Git 在 web 预览中不可用', style: _kMuted))
                     : LayoutBuilder(builder: (context, constraints) {
                         // 窗口太窄时先让出详情栏、再让出分支栏,提交列表至少留 460px。
                         // 只影响这次布局,不改用户的开关状态。
@@ -677,8 +679,8 @@ class _FilterBar extends StatelessWidget {
                   _FilterDropdown(
                     label: 'User',
                     value: store.author,
-                    options: () {
-                      if (store.authors.isEmpty) store.loadAuthors();
+                    options: () async {
+                      if (store.authors.isEmpty) await store.loadAuthors();
                       return store.authors;
                     },
                     onSelected: store.setAuthor,
@@ -727,7 +729,7 @@ class _FilterDropdown extends StatelessWidget {
 
   final String label;
   final String? value;
-  final List<String> Function() options;
+  final FutureOr<List<String>> Function() options;
   final ValueChanged<String?> onSelected;
 
   @override
@@ -740,7 +742,8 @@ class _FilterDropdown extends StatelessWidget {
         onTap: () async {
           final box = context.findRenderObject() as RenderBox;
           final origin = box.localToGlobal(Offset(0, box.size.height));
-          final items = options();
+          final items = await options();
+          if (!context.mounted) return;
           final picked = await showMenu<String>(
             context: context,
             position: RelativeRect.fromLTRB(origin.dx, origin.dy, origin.dx + 1, origin.dy + 1),

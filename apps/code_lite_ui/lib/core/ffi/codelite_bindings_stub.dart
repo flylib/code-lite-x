@@ -32,21 +32,7 @@ class CodeLiteBindings {
 
   Map<String, dynamic> getCodeContext(String query) => {};
 
-  Map<String, dynamic> getGitDiff({String? filePath, bool staged = false}) => {'status': 'error', 'diff': ''};
-
-  Map<String, dynamic> getGitStatus() => {'branch': 'HEAD', 'changes': []};
-
   Map<String, dynamic> getViewportTokens(String filePath, int startLine, int endLine) => {'status': 'error', 'lines': []};
-
-  Map<String, dynamic> gitCommit(String message) => {'status': 'error'};
-
-  Map<String, dynamic> gitFileDiffHunks(String filePath) => {'status': 'error', 'hunks': []};
-
-  Map<String, dynamic> gitRevertFile(String filePath) => {'status': 'error'};
-
-  Map<String, dynamic> gitStage(String filePath) => {'status': 'error'};
-
-  Map<String, dynamic> gitUnstage(String filePath) => {'status': 'error'};
 
   Map<String, dynamic> indexFile(String relPath) => {};
 
@@ -98,14 +84,6 @@ class CodeLiteBindings {
       {'status': 'error', 'error': 'FFI not available'};
 
   Map<String, dynamic> ptyClose(String id) => {'status': 'error', 'error': 'FFI not available'};
-
-  Map<String, dynamic> gitCall(String method, Map<String, dynamic> params) =>
-      {'status': 'error', 'error': 'FFI not available'};
-
-  Future<Map<String, dynamic>> gitCallAsync(String method, Map<String, dynamic> params) async =>
-      {'status': 'error', 'error': 'FFI not available'};
-
-  Future<void> whenIdle() => Future.value();
 
   Map<String, dynamic> undo(String relPath) => {};
 

@@ -68,22 +68,6 @@ pub struct DiagnosticList {
     pub diagnostics: Vec<DiagnosticItem>,
 }
 
-/// Git status file modification
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct GitFileChange {
-    pub path: String,
-    pub status: String,
-    pub staged: bool,
-}
-
-/// Git working tree status
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct GitStatusResult {
-    pub branch: String,
-    pub is_clean: bool,
-    pub changes: Vec<GitFileChange>,
-}
-
 /// Request parameters for `file.open`
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct FileOpenParams {
@@ -122,11 +106,5 @@ pub struct LspCompletionParams {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct LspDiagnosticsParams {
     pub path: String,
-}
-
-/// Request parameters for `git.status`
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct GitStatusParams {
-    pub workspace_path: String,
 }
 
