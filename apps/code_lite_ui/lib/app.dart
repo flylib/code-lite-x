@@ -1,9 +1,11 @@
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'core/client/api_client.dart';
 import 'core/state/layout_store.dart';
 import 'core/state/scopes.dart';
+import 'core/platform/workspace_io.dart' as io;
 import 'core/state/workspace_store.dart';
 import 'core/theme/intellij_theme.dart';
 import 'features/activity_stripe/activity_stripe_widget.dart';
@@ -34,7 +36,7 @@ class CodeLiteApp extends StatefulWidget {
 }
 
 class _CodeLiteAppState extends State<CodeLiteApp> {
-  final ApiClient _client = ApiClient();
+  final ApiClient _client = ApiClient(initialRoot: io.noProjectRoot());
   late final EditorSessionManager _sessions;
   late final WorkspaceStore _workspace;
   final LayoutStore _layout = LayoutStore();
@@ -48,9 +50,7 @@ class _CodeLiteAppState extends State<CodeLiteApp> {
   }
 
   Future<void> _bootstrap() async {
-    await _workspace.load();
-    const seed = 'crates/code-lite-agent/src/planner.rs';
-    await _workspace.openFile(seed);
+    await _workspace.bootstrap();
   }
 
   @override
@@ -92,7 +92,8 @@ class _Workbench extends StatelessWidget {
     final layout = context.layoutRead;
     final sessions = context.sessionRead;
 
-    return CallbackShortcuts(
+    return _AppMenuBar(
+      child: CallbackShortcuts(
       bindings: <ShortcutActivator, VoidCallback>{
         const SingleActivator(LogicalKeyboardKey.keyF, meta: true, shift: true): () => _openSearch(context),
         const SingleActivator(LogicalKeyboardKey.keyF, control: true, shift: true): () => _openSearch(context),
@@ -232,6 +233,7 @@ class _Workbench extends StatelessWidget {
           ),
         ),
       ),
+      ),
     );
   }
 
@@ -347,5 +349,210 @@ class _EditorRegion extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+/// 原生菜单栏(macOS)。只订阅 workspace 的最近项目 / 是否有项目,
+/// 工作台子树作为 `child` 传入,菜单变化时不会重建它。
+class _AppMenuBar extends StatelessWidget {
+  const _AppMenuBar({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    // PlatformProvidedMenuItem 在非 macOS 平台会直接抛异常,web / 测试环境不能建。
+    if (defaultTargetPlatform != TargetPlatform.macOS) return child;
+    final workspace = context.workspaceRead;
+    return ListenableBuilder(
+      listenable: workspace,
+      child: child,
+      builder: (context, child) => PlatformMenuBar(
+        menus: <PlatformMenuItem>[
+          const PlatformMenu(
+            label: 'CodeLiteX',
+            menus: <PlatformMenuItem>[
+              PlatformProvidedMenuItem(
+                  type: PlatformProvidedMenuItemType.about),
+              PlatformProvidedMenuItem(
+                  type: PlatformProvidedMenuItemType.servicesSubmenu),
+              PlatformProvidedMenuItem(type: PlatformProvidedMenuItemType.hide),
+              PlatformProvidedMenuItem(
+                  type: PlatformProvidedMenuItemType.hideOtherApplications),
+              PlatformProvidedMenuItem(
+                  type: PlatformProvidedMenuItemType.showAllApplications),
+              PlatformProvidedMenuItem(type: PlatformProvidedMenuItemType.quit),
+            ],
+          ),
+          _fileMenu(context, workspace),
+          const PlatformMenu(
+            label: 'Window',
+            menus: <PlatformMenuItem>[
+              PlatformProvidedMenuItem(
+                  type: PlatformProvidedMenuItemType.minimizeWindow),
+              PlatformProvidedMenuItem(
+                  type: PlatformProvidedMenuItemType.zoomWindow),
+              PlatformProvidedMenuItem(
+                  type: PlatformProvidedMenuItemType.toggleFullScreen),
+            ],
+          ),
+        ],
+        child: child!,
+      ),
+    );
+  }
+
+  PlatformMenu _fileMenu(BuildContext context, WorkspaceStore workspace) {
+    final recent = workspace.recentProjects;
+    return PlatformMenu(
+      label: 'File',
+      menus: <PlatformMenuItem>[
+        PlatformMenuItemGroup(members: <PlatformMenuItem>[
+          PlatformMenu(
+            label: 'New',
+            menus: <PlatformMenuItem>[
+              PlatformMenuItem(
+                label: 'File…',
+                shortcut:
+                    const SingleActivator(LogicalKeyboardKey.keyN, meta: true),
+                onSelected: workspace.hasProject
+                    ? () => _newFile(context, workspace)
+                    : null,
+              ),
+            ],
+          ),
+          PlatformMenuItem(
+            label: 'Open…',
+            shortcut:
+                const SingleActivator(LogicalKeyboardKey.keyO, meta: true),
+            onSelected: () => _openFolder(context, workspace),
+          ),
+          PlatformMenu(
+            label: 'Recent Projects',
+            menus: <PlatformMenuItem>[
+              PlatformMenuItemGroup(members: <PlatformMenuItem>[
+                if (recent.isEmpty)
+                  const PlatformMenuItem(label: 'No Recent Projects')
+                else
+                  for (final path in recent)
+                    PlatformMenuItem(
+                      label: _recentLabel(path),
+                      onSelected: () => _openRecent(context, workspace, path),
+                    ),
+              ]),
+              if (recent.isNotEmpty)
+                PlatformMenuItemGroup(members: <PlatformMenuItem>[
+                  PlatformMenuItem(
+                      label: 'Clear Recent Projects',
+                      onSelected: workspace.clearRecentProjects),
+                ]),
+            ],
+          ),
+          PlatformMenuItem(
+            label: 'Close Project',
+            onSelected: workspace.hasProject
+                ? () => _closeProject(context, workspace)
+                : null,
+          ),
+        ]),
+        PlatformMenuItemGroup(members: <PlatformMenuItem>[
+          // ⌘S 已由编辑器自己处理,这里不再绑定快捷键以免触发两次。
+          PlatformMenuItem(
+              label: 'Save',
+              onSelected: workspace.hasProject ? workspace.save : null),
+        ]),
+      ],
+    );
+  }
+
+  /// "name — ~/path":同名目录靠路径区分,与 IntelliJ 的 Recent Projects 一致。
+  static String _recentLabel(String path) {
+    final name = path.split('/').where((s) => s.isNotEmpty).lastOrNull ?? path;
+    return '$name — $path';
+  }
+
+  /// 切换项目会丢弃未保存的标签,有脏标签时先确认。
+  Future<bool> _confirmDiscard(
+      BuildContext context, WorkspaceStore workspace) async {
+    if (!workspace.sessions.hasDirtyTabs) return true;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('有未保存的修改'),
+        content: const Text('继续将丢弃这些修改。'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('取消')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('丢弃并继续')),
+        ],
+      ),
+    );
+    return ok ?? false;
+  }
+
+  Future<void> _openFolder(
+      BuildContext context, WorkspaceStore workspace) async {
+    final path = await io.pickDirectory();
+    if (path == null || !context.mounted) return;
+    if (!await _confirmDiscard(context, workspace) || !context.mounted) return;
+    await _open(context, workspace, path);
+  }
+
+  Future<void> _openRecent(
+      BuildContext context, WorkspaceStore workspace, String path) async {
+    if (!await _confirmDiscard(context, workspace) || !context.mounted) return;
+    await _open(context, workspace, path);
+  }
+
+  Future<void> _open(
+      BuildContext context, WorkspaceStore workspace, String path) async {
+    final ok = await workspace.openFolder(path);
+    if (!ok && context.mounted) {
+      ScaffoldMessenger.maybeOf(context)
+          ?.showSnackBar(SnackBar(content: Text('无法打开项目: $path')));
+    }
+  }
+
+  Future<void> _closeProject(
+      BuildContext context, WorkspaceStore workspace) async {
+    if (!await _confirmDiscard(context, workspace)) return;
+    workspace.closeProject();
+  }
+
+  Future<void> _newFile(BuildContext context, WorkspaceStore workspace) async {
+    final controller = TextEditingController();
+    final name = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('New File'),
+        content: SizedBox(
+          width: 380,
+          child: TextField(
+            controller: controller,
+            autofocus: true,
+            decoration:
+                const InputDecoration(hintText: 'path/to/file.rs(相对项目根目录)'),
+            onSubmitted: (v) => Navigator.pop(ctx, v),
+          ),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, controller.text),
+              child: const Text('创建')),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (name == null || !context.mounted) return;
+    final err = await workspace.createFile(name);
+    if (err != null && context.mounted) {
+      ScaffoldMessenger.maybeOf(context)
+          ?.showSnackBar(SnackBar(content: Text('创建失败: $err')));
+    }
   }
 }

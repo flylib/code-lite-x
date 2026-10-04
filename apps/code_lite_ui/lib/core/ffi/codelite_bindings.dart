@@ -377,6 +377,13 @@ class CodeLiteBindings {
     }
   }
 
+  /// 销毁当前上下文并以新的工作区根重新初始化(File → Open)。
+  /// 动态库与函数指针沿用,只重建 Rust 侧的 CodeLiteContext。
+  bool reinitialize(String workspacePath) {
+    dispose();
+    return initialize(workspacePath);
+  }
+
   void dispose() {
     if (_ctx != null && _ctx!.address != 0) {
       _destroy(_ctx!);
@@ -1169,7 +1176,12 @@ class CodeLiteBindings {
   }
 
   DynamicLibrary? _loadLibrary() {
+    // 打包后的 .app:库在 Contents/Frameworks,可执行文件在 Contents/MacOS。
+    final bundled = Platform.isMacOS
+        ? '${File(Platform.resolvedExecutable).parent.parent.path}/Frameworks/libcodelite.dylib'
+        : null;
     final candidates = [
+      if (bundled != null) bundled,
       'target/debug/libcodelite.dylib',
       'target/release/libcodelite.dylib',
       '../../target/debug/libcodelite.dylib',

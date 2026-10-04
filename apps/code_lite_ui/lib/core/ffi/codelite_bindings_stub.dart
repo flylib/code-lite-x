@@ -74,6 +74,8 @@ class CodeLiteBindings {
 
   bool initialize([String workspacePath = '.']) => false;
 
+  bool reinitialize(String workspacePath) => false;
+
   List<dynamic> listMcpTools() => [];
 
   List<dynamic> listMessages(String sessionId) => [];

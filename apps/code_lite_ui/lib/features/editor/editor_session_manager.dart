@@ -191,6 +191,21 @@ class EditorSessionManager extends ChangeNotifier {
     return true;
   }
 
+  /// 丢弃全部标签(切换/关闭项目)。未保存的修改一并丢弃,调用方先确认。
+  void closeAll() {
+    for (final tab in _tabs.values) {
+      tab.dispose();
+    }
+    _tabs.clear();
+    _tabOrder.clear();
+    _activePath = null;
+    _secondaryActivePath = null;
+    _splitDirection = SplitDirection.none;
+    notifyListeners();
+  }
+
+  bool get hasDirtyTabs => _tabs.values.any((t) => t.isDirty);
+
   /// Saves the active file to disk via Rust Core FFI.
   Future<bool> saveActiveFile() async {
     final active = activeTab;

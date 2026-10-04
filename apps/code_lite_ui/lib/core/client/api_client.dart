@@ -11,11 +11,14 @@ class ApiClient {
   final String baseUrl;
   final CodeLiteBindings _ffi = CodeLiteBindings.instance;
 
-  ApiClient({this.baseUrl = 'http://127.0.0.1:4096'}) {
-    _ffi.initialize();
+  ApiClient({this.baseUrl = 'http://127.0.0.1:4096', String initialRoot = '.'}) {
+    _ffi.initialize(initialRoot);
   }
 
   bool get isFfiAvailable => _ffi.isAvailable;
+
+  /// 把 Rust Core 重新指向另一个工作区根目录(File → Open)。
+  bool openWorkspace(String path) => _ffi.reinitialize(path);
 
   /// Fetches the project workspace file tree.
   Future<Map<String, dynamic>> fetchWorkspaceTree() async {

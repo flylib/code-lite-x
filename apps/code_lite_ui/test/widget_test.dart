@@ -16,8 +16,8 @@ void main() {
     expect(find.text('[Flutter + Rust]'), findsOneWidget);
     expect(find.text('main'), findsWidgets);
 
-    // Verify Editor & Tabs — seeded file matches design/Main.dc.html
-    expect(find.text('planner.rs'), findsWidgets);
+    // 启动不再硬编码打开某个文件:恢复上次项目,没有就是空态,由 File → Open 进入项目。
+    expect(find.text('planner.rs'), findsNothing);
 
     // Verify Bottom Tools Tab
     expect(find.text('Git Log: HEAD'), findsOneWidget);

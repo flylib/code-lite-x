@@ -10,6 +10,32 @@ class MainFlutterWindow: NSWindow {
 
     RegisterGeneratedPlugins(registry: flutterViewController)
 
+    // File → Open:原生"选择文件夹"面板。取消时回传 nil。
+    let dialogs = FlutterMethodChannel(
+      name: "codelitex/dialogs",
+      binaryMessenger: flutterViewController.engine.binaryMessenger)
+    dialogs.setMethodCallHandler { [weak self] call, result in
+      guard call.method == "pickDirectory" else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      let panel = NSOpenPanel()
+      panel.canChooseDirectories = true
+      panel.canChooseFiles = false
+      panel.allowsMultipleSelection = false
+      panel.canCreateDirectories = true
+      panel.prompt = "Open"
+      panel.message = "Choose a project folder"
+      let finish: (NSApplication.ModalResponse) -> Void = { response in
+        result(response == .OK ? panel.url?.path : nil)
+      }
+      if let window = self {
+        panel.beginSheetModal(for: window, completionHandler: finish)
+      } else {
+        finish(panel.runModal())
+      }
+    }
+
     super.awakeFromNib()
   }
 }
