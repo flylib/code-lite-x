@@ -22,12 +22,9 @@ class _ProjectExplorerWidgetState extends State<ProjectExplorerWidget> {
 
   @override
   Widget build(BuildContext context) {
+    // 宽度与右侧分隔线由外层统一给出(可拖动调整)。
     return Container(
-      width: 250,
-      decoration: const BoxDecoration(
-        color: IntelliJTheme.panelBg,
-        border: Border(right: BorderSide(color: IntelliJTheme.borderSubtle)),
-      ),
+      color: IntelliJTheme.panelBg,
       child: Column(
         children: [
           // Tool window header
@@ -37,27 +34,30 @@ class _ProjectExplorerWidgetState extends State<ProjectExplorerWidget> {
             decoration: const BoxDecoration(
               border: Border(bottom: BorderSide(color: IntelliJTheme.borderSubtle)),
             ),
+            // 侧栏可拖窄到 160px:标题可省略,按钮用 InkWell 不占 Material 默认的大点击区。
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Row(
-                  children: [
-                    Text('Project', style: TextStyle(color: IntelliJTheme.textHigh, fontSize: 12, fontWeight: FontWeight.w600)),
-                    SizedBox(width: 4),
-                    Icon(Icons.arrow_drop_down, size: 16, color: IntelliJTheme.textMuted),
-                  ],
+                const Flexible(
+                  child: Text(
+                    'Project',
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                    style: TextStyle(color: IntelliJTheme.textHigh, fontSize: 12, fontWeight: FontWeight.w600),
+                  ),
                 ),
-                Row(
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.unfold_less, size: 14, color: IntelliJTheme.textMuted),
-                      tooltip: 'Collapse All',
-                      onPressed: () => setState(() => _expandedDirs.clear()),
-                      splashRadius: 12,
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(minWidth: 20, minHeight: 20),
+                const SizedBox(width: 4),
+                const Icon(Icons.arrow_drop_down, size: 16, color: IntelliJTheme.textMuted),
+                const Spacer(),
+                Tooltip(
+                  message: 'Collapse All',
+                  child: InkWell(
+                    onTap: () => setState(() => _expandedDirs.clear()),
+                    borderRadius: BorderRadius.circular(4),
+                    child: const Padding(
+                      padding: EdgeInsets.all(3),
+                      child: Icon(Icons.unfold_less, size: 14, color: IntelliJTheme.textMuted),
                     ),
-                  ],
+                  ),
                 ),
               ],
             ),

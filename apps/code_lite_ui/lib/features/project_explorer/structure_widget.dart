@@ -30,17 +30,21 @@ class StructureWidget extends StatelessWidget {
               color: IntelliJTheme.subHeaderBg,
               border: Border(bottom: BorderSide(color: IntelliJTheme.borderSubtle)),
             ),
+            // 侧栏可拖窄到 160px:文件名与计数都要能省略,不能溢出。
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Row(
-                  children: [
-                    const Text('STRUCTURE', style: TextStyle(color: IntelliJTheme.textMuted, fontSize: 10, fontWeight: FontWeight.bold)),
-                    const SizedBox(width: 6),
-                    Text(fileName, style: const TextStyle(color: IntelliJTheme.textPrimary, fontSize: 11)),
-                  ],
+                const Text('STRUCTURE', style: TextStyle(color: IntelliJTheme.textMuted, fontSize: 10, fontWeight: FontWeight.bold)),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    fileName,
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                    style: const TextStyle(color: IntelliJTheme.textPrimary, fontSize: 11),
+                  ),
                 ),
-                Text('${outline.length} symbols', style: const TextStyle(color: IntelliJTheme.textMuted, fontSize: 10)),
+                const SizedBox(width: 6),
+                Text('${outline.length}', style: const TextStyle(color: IntelliJTheme.textMuted, fontSize: 10)),
               ],
             ),
           ),

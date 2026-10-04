@@ -104,12 +104,9 @@ class _CommitPanelState extends State<CommitPanel> {
     final untracked = _changes.where((c) => c['status'] == 'untracked').toList();
     final canCommit = _hasStaged && _message.text.trim().isNotEmpty && !_committing;
 
+    // 宽度与右侧分隔线由外层统一给出(可拖动调整)。
     return Container(
-      width: IntelliJMetrics.sidePanel + 30,
-      decoration: const BoxDecoration(
-        color: IntelliJTheme.panelBg,
-        border: Border(right: BorderSide(color: IntelliJTheme.borderSubtle)),
-      ),
+      color: IntelliJTheme.panelBg,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [

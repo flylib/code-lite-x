@@ -154,7 +154,7 @@ class _Workbench extends StatelessWidget {
                       listenable: layout,
                       builder: (context, _) {
                         if (!layout.isLeftOpen) return const SizedBox.shrink();
-                        return ListenableBuilder(
+                        final panel = ListenableBuilder(
                           listenable: workspace,
                           builder: (context, _) => switch (layout.leftTool) {
                             LeftTool.project => ProjectExplorerWidget(
@@ -168,15 +168,18 @@ class _Workbench extends StatelessWidget {
                                 onOpenFile: workspace.openFile,
                                 onCommitted: gitLog.refresh,
                               ),
-                            LeftTool.structure => SizedBox(
-                                width: IntelliJMetrics.sidePanel,
-                                child: StructureWidget(
-                                  activeFile: workspace.activeFile,
-                                  outline: workspace.outline,
-                                  onSelectSymbol: (sym) => workspace.selectSymbol(sym['name'] as String?),
-                                ),
+                            LeftTool.structure => StructureWidget(
+                                activeFile: workspace.activeFile,
+                                outline: workspace.outline,
+                                onSelectSymbol: (sym) => workspace.selectSymbol(sym['name'] as String?),
                               ),
                           },
+                        );
+                        return Row(
+                          children: [
+                            SizedBox(width: layout.leftWidth, child: panel),
+                            _SideResizeHandle(layout: layout),
+                          ],
                         );
                       },
                     ),
@@ -580,6 +583,52 @@ class _BottomResizeHandle extends StatelessWidget {
           layout.resizeBottom(layout.bottomHeight - d.delta.dy, maxHeight: max);
         },
         child: const SizedBox(height: 4, width: double.infinity),
+      ),
+    );
+  }
+}
+
+/// 左侧工具窗与编辑区之间的分隔线:1px 线条,左右拖动调整工具窗宽度(与 IntelliJ 一致)。
+/// 命中区比线条宽,方便抓取;悬停 / 拖动时高亮。
+class _SideResizeHandle extends StatefulWidget {
+  const _SideResizeHandle({required this.layout});
+
+  final LayoutStore layout;
+
+  @override
+  State<_SideResizeHandle> createState() => _SideResizeHandleState();
+}
+
+class _SideResizeHandleState extends State<_SideResizeHandle> {
+  bool _hot = false;
+  bool _dragging = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final active = _hot || _dragging;
+    return MouseRegion(
+      cursor: SystemMouseCursors.resizeColumn,
+      onEnter: (_) => setState(() => _hot = true),
+      onExit: (_) => setState(() => _hot = false),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onHorizontalDragStart: (_) => setState(() => _dragging = true),
+        onHorizontalDragEnd: (_) => setState(() => _dragging = false),
+        onHorizontalDragCancel: () => setState(() => _dragging = false),
+        onHorizontalDragUpdate: (d) {
+          // 编辑区至少留 300px(再扣掉左右两条活动条)。
+          final max = MediaQuery.sizeOf(context).width - 300 - IntelliJMetrics.activityStripe * 2;
+          widget.layout.resizeLeft(widget.layout.leftWidth + d.delta.dx, maxWidth: max);
+        },
+        child: Container(
+          width: 5,
+          color: IntelliJTheme.editorBg,
+          alignment: Alignment.centerLeft,
+          child: Container(
+            width: active ? 2 : 1,
+            color: active ? IntelliJTheme.accentBlue : IntelliJTheme.borderSubtle,
+          ),
+        ),
       ),
     );
   }

@@ -22,6 +22,10 @@ class LayoutStore extends ChangeNotifier {
   // 底部工具窗默认收起:打开 Git 窗口会立刻跑 git log,不该为用户还没要看的面板付这个代价。
   bool _isBottomOpen = false;
   double _bottomHeight = 300;
+  double _leftWidth = 250;
+
+  /// 左侧工具窗(项目 / Commit / 结构)共用一个宽度,拖动分隔线调整;切换工具窗时不跳变。
+  static const double minLeftWidth = 160;
 
   /// 底部工具窗高度,拖动分隔条调整。Git Log 这类视图在 220 高度下只看得到几行。
   static const double minBottomHeight = 140;
@@ -32,6 +36,15 @@ class LayoutStore extends ChangeNotifier {
   bool get isLeftOpen => _isLeftOpen;
   bool get isBottomOpen => _isBottomOpen;
   double get bottomHeight => _bottomHeight;
+  double get leftWidth => _leftWidth;
+
+  /// [maxWidth] 由调用方按窗口宽度给出,保证编辑区始终留有空间。
+  void resizeLeft(double width, {required double maxWidth}) {
+    final clamped = width.clamp(minLeftWidth, maxWidth < minLeftWidth ? minLeftWidth : maxWidth);
+    if (clamped == _leftWidth) return;
+    _leftWidth = clamped;
+    notifyListeners();
+  }
   bool get isRightOpen => _rightTool != RightTool.none;
 
   /// 再点一次当前工具会收起该栏 —— 与 IntelliJ 的行为一致。
