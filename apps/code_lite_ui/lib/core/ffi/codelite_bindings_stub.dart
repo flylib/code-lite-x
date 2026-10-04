@@ -143,6 +143,14 @@ class CodeLiteBindings {
 
   Map<String, dynamic> ptyClose(String id) => {'status': 'error', 'error': 'FFI not available'};
 
+  Map<String, dynamic> gitCall(String method, Map<String, dynamic> params) =>
+      {'status': 'error', 'error': 'FFI not available'};
+
+  Future<Map<String, dynamic>> gitCallAsync(String method, Map<String, dynamic> params) async =>
+      {'status': 'error', 'error': 'FFI not available'};
+
+  Future<void> whenIdle() => Future.value();
+
   Map<String, dynamic> undo(String relPath) => {};
 
   Map<String, dynamic> updaterApply(String stagingDir, String targetDir, List<String> files, {String? platform}) => {'status': 'error', 'error': 'FFI not available'};

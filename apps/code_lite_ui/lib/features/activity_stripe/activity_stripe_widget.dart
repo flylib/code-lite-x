@@ -50,6 +50,13 @@ class ActivityStripeWidget extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           StripeButton(
+            icon: Icons.task_alt,
+            tooltip: 'Commit (⌘0)',
+            isActive: isLeftOpen && leftTool == LeftTool.commit,
+            onTap: () => onSelectLeftTool(LeftTool.commit),
+          ),
+          const SizedBox(height: 6),
+          StripeButton(
             icon: Icons.account_tree_outlined,
             tooltip: '结构 (⌘7)',
             isActive: isLeftOpen && leftTool == LeftTool.structure,

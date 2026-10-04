@@ -11,3 +11,7 @@ Future<List<String>> loadRecentProjects() async => const [];
 Future<void> saveRecentProjects(List<String> paths) async {}
 
 String noProjectRoot() => '.';
+
+Future<String?> pickSavePath(String suggestedName) async => null;
+
+Future<String?> writeTextFile(String path, String content) async => 'web 预览不支持写文件';

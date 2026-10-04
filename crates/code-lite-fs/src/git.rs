@@ -13,6 +13,10 @@ pub enum GitError {
 
     #[error("Not a git repository: {0}")]
     NotARepository(String),
+
+    /// 参数校验 / 业务规则失败(以及冲突中止),消息直接面向用户展示。
+    #[error("{0}")]
+    Message(String),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -298,21 +302,51 @@ impl GitEngine {
         Ok(())
     }
 
-    fn run_git(&self, args: &[&str]) -> Result<String, GitError> {
-        let output = Command::new("git")
-            .arg("-C")
-            .arg(&self.repo_path)
-            .args(args)
-            .output()?;
+    pub(crate) fn run_git(&self, args: &[&str]) -> Result<String, GitError> {
+        self.run_git_env(args, &[])
+    }
 
+    /// 带环境变量运行 git(脚本化 rebase 需要注入 GIT_SEQUENCE_EDITOR / GIT_EDITOR)。
+    pub(crate) fn run_git_env(&self, args: &[&str], envs: &[(&str, &str)]) -> Result<String, GitError> {
+        let output = self.run_git_raw(args, envs)?;
         if output.status.success() {
             Ok(String::from_utf8_lossy(&output.stdout).to_string())
         } else {
-            let err_msg = String::from_utf8_lossy(&output.stderr).to_string();
-            let code = output.status.code().unwrap_or(-1);
-            Err(GitError::CommandFailed(code, err_msg))
+            Err(command_failed(&output))
         }
     }
+
+    /// 不检查退出码的原始调用:需要字节级 stdout(二进制文件)或自行判定成败时使用。
+    pub(crate) fn run_git_raw(
+        &self,
+        args: &[&str],
+        envs: &[(&str, &str)],
+    ) -> Result<std::process::Output, GitError> {
+        let mut cmd = Command::new("git");
+        cmd.arg("-C").arg(&self.repo_path).args(args);
+        for (k, v) in envs {
+            cmd.env(k, v);
+        }
+        Ok(cmd.output()?)
+    }
+}
+
+/// 失败时的错误消息以 stderr 为主;冲突提示(CONFLICT ...)git 写在 stdout,一并带上便于用户定位。
+pub(crate) fn command_failed(output: &std::process::Output) -> GitError {
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let mut msg = stderr.trim().to_string();
+    let conflicts: Vec<&str> = stdout.lines().filter(|l| l.starts_with("CONFLICT")).collect();
+    if !conflicts.is_empty() {
+        if !msg.is_empty() {
+            msg.push('\n');
+        }
+        msg.push_str(&conflicts.join("\n"));
+    }
+    if msg.is_empty() {
+        msg = stdout.trim().to_string();
+    }
+    GitError::CommandFailed(output.status.code().unwrap_or(-1), msg)
 }
 
 fn parse_hunk_header(line: &str) -> Option<(usize, usize, usize, usize)> {

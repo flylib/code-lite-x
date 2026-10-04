@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../core/client/api_client.dart';
 import '../../core/theme/intellij_theme.dart';
+import '../git/git_log_store.dart';
+import '../git/git_log_window.dart';
 import '../terminal/terminal_store.dart';
 import '../terminal/terminal_view.dart';
 
@@ -15,6 +17,15 @@ class BottomToolsWidget extends StatefulWidget {
   /// 终端会话活在面板之外,面板收起时 shell 不会被杀。
   final TerminalStore? terminals;
 
+  /// Git Log 的筛选、选中项同样活在面板之外。
+  final GitLogStore? gitLog;
+
+  /// 项目目录名:Git 详情面板文件树的根节点。
+  final String repoName;
+
+  /// 由布局 store 管理,拖动分隔条可调。
+  final double height;
+
   const BottomToolsWidget({
     super.key,
     required this.activeTab,
@@ -22,6 +33,9 @@ class BottomToolsWidget extends StatefulWidget {
     required this.onRevertTask,
     this.client,
     this.terminals,
+    this.gitLog,
+    this.repoName = '',
+    this.height = 300,
   });
 
   @override
@@ -31,62 +45,35 @@ class BottomToolsWidget extends StatefulWidget {
 class _BottomToolsWidgetState extends State<BottomToolsWidget> {
   late final ApiClient _client;
   bool _reverted = false;
-  final TextEditingController _commitController = TextEditingController();
-  String _currentBranch = 'main';
-  List<Map<String, dynamic>> _gitChanges = [];
-  bool _isCommitting = false;
 
   @override
   void initState() {
     super.initState();
     _client = widget.client ?? ApiClient();
-    _refreshGit();
-  }
-
-  Future<void> _refreshGit() async {
-    final status = await _client.getGitStatus();
-    if (mounted) {
-      setState(() {
-        _currentBranch = status['branch'] as String? ?? 'main';
-        final raw = status['changes'] as List<dynamic>? ?? [];
-        _gitChanges = raw.map((c) => Map<String, dynamic>.from(c as Map)).toList();
-      });
-    }
-  }
-
-  Future<void> _stageFile(String path) async {
-    await _client.gitStage(path);
-    await _refreshGit();
-  }
-
-  Future<void> _unstageFile(String path) async {
-    await _client.gitUnstage(path);
-    await _refreshGit();
-  }
-
-  Future<void> _commitChanges() async {
-    final msg = _commitController.text.trim();
-    if (msg.isEmpty || _isCommitting) return;
-    setState(() => _isCommitting = true);
-    await _client.gitCommit(msg);
-    _commitController.clear();
-    await _refreshGit();
-    if (mounted) setState(() => _isCommitting = false);
-  }
-
-  @override
-  void dispose() {
-    _commitController.dispose();
-    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final gitLog = widget.gitLog;
+    if (widget.activeTab == BottomToolTab.git && gitLog != null) {
+      // Git 工具窗同样用 IntelliJ 式独立标题栏(Git | Log)。
+      return Container(
+        height: widget.height,
+        decoration: const BoxDecoration(
+          border: Border(top: BorderSide(color: IntelliJTheme.borderSubtle)),
+        ),
+        child: GitLogWindow(
+          store: gitLog,
+          repoName: widget.repoName,
+          onHide: () => widget.onSelectTab(BottomToolTab.git),
+        ),
+      );
+    }
     final terminals = widget.terminals;
     if (widget.activeTab == BottomToolTab.terminal && terminals != null) {
       // 终端用 IntelliJ 式的独立标题栏(Terminal | Local × | +),不显示共享标签条。
       return Container(
-        height: 220,
+        height: widget.height,
         decoration: const BoxDecoration(
           border: Border(top: BorderSide(color: IntelliJTheme.borderSubtle)),
         ),
@@ -98,7 +85,7 @@ class _BottomToolsWidgetState extends State<BottomToolsWidget> {
       );
     }
     return Container(
-      height: 220,
+      height: widget.height,
       decoration: const BoxDecoration(
         color: IntelliJTheme.panelBg,
         border: Border(top: BorderSide(color: IntelliJTheme.borderSubtle)),
@@ -117,7 +104,7 @@ class _BottomToolsWidgetState extends State<BottomToolsWidget> {
               scrollDirection: Axis.horizontal,
               child: Row(
                 children: [
-                  _buildTab('Git Log: HEAD', BottomToolTab.git),
+                  _buildTab('Git', BottomToolTab.git),
                   _buildTab('SQLite State & Rollback', BottomToolTab.sqlite),
                   _buildTab('CodeGraph Explorer', BottomToolTab.codegraph),
                   _buildTab('Terminal', BottomToolTab.terminal),
@@ -129,7 +116,7 @@ class _BottomToolsWidgetState extends State<BottomToolsWidget> {
           // Content Panels
           Expanded(
             child: switch (widget.activeTab) {
-              BottomToolTab.git => _buildGitPanel(),
+              BottomToolTab.git => const SizedBox.shrink(),
               BottomToolTab.sqlite => _buildSqlitePanel(),
               BottomToolTab.codegraph => _buildCodeGraphPanel(),
               BottomToolTab.terminal => const SizedBox.shrink(),
@@ -170,250 +157,6 @@ class _BottomToolsWidgetState extends State<BottomToolsWidget> {
   }
 
   // 1. Git Version Control Panel
-  Widget _buildGitPanel() {
-    return Row(
-      children: [
-        // Branches list
-        Container(
-          width: 140,
-          decoration: const BoxDecoration(
-            border: Border(right: BorderSide(color: IntelliJTheme.borderSubtle)),
-          ),
-          padding: const EdgeInsets.all(8),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Expanded(
-                    child: Text(
-                      'BRANCH (HEAD)',
-                      style: TextStyle(color: IntelliJTheme.textHigh, fontSize: 11, fontWeight: FontWeight.bold),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  InkWell(
-                    onTap: _refreshGit,
-                    child: const Padding(
-                      padding: EdgeInsets.all(2),
-                      child: Icon(Icons.refresh, size: 13, color: IntelliJTheme.textMuted),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 6),
-              Row(
-                children: [
-                  const Icon(Icons.circle, size: 6, color: IntelliJTheme.gitGreen),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      _currentBranch,
-                      style: const TextStyle(color: Color(0xFF6CB4F8), fontSize: 11, fontFamily: 'monospace', fontWeight: FontWeight.bold),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Text(
-                '${_gitChanges.length} changed files',
-                style: const TextStyle(color: IntelliJTheme.textMuted, fontSize: 10),
-              ),
-            ],
-          ),
-        ),
-
-        // Commit Message & Action Box
-        Expanded(
-          child: Padding(
-            padding: const EdgeInsets.all(8),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Expanded(
-                      child: Text(
-                        'COMMIT CHANGES',
-                        style: TextStyle(color: IntelliJTheme.textHigh, fontSize: 11, fontWeight: FontWeight.bold),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    InkWell(
-                      onTap: _isCommitting ? null : _commitChanges,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: IntelliJTheme.gitGreen,
-                          borderRadius: BorderRadius.circular(3),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (_isCommitting)
-                              const SizedBox(width: 10, height: 10, child: CircularProgressIndicator(strokeWidth: 1.5, color: Colors.white))
-                            else
-                              const Icon(Icons.check, size: 12, color: Colors.white),
-                            const SizedBox(width: 4),
-                            const Text('Commit', style: TextStyle(color: Colors.white, fontSize: 10.5, fontWeight: FontWeight.w600)),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Expanded(
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: IntelliJTheme.cardBg,
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(color: IntelliJTheme.border),
-                    ),
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    child: TextField(
-                      controller: _commitController,
-                      maxLines: null,
-                      style: const TextStyle(color: IntelliJTheme.textHigh, fontSize: 11, fontFamily: 'monospace'),
-                      decoration: const InputDecoration(
-                        hintText: 'Enter commit message (e.g. feat: update git engine)...',
-                        hintStyle: TextStyle(color: IntelliJTheme.textMuted, fontSize: 11),
-                        border: InputBorder.none,
-                        isDense: true,
-                        contentPadding: EdgeInsets.zero,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-
-        // Changed Files List
-        Container(
-          width: 210,
-          decoration: const BoxDecoration(
-            border: Border(left: BorderSide(color: IntelliJTheme.borderSubtle)),
-          ),
-          padding: const EdgeInsets.all(8),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Text(
-                      'Changed Files (${_gitChanges.length})',
-                      style: const TextStyle(color: IntelliJTheme.textHigh, fontSize: 11, fontWeight: FontWeight.bold),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  if (_gitChanges.isNotEmpty) ...[
-                    const SizedBox(width: 4),
-                    InkWell(
-                      onTap: () async {
-                        for (final c in _gitChanges) {
-                          await _client.gitStage(c['path'] as String);
-                        }
-                        await _refreshGit();
-                      },
-                      child: const Text('Stage All', style: TextStyle(color: IntelliJTheme.accentBlue, fontSize: 10)),
-                    ),
-                  ],
-                ],
-              ),
-              const SizedBox(height: 6),
-              Expanded(
-                child: _gitChanges.isEmpty
-                    ? const Center(
-                        child: Text(
-                          '✓ Working tree clean',
-                          style: TextStyle(color: IntelliJTheme.gitGreen, fontSize: 11),
-                        ),
-                      )
-                    : ListView.builder(
-                        itemCount: _gitChanges.length,
-                        itemBuilder: (ctx, i) {
-                          final c = _gitChanges[i];
-                          final path = c['path'] as String? ?? '';
-                          final isStaged = c['is_staged'] as bool? ?? false;
-                          final status = c['status'] as String? ?? 'modified';
-
-                          Color statusColor;
-                          String badge;
-                          switch (status) {
-                            case 'added':
-                              statusColor = IntelliJTheme.gitGreen;
-                              badge = 'A';
-                              break;
-                            case 'deleted':
-                              statusColor = IntelliJTheme.gitRed;
-                              badge = 'D';
-                              break;
-                            case 'untracked':
-                              statusColor = IntelliJTheme.syntaxType;
-                              badge = '?';
-                              break;
-                            default:
-                              statusColor = IntelliJTheme.gitBlue;
-                              badge = 'M';
-                          }
-
-                          return Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 2),
-                            child: Row(
-                              children: [
-                                InkWell(
-                                  onTap: () => isStaged ? _unstageFile(path) : _stageFile(path),
-                                  child: Icon(
-                                    isStaged ? Icons.check_box : Icons.check_box_outline_blank,
-                                    size: 14,
-                                    color: isStaged ? IntelliJTheme.gitGreen : IntelliJTheme.textMuted,
-                                  ),
-                                ),
-                                const SizedBox(width: 4),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                                  decoration: BoxDecoration(
-                                    color: statusColor.withOpacity(0.15),
-                                    borderRadius: BorderRadius.circular(2),
-                                  ),
-                                  child: Text(
-                                    badge,
-                                    style: TextStyle(color: statusColor, fontSize: 9, fontWeight: FontWeight.bold),
-                                  ),
-                                ),
-                                const SizedBox(width: 6),
-                                Expanded(
-                                  child: Text(
-                                    path,
-                                    style: const TextStyle(
-                                      color: IntelliJTheme.textPrimary,
-                                      fontSize: 10.5,
-                                      fontFamily: 'monospace',
-                                    ),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
-                        },
-                      ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
   // 2. SQLite State & Rollback Panel
   Widget _buildSqlitePanel() {
     return Padding(

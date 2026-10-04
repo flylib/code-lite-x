@@ -4,6 +4,7 @@
 
 pub mod entry;
 pub mod git;
+pub mod git_history;
 pub mod search;
 pub mod tree;
 pub mod updater;

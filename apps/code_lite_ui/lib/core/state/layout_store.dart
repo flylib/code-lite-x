@@ -3,7 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../../features/bottom_tools/bottom_tools_widget.dart';
 
 /// 左侧工具窗(活动条上半段选择的那一栏)。
-enum LeftTool { project, structure }
+enum LeftTool { project, commit, structure }
 
 /// 右侧工具窗(右侧活动条选择的那一栏)。
 enum RightTool { none, cargo, assistant }
@@ -21,12 +21,17 @@ class LayoutStore extends ChangeNotifier {
   BottomToolTab _bottomTab = BottomToolTab.git;
   bool _isLeftOpen = true;
   bool _isBottomOpen = true;
+  double _bottomHeight = 300;
+
+  /// 底部工具窗高度,拖动分隔条调整。Git Log 这类视图在 220 高度下只看得到几行。
+  static const double minBottomHeight = 140;
 
   LeftTool get leftTool => _leftTool;
   RightTool get rightTool => _rightTool;
   BottomToolTab get bottomTab => _bottomTab;
   bool get isLeftOpen => _isLeftOpen;
   bool get isBottomOpen => _isBottomOpen;
+  double get bottomHeight => _bottomHeight;
   bool get isRightOpen => _rightTool != RightTool.none;
 
   /// 再点一次当前工具会收起该栏 —— 与 IntelliJ 的行为一致。
@@ -53,6 +58,14 @@ class LayoutStore extends ChangeNotifier {
       _bottomTab = tab;
       _isBottomOpen = true;
     }
+    notifyListeners();
+  }
+
+  /// [maxHeight] 由调用方按窗口大小给出,保证编辑区始终留有空间。
+  void resizeBottom(double height, {required double maxHeight}) {
+    final clamped = height.clamp(minBottomHeight, maxHeight < minBottomHeight ? minBottomHeight : maxHeight);
+    if (clamped == _bottomHeight) return;
+    _bottomHeight = clamped;
     notifyListeners();
   }
 

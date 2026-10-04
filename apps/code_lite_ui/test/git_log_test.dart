@@ -1,0 +1,106 @@
+import 'dart:io';
+
+import 'package:code_lite_ui/core/client/api_client.dart';
+import 'package:code_lite_ui/features/git/git_log_store.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+/// 端到端:真实 git 仓库 → Rust GitEngine → FFI → GitLogStore。
+void main() {
+  final client = ApiClient();
+  late Directory repo;
+
+  Future<void> git(List<String> args) async {
+    final r = await Process.run('git', args, workingDirectory: repo.path);
+    if (r.exitCode != 0) throw StateError('git ${args.join(' ')}: ${r.stderr}');
+  }
+
+  Future<void> commitFile(String name, String content, String message) async {
+    File('${repo.path}/$name').writeAsStringSync(content);
+    await git(['add', name]);
+    await git(['commit', '-q', '-m', message]);
+  }
+
+  setUp(() async {
+    repo = Directory.systemTemp.createTempSync('clx_gitlog_');
+    await git(['init', '-q', '-b', 'main']);
+    await git(['config', 'user.name', 'Tester']);
+    await git(['config', 'user.email', 't@example.com']);
+    await commitFile('a.txt', 'a\n', 'feat: 初始提交');
+    await git(['switch', '-q', '-c', 'feat/x']);
+    await commitFile('x.txt', 'x\n', 'feat: 分支上的提交');
+    await git(['switch', '-q', 'main']);
+    await commitFile('b.txt', 'b\n', 'fix: 主干修复');
+    await git(['merge', '-q', '--no-ff', 'feat/x', '-m', 'merge feat/x']);
+    client.openWorkspace(repo.path);
+  });
+
+  tearDown(() {
+    client.openWorkspace('.');
+    repo.deleteSync(recursive: true);
+  });
+
+  test('loads branches, commits with graph, and details', () async {
+    if (!client.isFfiAvailable) return; // 没编出 dylib 时跳过
+    final store = GitLogStore(client);
+    await store.refresh();
+
+    expect(store.currentBranch, 'main');
+    expect(store.localBranches.map((b) => b.name), containsAll(['main', 'feat/x']));
+    expect(store.commits, hasLength(4));
+    expect(store.commits.first.subject, 'merge feat/x');
+    expect(store.commits.first.refs.map((r) => r.name), containsAll(['HEAD', 'main']));
+    // 合并提交向下分出第二条轨道。
+    expect(store.graph.first.width, 2);
+
+    // 默认选中第一条,并带出详情。
+    expect(store.selected, store.commits.first.hash);
+    final initial = store.commits.last;
+    store.selectCommit(initial.hash);
+    expect(store.details!.message, 'feat: 初始提交');
+    expect(store.details!.files.single.path, 'a.txt');
+    expect(store.details!.files.single.status, 'A');
+    store.dispose();
+  });
+
+  test('filters by text, branch and paths', () async {
+    if (!client.isFfiAvailable) return;
+    final store = GitLogStore(client);
+    await store.refresh();
+
+    store.setBranch('feat/x');
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    expect(store.commits.map((c) => c.subject), ['feat: 分支上的提交', 'feat: 初始提交']);
+
+    store.setBranch(null);
+    store.setPaths(['b.txt']);
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    expect(store.commits.map((c) => c.subject), ['fix: 主干修复']);
+
+    store.setPaths(const []);
+    store.setText('主干');
+    await Future<void>.delayed(const Duration(milliseconds: 700)); // 300ms 防抖 + 加载
+    expect(store.commits.map((c) => c.subject), ['fix: 主干修复']);
+    store.dispose();
+  });
+
+  test('write operations go through the store and refresh the log', () async {
+    if (!client.isFfiAvailable) return;
+    final store = GitLogStore(client);
+    await store.refresh();
+    final head = store.commits.first;
+
+    expect(await store.run('New Tag', 'git.new_tag', {'name': 'v1', 'hash': head.hash}), isNull);
+    expect(store.commits.first.refs.map((r) => r.name), contains('v1'));
+
+    expect(await store.run('Edit Message', 'git.reword', {'hash': head.hash, 'message': 'merge: 改过的信息'}), isNull);
+    // 旧的合并提交还挂着 v1 标签,所以在 --all 视图里仍然可见;看 HEAD 指向谁。
+    expect(store.commit(store.headHash)!.subject, 'merge: 改过的信息');
+
+    expect(await store.run('Undo', 'git.undo_commit'), isNull);
+    expect(store.commit(store.headHash)!.subject, 'fix: 主干修复');
+
+    // 失败要以错误返回,而不是抛异常。
+    expect(await store.run('Reset', 'git.reset', {'hash': head.hash, 'mode': 'bogus'}), isNotNull);
+    store.dispose();
+  });
+}

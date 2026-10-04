@@ -2472,6 +2472,41 @@ pub unsafe extern "C" fn codelite_git_revert_file(
     }
 }
 
+/// Git Log 工具窗口的统一入口:按 `method`(如 "git.log"、"git.cherry_pick")分派,
+/// 参数与结果均为 JSON,具体契约见 `handlers::git_log`。
+/// 成功返回 `{"status":"ok", ...}`,失败返回 `{"status":"error","error":"..."}`。
+#[no_mangle]
+pub unsafe extern "C" fn codelite_git_call(
+    ctx: *mut CodeLiteContext,
+    method: *const c_char,
+    params_json: *const c_char,
+) -> *const c_char {
+    if ctx.is_null() {
+        return err_json("Context is null");
+    }
+    let ctx = &*ctx;
+
+    let method = match c_str_to_str(method).map(str::trim) {
+        Some(m) if !m.is_empty() => m,
+        _ => return err_json("method is required"),
+    };
+    let params = if params_json.is_null() {
+        ""
+    } else {
+        match c_str_to_str(params_json) {
+            Some(p) => p,
+            None => return err_json("params_json is not valid UTF-8"),
+        }
+    };
+
+    // panic 绝不能跨越 FFI 边界展开
+    let root = ctx.workspace_root.clone();
+    match std::panic::catch_unwind(|| handlers::git_log::call(&root, method, params)) {
+        Ok(res) => json_to_c_char(&res),
+        Err(_) => err_json("git call panicked"),
+    }
+}
+
 // ---------------------------------------------------------------------------
 // 12. Context Engine & Memory (Phase 10)
 // ---------------------------------------------------------------------------
@@ -3757,5 +3792,76 @@ mod tests {
             let _ = std::fs::remove_dir_all(&temp_dir);
         }
     }
-}
 
+    #[test]
+    fn test_ffi_git_call_log_and_unknown_method() {
+        use std::process::Command;
+        let repo = std::env::temp_dir().join(format!(
+            "codelite_ffi_git_call_{}_{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&repo).unwrap();
+        let git = |args: &[&str]| {
+            let out = Command::new("git").arg("-C").arg(&repo).args(args).output().unwrap();
+            assert!(out.status.success(), "git {:?}: {}", args, String::from_utf8_lossy(&out.stderr));
+        };
+        git(&["init", "-q", "-b", "main"]);
+        git(&["config", "user.name", "FFI Tester"]);
+        git(&["config", "user.email", "ffi@codelite.dev"]);
+        git(&["config", "commit.gpgsign", "false"]);
+        std::fs::write(repo.join("hello.txt"), "hi\n").unwrap();
+        git(&["add", "hello.txt"]);
+        git(&["commit", "-q", "-m", "ffi first commit"]);
+
+        unsafe {
+            let root = CString::new(repo.to_str().unwrap()).unwrap();
+            let ctx = codelite_init(root.as_ptr());
+            assert!(!ctx.is_null());
+
+            let call = |method: &str, params: &str| -> serde_json::Value {
+                let m = CString::new(method).unwrap();
+                let p = CString::new(params).unwrap();
+                let ptr = codelite_git_call(ctx, m.as_ptr(), p.as_ptr());
+                let v = serde_json::from_str(CStr::from_ptr(ptr).to_str().unwrap()).unwrap();
+                codelite_string_free(ptr as *mut c_char);
+                v
+            };
+
+            let log = call("git.log", r#"{"limit": 10, "paths": null}"#);
+            assert_eq!(log["status"], "ok");
+            assert_eq!(log["has_more"], false);
+            let commits = log["commits"].as_array().unwrap();
+            assert_eq!(commits.len(), 1);
+            assert_eq!(commits[0]["subject"], "ffi first commit");
+            assert_eq!(commits[0]["hash"], log["head"]);
+            assert_eq!(commits[0]["refs"][0]["kind"], "head");
+            assert_eq!(commits[0]["refs"][1]["name"], "main");
+
+            // 空参数 / null 指针都按 {} 处理
+            let null_ptr = codelite_git_call(ctx, CString::new("git.branches").unwrap().as_ptr(), std::ptr::null());
+            let branches: serde_json::Value =
+                serde_json::from_str(CStr::from_ptr(null_ptr).to_str().unwrap()).unwrap();
+            codelite_string_free(null_ptr as *mut c_char);
+            assert_eq!(branches["status"], "ok");
+            assert_eq!(branches["current"], "main");
+
+            let unknown = call("git.nope", "{}");
+            assert_eq!(unknown["status"], "error");
+            assert!(unknown["error"].as_str().unwrap().contains("git.nope"));
+
+            let missing = call("git.commit_details", "{}");
+            assert_eq!(missing["status"], "error");
+            let bad_json = call("git.log", "{not json");
+            assert_eq!(bad_json["status"], "error");
+            let bad_mode = call("git.reset", r#"{"hash":"HEAD","mode":"keep"}"#);
+            assert_eq!(bad_mode["status"], "error");
+
+            codelite_destroy(ctx);
+        }
+        let _ = std::fs::remove_dir_all(&repo);
+    }
+}

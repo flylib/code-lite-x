@@ -13,8 +13,10 @@ import 'features/activity_stripe/right_activity_stripe.dart';
 import 'features/ai_assistant/ai_assistant_panel.dart';
 import 'features/bottom_tools/bottom_tools_widget.dart';
 import 'features/cargo/cargo_panel.dart';
+import 'features/commit/commit_panel.dart';
 import 'features/editor/editor_session_manager.dart';
 import 'features/editor/editor_view_widget.dart';
+import 'features/git/git_log_store.dart';
 import 'features/project_explorer/project_explorer_widget.dart';
 import 'features/project_explorer/structure_widget.dart';
 import 'features/search/global_search_modal.dart';
@@ -42,12 +44,15 @@ class _CodeLiteAppState extends State<CodeLiteApp> {
   late final WorkspaceStore _workspace;
   final LayoutStore _layout = LayoutStore();
   late final TerminalStore _terminals = TerminalStore(_client);
+  late final GitLogStore _gitLog = GitLogStore(_client);
+  String? _lastRoot;
 
   @override
   void initState() {
     super.initState();
     _sessions = EditorSessionManager(client: _client);
     _workspace = WorkspaceStore(client: _client, sessions: _sessions);
+    _workspace.addListener(_onWorkspaceChanged);
     _bootstrap();
   }
 
@@ -55,8 +60,18 @@ class _CodeLiteAppState extends State<CodeLiteApp> {
     await _workspace.bootstrap();
   }
 
+  /// 换了项目:Git Log 里还是旧仓库的数据,作废后在下次显示时重新加载。
+  void _onWorkspaceChanged() {
+    final root = _workspace.rootPath;
+    if (root == _lastRoot) return;
+    _lastRoot = root;
+    _gitLog.invalidate();
+  }
+
   @override
   void dispose() {
+    _workspace.removeListener(_onWorkspaceChanged);
+    _gitLog.dispose();
     _terminals.dispose();
     _layout.dispose();
     _workspace.dispose();
@@ -76,7 +91,7 @@ class _CodeLiteAppState extends State<CodeLiteApp> {
           notifier: _workspace,
           child: SessionScope(
             notifier: _sessions,
-            child: _Workbench(client: _client, terminals: _terminals),
+            child: _Workbench(client: _client, terminals: _terminals, gitLog: _gitLog),
           ),
         ),
       ),
@@ -85,10 +100,11 @@ class _CodeLiteAppState extends State<CodeLiteApp> {
 }
 
 class _Workbench extends StatelessWidget {
-  const _Workbench({required this.client, required this.terminals});
+  const _Workbench({required this.client, required this.terminals, required this.gitLog});
 
   final ApiClient client;
   final TerminalStore terminals;
+  final GitLogStore gitLog;
 
   @override
   Widget build(BuildContext context) {
@@ -155,6 +171,12 @@ class _Workbench extends StatelessWidget {
                                 activeFilePath: workspace.activeFile,
                                 onSelectFile: workspace.openFile,
                               ),
+                            LeftTool.commit => CommitPanel(
+                                key: ValueKey(workspace.rootPath),
+                                client: client,
+                                onOpenFile: workspace.openFile,
+                                onCommitted: gitLog.refresh,
+                              ),
                             LeftTool.structure => SizedBox(
                                 width: IntelliJMetrics.sidePanel,
                                 child: StructureWidget(
@@ -177,12 +199,21 @@ class _Workbench extends StatelessWidget {
                             listenable: layout,
                             builder: (context, _) {
                               if (!layout.isBottomOpen) return const SizedBox.shrink();
-                              return BottomToolsWidget(
-                                activeTab: layout.bottomTab,
-                                onSelectTab: layout.selectBottomTab,
-                                onRevertTask: () => _revertTask(context),
-                                client: client,
-                                terminals: terminals,
+                              return Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                    _BottomResizeHandle(layout: layout),
+                                    BottomToolsWidget(
+                                      activeTab: layout.bottomTab,
+                                      onSelectTab: layout.selectBottomTab,
+                                      onRevertTask: () => _revertTask(context),
+                                      client: client,
+                                      terminals: terminals,
+                                      gitLog: gitLog,
+                                      repoName: workspace.projectName,
+                                      height: layout.bottomHeight,
+                                    ),
+                                ],
                               );
                             },
                           ),
@@ -559,5 +590,28 @@ class _AppMenuBar extends StatelessWidget {
       ScaffoldMessenger.maybeOf(context)
           ?.showSnackBar(SnackBar(content: Text('创建失败: $err')));
     }
+  }
+}
+
+/// 编辑区与底部工具窗之间的分隔条,上下拖动调整底部高度(与 IntelliJ 一致)。
+class _BottomResizeHandle extends StatelessWidget {
+  const _BottomResizeHandle({required this.layout});
+
+  final LayoutStore layout;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.resizeRow,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onVerticalDragUpdate: (d) {
+          // 编辑区至少留 160px。
+          final max = MediaQuery.sizeOf(context).height - 160 - IntelliJMetrics.titleBar;
+          layout.resizeBottom(layout.bottomHeight - d.delta.dy, maxHeight: max);
+        },
+        child: const SizedBox(height: 4, width: double.infinity),
+      ),
+    );
   }
 }

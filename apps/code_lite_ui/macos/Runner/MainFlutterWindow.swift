@@ -15,6 +15,23 @@ class MainFlutterWindow: NSWindow {
       name: "codelitex/dialogs",
       binaryMessenger: flutterViewController.engine.binaryMessenger)
     dialogs.setMethodCallHandler { [weak self] call, result in
+      if call.method == "pickSavePath" {
+        // Git → Create Patch:原生"存储为"面板。取消时回传 nil。
+        let panel = NSSavePanel()
+        panel.canCreateDirectories = true
+        if let args = call.arguments as? [String: Any], let name = args["name"] as? String {
+          panel.nameFieldStringValue = name
+        }
+        let finish: (NSApplication.ModalResponse) -> Void = { response in
+          result(response == .OK ? panel.url?.path : nil)
+        }
+        if let window = self {
+          panel.beginSheetModal(for: window, completionHandler: finish)
+        } else {
+          finish(panel.runModal())
+        }
+        return
+      }
       guard call.method == "pickDirectory" else {
         result(FlutterMethodNotImplemented)
         return

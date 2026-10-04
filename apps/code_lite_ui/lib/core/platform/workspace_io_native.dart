@@ -14,6 +14,25 @@ Future<String?> pickDirectory() async {
   }
 }
 
+/// 弹出系统"存储为"面板。取消返回 null。
+Future<String?> pickSavePath(String suggestedName) async {
+  try {
+    return await _dialogs.invokeMethod<String>('pickSavePath', {'name': suggestedName});
+  } on MissingPluginException {
+    return null;
+  }
+}
+
+/// 写文本文件。成功返回 null,失败返回原因。
+Future<String?> writeTextFile(String path, String content) async {
+  try {
+    await File(path).writeAsString(content);
+    return null;
+  } on FileSystemException catch (e) {
+    return e.osError?.message ?? e.message;
+  }
+}
+
 /// 在 [root] 下创建空文件 [relPath](自动补父目录)。成功返回 null,失败返回原因。
 Future<String?> createEmptyFile(String root, String relPath) async {
   final file = File('$root/$relPath');

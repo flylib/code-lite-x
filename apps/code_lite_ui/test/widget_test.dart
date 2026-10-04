@@ -19,9 +19,10 @@ void main() {
     // 启动不再硬编码打开某个文件:恢复上次项目,没有就是空态,由 File → Open 进入项目。
     expect(find.text('planner.rs'), findsNothing);
 
-    // Verify Bottom Tools Tab
-    expect(find.text('Git Log: HEAD'), findsOneWidget);
-    expect(find.text('SQLite State & Rollback'), findsOneWidget);
+    // 底部默认是 Git 工具窗,IntelliJ 式标题栏 Git | Log;其余底部面板从左侧条下半段打开。
+    expect(find.text('Log'), findsOneWidget);
+    expect(find.byTooltip('操作记录与回滚'), findsOneWidget);
+    expect(find.byTooltip('Commit (⌘0)'), findsOneWidget);
 
     // The right column starts closed — no tool window should pay FFI cost on boot.
     expect(find.text('CodeLite AI Assistant'), findsNothing);

@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:ffi';
 import 'dart:io';
+import 'dart:isolate';
 
 // Native function typedefs
 typedef _InitC = Pointer<Void> Function(Pointer<Char> path);
@@ -126,6 +128,8 @@ typedef _PtySnapshotC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> 
 typedef _PtySnapshotDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> id, int sinceSeq, int scrollback);
 typedef _PtyCloseC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> id);
 typedef _PtyCloseDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> id);
+typedef _GitCallC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> method, Pointer<Char> paramsJson);
+typedef _GitCallDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> method, Pointer<Char> paramsJson);
 
 typedef _AgentPromptStreamC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> sessionId, Pointer<Char> prompt);
 typedef _AgentPromptStreamDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> sessionId, Pointer<Char> prompt);
@@ -209,6 +213,13 @@ class CodeLiteBindings {
   bool _initialized = false;
   bool _symbolsBound = false;
 
+  /// 打开动态库时用的路径;后台 isolate 要按同一路径再打开一次。
+  String? _libraryPath;
+
+  /// 正在后台 isolate 里执行、还持有 `_ctx` 的调用数。
+  int _inFlight = 0;
+  Completer<void>? _idle;
+
   bool get isAvailable => _dylib != null && _ctx != null && _ctx!.address != 0;
 
   // Function pointers
@@ -266,6 +277,7 @@ class CodeLiteBindings {
   late final _PtyResizeDart _ptyResize;
   late final _PtySnapshotDart _ptySnapshot;
   late final _PtyCloseDart _ptyClose;
+  late final _GitCallDart _gitCall;
   late final _AgentPromptStreamDart _agentPromptStream;
   late final _AgentPollStreamDart _agentPollStream;
   late final _SessionMessagesDart _sessionListMessages;
@@ -378,6 +390,7 @@ class CodeLiteBindings {
     _ptyResize = _dylib!.lookupFunction<_PtyResizeC, _PtyResizeDart>('codelite_pty_resize');
     _ptySnapshot = _dylib!.lookupFunction<_PtySnapshotC, _PtySnapshotDart>('codelite_pty_snapshot');
     _ptyClose = _dylib!.lookupFunction<_PtyCloseC, _PtyCloseDart>('codelite_pty_close');
+    _gitCall = _dylib!.lookupFunction<_GitCallC, _GitCallDart>('codelite_git_call');
     _agentPromptStream = _dylib!.lookupFunction<_AgentPromptStreamC, _AgentPromptStreamDart>('codelite_agent_send_prompt_stream');
     _agentPollStream = _dylib!.lookupFunction<_AgentPollStreamC, _AgentPollStreamDart>('codelite_agent_poll_stream_events');
     _sessionListMessages = _dylib!.lookupFunction<_SessionMessagesC, _SessionMessagesDart>('codelite_session_list_messages');
@@ -869,6 +882,45 @@ class CodeLiteBindings {
     return _parseJsonMap(_fromCString(ptr));
   }
 
+  /// [gitCall] 的后台版本:在独立 isolate 里调用,push / rebase 这类慢操作不卡界面。
+  /// 上下文指针按地址传过去 —— 调用期间不能销毁上下文,切换项目前要先 await [whenIdle]。
+  Future<Map<String, dynamic>> gitCallAsync(String method, Map<String, dynamic> params) async {
+    final path = _libraryPath;
+    if (!isAvailable || path == null) return {'status': 'error', 'error': 'FFI not available'};
+    final ctxAddress = _ctx!.address;
+    final paramsJson = jsonEncode(params);
+    _inFlight++;
+    try {
+      final raw = await Isolate.run(() => _gitCallInIsolate(path, ctxAddress, method, paramsJson));
+      return _parseJsonMap(raw);
+    } catch (e) {
+      return {'status': 'error', 'error': '$e'};
+    } finally {
+      _inFlight--;
+      if (_inFlight == 0) {
+        _idle?.complete();
+        _idle = null;
+      }
+    }
+  }
+
+  /// 所有后台调用都结束后完成。
+  Future<void> whenIdle() {
+    if (_inFlight == 0) return Future.value();
+    return (_idle ??= Completer<void>()).future;
+  }
+
+  /// Git Log 工具窗的统一入口:按 method 名分发到 Rust 的 GitEngine(git.log / git.reset …)。
+  Map<String, dynamic> gitCall(String method, Map<String, dynamic> params) {
+    if (!isAvailable) return {'status': 'error', 'error': 'FFI not available'};
+    final methodPtr = _toCString(method);
+    final paramsPtr = _toCString(jsonEncode(params));
+    final ptr = _gitCall(_ctx!, methodPtr.pointer, paramsPtr.pointer);
+    _freeAllocatedString(methodPtr);
+    _freeAllocatedString(paramsPtr);
+    return _parseJsonMap(_fromCString(ptr));
+  }
+
   // ---------------------------------------------------------------------------
   // Phase 5: Streaming AI Chat, Message Persistence & Git Operations
   // ---------------------------------------------------------------------------
@@ -1267,12 +1319,15 @@ class CodeLiteBindings {
     for (final path in candidates) {
       if (File(path).existsSync()) {
         try {
-          return DynamicLibrary.open(path);
+          final lib = DynamicLibrary.open(path);
+          _libraryPath = path;
+          return lib;
         } catch (_) {}
       }
     }
 
     try {
+      if (Platform.isMacOS) _libraryPath = 'libcodelite.dylib';
       return Platform.isMacOS
           ? DynamicLibrary.open('libcodelite.dylib')
           : DynamicLibrary.process();
@@ -1280,6 +1335,42 @@ class CodeLiteBindings {
       return null;
     }
   }
+}
+
+/// 在后台 isolate 里执行 `codelite_git_call`。isolate 不共享 [CodeLiteBindings] 单例,
+/// 所以重新打开同一个库(进程内是同一份映像,`_ctx` 地址依然有效)并只查这几个符号。
+String _gitCallInIsolate(String libraryPath, int ctxAddress, String method, String paramsJson) {
+  final lib = DynamicLibrary.open(libraryPath);
+  final call = lib.lookupFunction<_GitCallC, _GitCallDart>('codelite_git_call');
+  final alloc = lib.lookupFunction<_StringAllocC, _StringAllocDart>('codelite_string_alloc');
+  final bufferFree = lib.lookupFunction<_BufferFreeC, _BufferFreeDart>('codelite_buffer_free');
+  final stringFree = lib.lookupFunction<_StringFreeC, _StringFreeDart>('codelite_string_free');
+
+  Pointer<Char> toC(List<int> bytes) {
+    final ptr = alloc(bytes.length);
+    final b = ptr.cast<Uint8>();
+    for (var i = 0; i < bytes.length; i++) {
+      b[i] = bytes[i];
+    }
+    b[bytes.length] = 0;
+    return ptr;
+  }
+
+  final methodBytes = utf8.encode(method);
+  final paramsBytes = utf8.encode(paramsJson);
+  final m = toC(methodBytes);
+  final p = toC(paramsBytes);
+  final res = call(Pointer<Void>.fromAddress(ctxAddress), m, p);
+  bufferFree(m, methodBytes.length);
+  bufferFree(p, paramsBytes.length);
+  if (res.address == 0) return '';
+  final out = <int>[];
+  final bytes = res.cast<Uint8>();
+  for (var i = 0; bytes[i] != 0; i++) {
+    out.add(bytes[i]);
+  }
+  stringFree(res);
+  return utf8.decode(out, allowMalformed: true);
 }
 
 class _AllocatedString {

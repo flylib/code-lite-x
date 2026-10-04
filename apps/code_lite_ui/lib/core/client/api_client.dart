@@ -20,6 +20,9 @@ class ApiClient {
   /// 把 Rust Core 重新指向另一个工作区根目录(File → Open)。
   bool openWorkspace(String path) => _ffi.reinitialize(path);
 
+  /// 后台 isolate 里的调用还持有旧上下文指针;切换工作区前必须等它们结束。
+  Future<void> whenIdle() => _ffi.whenIdle();
+
   /// Fetches the project workspace file tree.
   Future<Map<String, dynamic>> fetchWorkspaceTree() async {
     if (_ffi.isAvailable) {
@@ -522,6 +525,15 @@ class ApiClient {
   Map<String, dynamic> ptySnapshot(String id, {int sinceSeq = -1, int scrollback = 0}) =>
       _ffi.ptySnapshot(id, sinceSeq: sinceSeq, scrollback: scrollback);
   Map<String, dynamic> ptyClose(String id) => _ffi.ptyClose(id);
+
+  /// Git Log 工具窗的所有读写操作。返回 `{"status":"ok", ...}` 或 `{"status":"error","error":...}`。
+  /// 同步 FFI:git 命令通常在几十毫秒内,写操作(rebase 等)由调用方显示进度。
+  Map<String, dynamic> gitCall(String method, [Map<String, dynamic> params = const {}]) =>
+      _ffi.gitCall(method, params);
+
+  /// 慢操作(push、rebase、cherry-pick)用这个:在后台 isolate 执行,界面不卡。
+  Future<Map<String, dynamic>> gitCallAsync(String method, [Map<String, dynamic> params = const {}]) =>
+      _ffi.gitCallAsync(method, params);
 
   // ---------------------------------------------------------------------------
   // Phase 5: Streaming AI Chat, History Persistence & Git Operations
