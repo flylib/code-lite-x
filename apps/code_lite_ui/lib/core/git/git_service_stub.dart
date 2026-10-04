@@ -17,7 +17,7 @@ class GitService {
 
   Future<Map<String, dynamic>> unstage(String path) async => _unavailable;
 
-  Future<Map<String, dynamic>> commit(String message) async => _unavailable;
+  Future<Map<String, dynamic>> commit(String message, {bool amend = false}) async => _unavailable;
 
   Future<Map<String, dynamic>> fileDiffHunks(String path) async => _unavailable;
 

@@ -1,0 +1,364 @@
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+
+import '../../core/client/api_client.dart';
+import '../../core/theme/intellij_theme.dart';
+import '../editor/code_editor_controller.dart';
+import 'line_diff.dart';
+
+const double _rowHeight = 20;
+
+/// 中间两列行号(各 36)加间隔 4。
+const double _gutterWidth = 76;
+const TextStyle _code = TextStyle(
+  fontFamily: 'Menlo',
+  fontFamilyFallback: ['monospace'],
+  fontSize: 12,
+  height: 1.4,
+  color: IntelliJTheme.textPrimary,
+);
+const TextStyle _small = TextStyle(color: IntelliJTheme.textSecondary, fontSize: 12);
+
+// IntelliJ Darcula 的差异底色:修改蓝、新增绿、删除灰;行内真正改动的部分再深一档。
+const Color _modBg = Color(0xFF293A4F);
+const Color _modWord = Color(0xFF385A82);
+const Color _insBg = Color(0xFF294436);
+const Color _delBg = Color(0xFF484A4A);
+const Color _gapBg = Color(0xFF232427);
+
+/// 「Commit: 文件名」标签页:左边 HEAD,右边当前版本,改动处高亮。两侧只读;
+/// 双击右侧某行或点 ✎ 跳到源文件对应行。
+class DiffTab extends StatefulWidget {
+  const DiffTab({
+    super.key,
+    required this.client,
+    required this.repoPath,
+    required this.findOpenController,
+    required this.onOpenSource,
+  });
+
+  final ApiClient client;
+
+  /// 相对仓库根的路径(git status 给出的就是这种)。
+  final String repoPath;
+
+  /// 该文件已在编辑器里打开时,返回它的 controller —— 右侧显示未保存的内容,并随编辑刷新。
+  final CodeEditorController? Function(String workspacePath) findOpenController;
+
+  /// 跳到源文件:[path] 是相对项目的路径(文件在项目目录外时为绝对路径),[line] 从 0 起。
+  final void Function(String path, int line) onOpenSource;
+
+  @override
+  State<DiffTab> createState() => _DiffTabState();
+}
+
+class _DiffTabState extends State<DiffTab> {
+  final ScrollController _scroll = ScrollController();
+  List<String> _left = const [];
+  List<String> _right = const [];
+  List<DiffRow> _rows = const [];
+  List<int> _blocks = const [];
+  int _currentBlock = -1;
+  String _headShort = '';
+  String? _error;
+  bool _loading = true;
+
+  /// 相对项目的路径;文件不在项目目录下时为绝对路径。
+  String _sourcePath = '';
+  CodeEditorController? _live;
+  Timer? _debounce;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void didUpdateWidget(DiffTab old) {
+    super.didUpdateWidget(old);
+    if (old.repoPath != widget.repoPath) _load();
+  }
+
+  @override
+  void dispose() {
+    _live?.removeTextListener(_onLiveText);
+    _debounce?.cancel();
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  void _onLiveText(String _) {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 300), () => _recompute(_live?.text));
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    final client = widget.client;
+    final info = await client.gitCall('git.repo_info');
+    if (info['status'] != 'ok') {
+      setState(() {
+        _loading = false;
+        _error = info['error'] as String? ?? '不是 Git 仓库';
+      });
+      return;
+    }
+    final top = info['toplevel'] as String;
+    final prefix = info['prefix'] as String? ?? '';
+    _sourcePath = prefix.isNotEmpty && widget.repoPath.startsWith(prefix)
+        ? widget.repoPath.substring(prefix.length)
+        : prefix.isEmpty
+            ? widget.repoPath
+            : '$top/${widget.repoPath}';
+
+    // HEAD 里没有这个文件 = 新增,左侧为空。
+    final base = await client.gitCall('git.file_at', {'hash': 'HEAD', 'path': widget.repoPath});
+    final head = await client.gitCall('git.log', {'branch': 'HEAD', 'limit': 1});
+    final commits = head['commits'] as List?;
+    _headShort = commits == null || commits.isEmpty ? '' : (commits.first['hash'] as String).substring(0, 8);
+    _left = base['status'] == 'ok' && base['binary'] != true ? _split(base['content'] as String? ?? '') : const [];
+
+    _live?.removeTextListener(_onLiveText);
+    _live = widget.findOpenController(_sourcePath);
+    _live?.addTextListener(_onLiveText);
+
+    String? current = _live?.text;
+    if (current == null) {
+      final file = await client.fetchFile(_sourcePath);
+      current = file['status'] == 'ok' ? file['content'] as String? ?? '' : ''; // 已删除的文件:右侧为空
+    }
+    if (!mounted) return;
+    _recompute(current);
+    setState(() => _loading = false);
+  }
+
+  static List<String> _split(String text) {
+    if (text.isEmpty) return const [];
+    final lines = text.split('\n');
+    if (lines.last.isEmpty) lines.removeLast(); // 末尾换行不算一行
+    return lines;
+  }
+
+  void _recompute(String? current) {
+    if (!mounted || current == null) return;
+    setState(() {
+      _right = _split(current);
+      _rows = sideBySideDiff(_left, _right);
+      _blocks = changeBlockStarts(_rows);
+      if (_currentBlock >= _blocks.length) _currentBlock = _blocks.length - 1;
+    });
+  }
+
+  void _goto(int delta) {
+    if (_blocks.isEmpty) return;
+    final next = (_currentBlock + delta).clamp(0, _blocks.length - 1);
+    setState(() => _currentBlock = next);
+    if (!_scroll.hasClients) return;
+    final target = (_blocks[next] * _rowHeight - _scroll.position.viewportDimension / 3)
+        .clamp(0.0, _scroll.position.maxScrollExtent);
+    _scroll.animateTo(target, duration: const Duration(milliseconds: 150), curve: Curves.easeOut);
+  }
+
+  void _openAtRow(int rowIndex) {
+    // 找这一行或它之后最近的一个右侧行号(左侧专有的删除行没有对应位置)。
+    for (var r = rowIndex; r < _rows.length; r++) {
+      final line = _rows[r].right;
+      if (line != null) return widget.onOpenSource(_sourcePath, line);
+    }
+    widget.onOpenSource(_sourcePath, _right.isEmpty ? 0 : _right.length - 1);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) return const Center(child: Text('加载中…', style: _small));
+    if (_error != null) return Center(child: Text(_error!, style: _small));
+    final diffs = _blocks.length;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // 工具条:上一处 / 下一处 / 跳到源文件 …… 差异数
+        Container(
+          height: 32,
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          decoration: const BoxDecoration(
+            color: IntelliJTheme.panelBg,
+            border: Border(bottom: BorderSide(color: IntelliJTheme.borderSubtle)),
+          ),
+          child: Row(
+            children: [
+              _ToolIcon(icon: Icons.arrow_upward, tooltip: '上一处改动', onTap: diffs == 0 ? null : () => _goto(-1)),
+              _ToolIcon(icon: Icons.arrow_downward, tooltip: '下一处改动', onTap: diffs == 0 ? null : () => _goto(1)),
+              _ToolIcon(
+                icon: Icons.edit_outlined,
+                tooltip: '跳到源文件',
+                onTap: () => _openAtRow(_currentBlock < 0 || _blocks.isEmpty ? 0 : _blocks[_currentBlock]),
+              ),
+              _ToolIcon(icon: Icons.refresh, tooltip: '刷新', onTap: _load),
+              const Spacer(),
+              Text(
+                diffs == 0 ? '没有差异' : '$diffs ${diffs == 1 ? 'difference' : 'differences'}',
+                style: _small,
+              ),
+            ],
+          ),
+        ),
+        // 两侧标题:左 HEAD(只读)、右 当前版本
+        Container(
+          height: 26,
+          decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: IntelliJTheme.borderSubtle))),
+          child: Row(
+            children: [
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.lock_outline, size: 13, color: IntelliJTheme.textMuted),
+                      const SizedBox(width: 4),
+                      Flexible(
+                        child: Text(
+                          _left.isEmpty && _headShort.isNotEmpty ? '$_headShort  (新文件)' : '$_headShort  ${widget.repoPath}',
+                          overflow: TextOverflow.ellipsis,
+                          style: _small,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: _gutterWidth),
+              const Expanded(
+                child: Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 10),
+                  child: Text('Current version', overflow: TextOverflow.ellipsis, style: _small),
+                ),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: Container(
+            color: IntelliJTheme.editorBg,
+            child: ListView.builder(
+              controller: _scroll,
+              itemExtent: _rowHeight,
+              itemCount: _rows.length,
+              itemBuilder: (context, i) => _buildRow(i, isCurrent: _currentBlock >= 0 && _blocks.isNotEmpty && _blockOf(i) == _currentBlock),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  int _blockOf(int row) {
+    var b = -1;
+    for (var k = 0; k < _blocks.length && _blocks[k] <= row; k++) {
+      b = k;
+    }
+    return b;
+  }
+
+  Widget _buildRow(int i, {required bool isCurrent}) {
+    final r = _rows[i];
+    final leftText = r.left == null ? null : _left[r.left!];
+    final rightText = r.right == null ? null : _right[r.right!];
+    final span = r.kind == DiffRowKind.modify ? changedSpan(leftText!, rightText!) : null;
+
+    Color? leftBg, rightBg;
+    switch (r.kind) {
+      case DiffRowKind.equal:
+        break;
+      case DiffRowKind.modify:
+        leftBg = _modBg;
+        rightBg = _modBg;
+      case DiffRowKind.delete:
+        leftBg = _delBg;
+        rightBg = _gapBg;
+      case DiffRowKind.insert:
+        leftBg = _gapBg;
+        rightBg = _insBg;
+    }
+
+    Widget number(int? n) => SizedBox(
+          width: 36,
+          child: Text(
+            n == null ? '' : '${n + 1}',
+            textAlign: TextAlign.right,
+            style: const TextStyle(color: IntelliJTheme.textGutter, fontSize: 11, fontFamily: 'Menlo'),
+          ),
+        );
+
+    return Row(
+      children: [
+        Expanded(child: _cell(leftText, leftBg, span == null ? null : (span.start, span.oldEnd))),
+        Container(
+          width: _gutterWidth,
+          color: isCurrent && r.kind != DiffRowKind.equal ? IntelliJTheme.hoverBg : null,
+          child: Row(children: [number(r.left), const SizedBox(width: 4), number(r.right)]),
+        ),
+        Expanded(
+          child: GestureDetector(
+            onDoubleTap: () => _openAtRow(i),
+            child: _cell(rightText, rightBg, span == null ? null : (span.start, span.newEnd)),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _cell(String? text, Color? bg, (int, int)? highlight) {
+    InlineSpan content;
+    if (text == null) {
+      content = const TextSpan(text: '');
+    } else if (highlight == null || highlight.$1 >= highlight.$2) {
+      content = TextSpan(text: text.isEmpty ? ' ' : text);
+    } else {
+      content = TextSpan(children: [
+        TextSpan(text: text.substring(0, highlight.$1)),
+        TextSpan(text: text.substring(highlight.$1, highlight.$2), style: const TextStyle(backgroundColor: _modWord)),
+        TextSpan(text: text.substring(highlight.$2)),
+      ]);
+    }
+    return Container(
+      color: bg,
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      alignment: Alignment.centerLeft,
+      child: RichText(
+        text: TextSpan(style: _code, children: [content]),
+        maxLines: 1,
+        softWrap: false,
+        overflow: TextOverflow.clip,
+      ),
+    );
+  }
+}
+
+class _ToolIcon extends StatelessWidget {
+  const _ToolIcon({required this.icon, required this.tooltip, required this.onTap});
+
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      waitDuration: const Duration(milliseconds: 500),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(4),
+        child: Padding(
+          padding: const EdgeInsets.all(5),
+          child: Icon(icon, size: 15, color: onTap == null ? IntelliJTheme.textMuted : IntelliJTheme.textSecondary),
+        ),
+      ),
+    );
+  }
+}

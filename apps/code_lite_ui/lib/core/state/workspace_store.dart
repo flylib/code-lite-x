@@ -164,7 +164,23 @@ class WorkspaceStore extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Commit 窗点文件:在编辑区打开该文件的差异标签。[repoPath] 相对仓库根。
+  void openDiff(String repoPath) {
+    _sessions.openDiff(repoPath);
+    _outline = const [];
+    _activeSymbol = null;
+    notifyListeners();
+  }
+
   Future<void> openFile(String path) async {
+    // 差异标签(「Commit: 文件名」)不是文件:只切换,没有大纲。
+    if (_sessions.isDiffTab(path)) {
+      _sessions.selectTab(path);
+      _outline = const [];
+      _activeSymbol = null;
+      notifyListeners();
+      return;
+    }
     final tab = await _sessions.openFile(path);
     final outline = await _client.documentSymbols(path, tab.controller.text);
 

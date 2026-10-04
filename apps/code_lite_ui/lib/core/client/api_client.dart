@@ -144,7 +144,7 @@ class ApiClient {
   Future<Map<String, dynamic>> gitUnstage(String filePath) => _git.unstage(filePath);
 
   /// Commits staged changes with message.
-  Future<Map<String, dynamic>> gitCommit(String message) => _git.commit(message);
+  Future<Map<String, dynamic>> gitCommit(String message, {bool amend = false}) => _git.commit(message, amend: amend);
 
   /// Retrieves diff hunks (added, modified, deleted) for a file (editor Git gutter).
   Future<List<Map<String, dynamic>>> gitFileDiffHunks(String filePath) async {

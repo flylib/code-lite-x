@@ -13,6 +13,8 @@ import 'features/activity_stripe/right_activity_stripe.dart';
 import 'features/bottom_tools/bottom_tools_widget.dart';
 import 'features/cargo/cargo_panel.dart';
 import 'features/commit/commit_panel.dart';
+import 'features/commit/diff_tab.dart';
+import 'features/editor/code_editor_controller.dart' show EditorPosition;
 import 'features/editor/editor_session_manager.dart';
 import 'features/editor/editor_view_widget.dart';
 import 'features/git/git_log_store.dart';
@@ -165,8 +167,10 @@ class _Workbench extends StatelessWidget {
                             LeftTool.commit => CommitPanel(
                                 key: ValueKey(workspace.rootPath),
                                 client: client,
+                                onOpenDiff: workspace.openDiff,
                                 onOpenFile: workspace.openFile,
                                 onCommitted: gitLog.refresh,
+                                onFilesReverted: sessions.reloadFromDisk,
                               ),
                             LeftTool.structure => StructureWidget(
                                 activeFile: workspace.activeFile,
@@ -278,6 +282,20 @@ class _EditorRegion extends StatelessWidget {
   final ApiClient client;
   final GitLogStore gitLog;
 
+  /// 差异视图的「跳到源文件」:打开文件,光标放到 [line] 并滚动到可见处。
+  Future<void> _openSourceAt(WorkspaceStore workspace, EditorSessionManager sessions, String path, int line) async {
+    await workspace.openFile(path);
+    final tab = sessions.tabs[path];
+    if (tab == null) return;
+    tab.controller.setCursor(EditorPosition(line, 0));
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final scroll = tab.verticalScroll;
+      if (!scroll.hasClients) return;
+      final target = (line * 20.0 - scroll.position.viewportDimension / 3).clamp(0.0, scroll.position.maxScrollExtent);
+      scroll.jumpTo(target);
+    });
+  }
+
   /// Blame 菜单的 Show in File History:打开底部 Git 窗口,按该文件筛选并选中这个提交。
   Future<void> _showInHistory(BuildContext context, String hash, String path) async {
     final layout = context.layoutRead;
@@ -307,6 +325,15 @@ class _EditorRegion extends StatelessWidget {
           projectName: workspace.projectName,
           appearance: sessions.appearance,
           onShowInHistory: (hash, path) => _showInHistory(context, hash, path),
+          specialTabBuilder: (id) => !sessions.isDiffTab(id)
+              ? null
+              : DiffTab(
+                  key: ValueKey(id),
+                  client: client,
+                  repoPath: id.substring(diffTabPrefix.length),
+                  findOpenController: (path) => sessions.tabs[path]?.controller,
+                  onOpenSource: (path, line) => _openSourceAt(workspace, sessions, path, line),
+                ),
           openTabs: sessions.openPaths,
           activeFile: sessions.activePath ?? '',
           codeContent: active?.controller.text ?? '',

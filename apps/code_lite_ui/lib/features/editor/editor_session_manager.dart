@@ -5,6 +5,7 @@ import '../../core/client/api_client.dart';
 import '../../core/lsp/lsp.dart';
 import 'code_editor_controller.dart';
 import 'editor_appearance.dart';
+import 'editor_view_widget.dart' show diffTabPrefix;
 import 'lsp_overlay.dart';
 
 /// Holds independent buffer, viewport, cursor, and diagnostic state for an open editor tab.
@@ -201,8 +202,37 @@ class EditorSessionManager extends ChangeNotifier {
     return tab;
   }
 
+  /// Rollback 等在磁盘上改了文件之后:已打开的这些标签按磁盘内容重新载入(撤销历史一并清空)。
+  Future<void> reloadFromDisk(List<String> paths) async {
+    for (final path in paths) {
+      final tab = _tabs[path];
+      if (tab == null) continue;
+      final res = await client.fetchFile(path);
+      if (res['status'] == 'error') continue; // 文件已被删除:保留编辑器内容,交给用户处理
+      tab.controller.setText(res['content'] as String? ?? '');
+      client.lspDidChange(path, tab.controller.text);
+    }
+    notifyListeners();
+  }
+
+  /// 打开(或切到)一个「Commit: 文件名」差异标签。它没有文本缓冲,只占标签栏的一个位置,
+  /// 内容由差异视图自己从 Git 读取。[repoPath] 相对仓库根。
+  void openDiff(String repoPath) {
+    final id = '$diffTabPrefix$repoPath';
+    if (!_tabOrder.contains(id)) _tabOrder.add(id);
+    _activePath = id;
+    notifyListeners();
+  }
+
+  bool isDiffTab(String? id) => id != null && id.startsWith(diffTabPrefix);
+
   /// Selects an already open tab.
   void selectTab(String path) {
+    if (isDiffTab(path) && _tabOrder.contains(path) && _activePath != path) {
+      _activePath = path;
+      notifyListeners();
+      return;
+    }
     if (_tabs.containsKey(path) && _activePath != path) {
       _activePath = path;
       notifyListeners();
@@ -212,6 +242,12 @@ class EditorSessionManager extends ChangeNotifier {
   /// Closes an open tab and activates a fallback if any remain.
   /// Returns false if the tab is dirty and force is false.
   bool closeTab(String path, {bool force = true}) {
+    if (isDiffTab(path)) {
+      _tabOrder.remove(path);
+      if (_activePath == path) _activePath = _tabOrder.isNotEmpty ? _tabOrder.last : null;
+      notifyListeners();
+      return true;
+    }
     if (!_tabs.containsKey(path)) return true;
     if (!force && isTabDirty(path)) {
       return false;

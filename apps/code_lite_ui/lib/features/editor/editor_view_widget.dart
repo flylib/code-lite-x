@@ -14,6 +14,9 @@ import 'ime_text_input_client.dart';
 import 'lsp_overlay.dart';
 import 'syntax_highlighter.dart';
 
+/// 差异标签的 id 前缀:`diff:<相对仓库根的路径>`。
+const String diffTabPrefix = 'diff:';
+
 class EditorViewWidget extends StatefulWidget {
   final List<String> openTabs;
   final String activeFile;
@@ -50,11 +53,15 @@ class EditorViewWidget extends StatefulWidget {
   /// Blame 菜单的 Show in File History:打开 Git Log 并按文件筛选、选中该提交。
   final void Function(String hash, String path)? onShowInHistory;
 
+  /// 非文件标签(比如 `diff:路径` 的「Commit: 文件名」差异视图)的内容。返回 null 表示按普通文件处理。
+  final Widget? Function(String tabId)? specialTabBuilder;
+
   const EditorViewWidget({
     super.key,
     this.projectName = '',
     this.appearance,
     this.onShowInHistory,
+    this.specialTabBuilder,
     required this.openTabs,
     required this.activeFile,
     required this.codeContent,
@@ -527,9 +534,9 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
                 // 1. Tab Bar
                 _buildTabBar(),
 
-                // 2. Editor Panes
+                // 2. Editor Panes(非文件标签换成它自己的内容,比如差异视图)
                 Expanded(
-                  child: isSplit
+                  child: widget.specialTabBuilder?.call(widget.activeFile) ?? (isSplit
                       ? (widget.splitDirection == SplitDirection.horizontal
                           ? Row(
                               children: [
@@ -598,7 +605,7 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
                           focusNode: _focusNode,
                           imeBridge: _imeBridge,
                           isPrimary: true,
-                        ),
+                        )),
                 ),
               ],
             ),
@@ -628,7 +635,8 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
               },
               itemBuilder: (context, index) {
                 final path = widget.openTabs[index];
-                final fileName = path.split('/').last;
+                final isDiffTab = path.startsWith(diffTabPrefix);
+                final fileName = isDiffTab ? 'Commit: ${path.split('/').last}' : path.split('/').last;
                 final isActive = path == widget.activeFile;
                 final isDirty = widget.isTabDirty?.call(path) ?? (isActive && _controller.isDirty);
 
@@ -652,7 +660,10 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          _buildFileTypeIcon(path),
+                          if (isDiffTab)
+                            const Icon(Icons.compare_arrows, size: 14, color: IntelliJTheme.accentBlue)
+                          else
+                            _buildFileTypeIcon(path),
                           const SizedBox(width: 6),
                           Text(
                             fileName,

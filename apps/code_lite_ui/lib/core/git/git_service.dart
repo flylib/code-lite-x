@@ -104,9 +104,10 @@ class GitService {
         return {'status': 'ok'};
       });
 
-  /// `{"status":"ok","commit_hash": "<短哈希>"}`。
-  Future<Map<String, dynamic>> commit(String message) => _guard(() async {
-        await _run(['commit', '-m', message]);
+  /// `{"status":"ok","commit_hash": "<短哈希>"}`。[amend] 为 true 时改写上一次提交
+  /// (没有暂存改动也允许,只改提交信息)。
+  Future<Map<String, dynamic>> commit(String message, {bool amend = false}) => _guard(() async {
+        await _run(['commit', if (amend) '--amend', '-m', message]);
         final hash = await _run(['rev-parse', '--short', 'HEAD']);
         return {'status': 'ok', 'commit_hash': hash.trim()};
       });
@@ -167,6 +168,38 @@ class GitService {
       case 'git.file_at':
         final (hash, path) = (p.str('hash'), p.str('path'));
         return _fileAt(hash, path);
+      case 'git.repo_info':
+        // status 等命令给出的路径相对仓库根;项目可能只是仓库里的子目录,UI 据此换算。
+        final top = (await _run(['rev-parse', '--show-toplevel'])).trim();
+        final prefix = (await _run(['rev-parse', '--show-prefix'])).trim();
+        return {'toplevel': top, 'prefix': prefix};
+      case 'git.stash_list':
+        return {'stashes': await _stashList()};
+      case 'git.stash_push':
+        await _ensureIdle();
+        await _run([
+          'stash', 'push',
+          if (p.flag('include_untracked')) '--include-untracked',
+          if (p.flag('keep_index')) '--keep-index',
+          if ((p.optStr('message') ?? '').trim().isNotEmpty) ...['-m', p.optStr('message')!.trim()],
+        ]);
+        return {};
+      case 'git.stash_apply':
+        // pop = apply + drop;冲突时 git 不会 drop,stash 仍在,这里只把错误报出来。
+        await _ensureIdle();
+        await _run(['stash', p.flag('pop') ? 'pop' : 'apply', _stashRef(p.str('ref'))]);
+        return {};
+      case 'git.stash_drop':
+        await _run(['stash', 'drop', _stashRef(p.str('ref'))]);
+        return {};
+      case 'git.stash_files':
+        return {'files': await _stashFiles(_stashRef(p.str('ref')))};
+      case 'git.stash_file_diff':
+        return {'diff': await _stashFileDiff(_stashRef(p.str('ref')), p.str('path'))};
+      case 'git.rollback':
+        return {'rolled_back': await _rollback(p.strList('paths'))};
+      case 'git.recent_messages':
+        return {'messages': await _recentMessages(p.optInt('limit') ?? 20)};
       case 'git.blame':
         return _blame(p.str('path'), rev: p.optStr('rev'), contents: p.optStr('contents'));
       case 'git.create_patch':
@@ -743,6 +776,89 @@ class GitService {
       await _raw(['rebase', '--abort']);
       throw GitException('Rebase 失败,已中止: ${out.detail}');
     }
+  }
+
+  // =========================================================================
+  // Commit 工具窗:Stash / Rollback / 提交信息历史
+  // =========================================================================
+
+  /// 只接受 stash@{n} 形式,避免把任意修订名传给 stash 命令。
+  static String _stashRef(String ref) {
+    if (!RegExp(r'^stash@\{\d+\}$').hasMatch(ref.trim())) throw _ParamError('invalid stash ref: $ref');
+    return ref.trim();
+  }
+
+  /// `[{"ref":"stash@{0}","hash","message","time"}]`,最新的在前。
+  Future<List<Map<String, dynamic>>> _stashList() async {
+    final out = await _raw(['stash', 'list', '--format=%gd%x1f%H%x1f%ct%x1f%gs%x1e']);
+    if (!out.success) return const [];
+    return [
+      for (final rec in out.stdout.split('\x1e'))
+        if (rec.trim().isNotEmpty)
+          () {
+            final f = rec.trim().split('\x1f');
+            return {
+              'ref': f[0],
+              'hash': f.length > 1 ? f[1] : '',
+              'time': f.length > 2 ? int.tryParse(f[2]) ?? 0 : 0,
+              // %gs 形如 "WIP on main: abc123 msg" / "On main: my message"
+              'message': f.length > 3 ? f[3] : '',
+            };
+          }(),
+    ];
+  }
+
+  /// stash 改了哪些文件(含 --include-untracked 存进去的未跟踪文件)。
+  Future<List<Map<String, dynamic>>> _stashFiles(String ref) async {
+    final tracked = await _run(['stash', 'show', '--name-status', '-z', '--no-renames', ref]);
+    final files = <Map<String, dynamic>>[];
+    final parts = tracked.split('\x00').where((p) => p.isNotEmpty).toList();
+    for (var i = 0; i + 1 < parts.length; i += 2) {
+      files.add({'status': parts[i].substring(0, 1), 'path': parts[i + 1]});
+    }
+    // 未跟踪文件在 stash 的第三个父提交里(只有带 -u 时才存在)。
+    final untracked = await _raw(['ls-tree', '-r', '--name-only', '-z', '$ref^3']);
+    if (untracked.success) {
+      for (final p in untracked.stdout.split('\x00').where((p) => p.isNotEmpty)) {
+        files.add({'status': 'U', 'path': p});
+      }
+    }
+    return files;
+  }
+
+  Future<String> _stashFileDiff(String ref, String path) async {
+    final tracked = await _run(['diff', '--no-color', '--no-ext-diff', '$ref^1', ref, '--', topPathspec(path)]);
+    if (tracked.trim().isNotEmpty) return tracked;
+    final untracked = await _raw(['show', '--no-color', '--format=', '$ref^3', '--', topPathspec(path)]);
+    return untracked.success ? untracked.stdout : '';
+  }
+
+  /// 丢弃这些文件的本地修改(工作区与暂存区一起回到 HEAD)。HEAD 里没有的文件(新增的)
+  /// 从暂存区和磁盘上删除 —— 与 IntelliJ Rollback 对 added 文件的处理一致。
+  Future<List<String>> _rollback(List<String> paths) async {
+    if (paths.isEmpty) throw _ParamError('paths is empty');
+    final done = <String>[];
+    for (final path in paths) {
+      final inHead = (await _raw(['cat-file', '-e', 'HEAD:$path'])).success;
+      if (inHead) {
+        await _run(['restore', '--source=HEAD', '--staged', '--worktree', '--', topPathspec(path)]);
+      } else {
+        await _run(['rm', '-f', '-q', '--', topPathspec(path)]);
+      }
+      done.add(path);
+    }
+    return done;
+  }
+
+  /// 最近的提交信息(去重,最新的在前),给提交信息历史下拉用。
+  Future<List<String>> _recentMessages(int limit) async {
+    final out = await _raw(['log', '-n', '${limit * 2}', '--format=%B%x1e']);
+    if (!out.success) return const [];
+    final seen = <String>{};
+    return [
+      for (final m in out.stdout.split('\x1e').map((m) => m.trim()))
+        if (m.isNotEmpty && seen.add(m)) m,
+    ].take(limit).toList();
   }
 
   // =========================================================================
