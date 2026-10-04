@@ -526,6 +526,7 @@ class _LogPaneState extends State<_LogPane> {
     return Column(
       children: [
         _FilterBar(store: store, controller: _search, focus: widget.searchFocus),
+        if (store.warning != null) _WarningBanner(message: store.warning!),
         if (store.busy != null)
           const LinearProgressIndicator(
             minHeight: 2,
@@ -566,6 +567,40 @@ class _LogPaneState extends State<_LogPane> {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// 仓库部分损坏时的提示:列表照常显示读得到的提交,这里给出 git 的原始报错。
+class _WarningBanner extends StatelessWidget {
+  const _WarningBanner({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: message,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        color: IntelliJTheme.accentYellow.withValues(alpha: 0.14),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Icon(Icons.warning_amber_rounded, size: 15, color: IntelliJTheme.accentYellow),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                '仓库历史有损坏,只显示损坏点之前的提交(可运行 git fsck 检查)。$message',
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: IntelliJTheme.textPrimary, fontSize: 12),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

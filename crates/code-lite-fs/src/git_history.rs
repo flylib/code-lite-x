@@ -121,6 +121,9 @@ pub struct LogResult {
     pub commits: Vec<LogCommit>,
     pub head: String,
     pub has_more: bool,
+    /// 仓库部分损坏时 git 会输出一部分提交后才报错:保留已读到的提交,这里带上报错原文。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub warning: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -295,7 +298,7 @@ impl GitEngine {
         }
         // 空仓库:HEAD 指向尚未诞生的分支,`git log HEAD` 会报错,这里直接返回空列表
         if !branch.is_empty() && head.is_empty() && self.try_resolve_commit(branch).is_none() {
-            return Ok(LogResult { commits: Vec::new(), head, has_more: false });
+            return Ok(LogResult { commits: Vec::new(), head, has_more: false, warning: None });
         }
 
         let n_arg = format!("-n{}", limit + 1);
@@ -345,9 +348,43 @@ impl GitEngine {
         }
 
         let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
-        let raw = self.run_git(&arg_refs)?;
+        let first = self.run_git_raw(&arg_refs, &[])?;
+        let mut out = first;
+        let mut only_head = false;
+        let nothing = |o: &std::process::Output| {
+            !o.status.success() && parse_log_records(&String::from_utf8_lossy(&o.stdout)).is_empty()
+        };
+        if nothing(&out) {
+            // 仓库有损坏对象时尽量把读得到的提交拿出来,逐级放宽:
+            // 1. --date-order 要先走完整张图才输出,去掉它改成边走边输出;
+            // 2. --all 会先预读所有分支的父提交,仍然一条都拿不到时退到只看 HEAD。
+            let streaming: Vec<&str> = arg_refs.iter().copied().filter(|a| *a != "--date-order").collect();
+            out = self.run_git_raw(&streaming, &[])?;
+            if nothing(&out) && branch.is_empty() {
+                let head_only: Vec<&str> = streaming
+                    .iter()
+                    .map(|a| if *a == "--all" { "HEAD" } else { a })
+                    .filter(|a| *a != "--exclude=refs/stash")
+                    .collect();
+                let retry = self.run_git_raw(&head_only, &[])?;
+                if !nothing(&retry) {
+                    out = retry;
+                    only_head = true;
+                }
+            }
+        }
+        let raw = String::from_utf8_lossy(&out.stdout);
         let mut commits = parse_log_records(&raw);
-        let has_more = commits.len() > limit;
+        let warning = if out.status.success() {
+            None
+        } else if commits.is_empty() {
+            return Err(command_failed(&out));
+        } else {
+            // 损坏的对象之后的历史读不到,也就没有"下一页"
+            let scope = if only_head { "(其他分支无法读取,仅显示 HEAD)" } else { "" };
+            Some(format!("{}{}", scope, failure_detail(&out)))
+        };
+        let has_more = warning.is_none() && commits.len() > limit;
         commits.truncate(limit);
 
         // 搜索框里输入的是提交哈希:无论消息是否匹配都要把它带出来,且只放在第一页避免分页重复
@@ -365,7 +402,7 @@ impl GitEngine {
             }
         }
 
-        Ok(LogResult { commits, head, has_more })
+        Ok(LogResult { commits, head, has_more, warning })
     }
 
     /// 所有引用上出现过的作者,去重并按不区分大小写排序。
@@ -1978,5 +2015,33 @@ mod tests {
         assert!(engine.push_up_to(&t1).unwrap_err().to_string().contains("不在当前分支"));
         git(dir, &["checkout", "-q", "--detach", "HEAD"]);
         assert!(engine.push_up_to(&c2).unwrap_err().to_string().contains("游离"));
+    }
+
+    #[test]
+    fn log_returns_readable_commits_when_history_is_corrupt() {
+        let (d, engine) = init_repo();
+        let oldest = commit_file_at(&d.0, "a.txt", "a", "first", 1_700_000_000);
+        commit_file_at(&d.0, "b.txt", "b", "second", 1_700_000_100);
+        commit_file_at(&d.0, "c.txt", "c", "third", 1_700_000_200);
+
+        // 模拟磁盘损坏:最老那个提交的 loose 对象变成无法解压的垃圾
+        let obj = d.0.join(".git/objects").join(&oldest[..2]).join(&oldest[2..]);
+        let mut perms = fs::metadata(&obj).unwrap().permissions();
+        #[allow(clippy::permissions_set_readonly_false)]
+        perms.set_readonly(false);
+        fs::set_permissions(&obj, perms).unwrap();
+        fs::write(&obj, b"not zlib at all").unwrap();
+
+        let res = engine.history_log(&LogQuery::default()).unwrap();
+        let got: Vec<&str> = res.commits.iter().map(|c| c.subject.as_str()).collect();
+        // git 输出一个提交前要先解析它的父提交,所以紧挨着损坏点的 "second" 也出不来
+        assert_eq!(got, ["third"]);
+        assert!(!res.has_more);
+        let warning = res.warning.expect("partial log must carry git's error");
+        assert!(warning.contains(&oldest[..7]) || warning.contains("corrupt"), "{warning}");
+
+        // 一条都读不到时仍然是错误
+        let broken = query(|q| q.branch = Some(oldest.clone()));
+        assert!(engine.history_log(&broken).is_err());
     }
 }

@@ -176,6 +176,9 @@ class GitLogStore extends ChangeNotifier {
   bool loading = false;
   String? error;
 
+  /// 仓库部分损坏:列表只含损坏点之前读得到的提交,这里是 git 的报错原文。
+  String? warning;
+
   // --- 筛选 ---
   String text = '';
   bool regex = false;
@@ -264,6 +267,7 @@ class GitLogStore extends ChangeNotifier {
     if (token != _loadToken) return; // 期间筛选又变了,丢弃过期结果
 
     loading = false;
+    warning = res['warning'] as String?;
     if (res['status'] != 'ok') {
       error = res['error'] as String? ?? '加载失败';
       if (reset) _setCommits(const []);
@@ -361,6 +365,7 @@ class GitLogStore extends ChangeNotifier {
     authors = const [];
     selected = null;
     details = null;
+    warning = null;
     branch = null;
     author = null;
     paths = const [];

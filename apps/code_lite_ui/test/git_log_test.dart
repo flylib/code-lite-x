@@ -103,4 +103,24 @@ void main() {
     expect(await store.run('Reset', 'git.reset', {'hash': head.hash, 'mode': 'bogus'}), isNotNull);
     store.dispose();
   });
+
+  test('corrupt history still shows the readable commits with a warning', () async {
+    if (!client.isFfiAvailable) return;
+    // setUp 的仓库:merge ← fix ← 初始;弄坏最老的那个提交对象。
+    final initial = (await Process.run('git', ['rev-list', '--max-parents=0', 'HEAD'], workingDirectory: repo.path))
+        .stdout
+        .toString()
+        .trim();
+    final obj = File('${repo.path}/.git/objects/${initial.substring(0, 2)}/${initial.substring(2)}');
+    await Process.run('chmod', ['u+w', obj.path]);
+    obj.writeAsStringSync('not zlib at all');
+
+    final store = GitLogStore(client);
+    await store.refresh();
+    expect(store.error, isNull);
+    // 两条分支都以坏掉的根提交为父,--all 读不出任何东西,退到只看 HEAD:合并提交还能显示。
+    expect(store.warning, contains('仅显示 HEAD'));
+    expect(store.commits.map((c) => c.subject), ['merge feat/x']);
+    store.dispose();
+  });
 }
