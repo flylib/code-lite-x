@@ -14,6 +14,7 @@ import 'code_editor_controller.dart';
 import 'editor_session_manager.dart';
 import 'ime_text_input_client.dart';
 import 'lsp_overlay.dart';
+import 'visible_lines.dart';
 import 'syntax/document_highlighter.dart';
 import 'syntax/language.dart';
 import 'syntax/languages.dart';
@@ -250,6 +251,49 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
       _charWidth = painter.width;
     }
     painter.dispose();
+    final digits = TextPainter(
+      text: const TextSpan(text: '0000000000', style: _gutterNumberStyle),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    if (digits.width > 0) _gutterDigitWidth = digits.width / 10;
+    digits.dispose();
+  }
+
+  static const TextStyle _gutterNumberStyle = TextStyle(
+    color: IntelliJTheme.textGutter,
+    fontSize: 11,
+    fontFamily: IntelliJMetrics.codeFontFamily,
+    fontFamilyFallback: IntelliJMetrics.codeFontFallback,
+  );
+  double _gutterDigitWidth = 7;
+
+  /// 代码区宽度(横向滚动长度):按最长一行估算 —— 全角字符算两格、Tab 算四格。
+  /// 不逐行排版(那正是要避免的整文件开销);同一版文本只算一次。
+  final Map<CodeEditorController, (String, double)> _widthCache = {};
+
+  double _contentWidth(CodeEditorController controller, List<String> lines) {
+    final cached = _widthCache[controller];
+    if (cached != null && identical(cached.$1, controller.text)) return cached.$2;
+    var widest = 0;
+    for (final line in lines) {
+      if (line.length * 4 <= widest) continue; // 全是 Tab 也超不过当前最宽:跳过
+      var cols = 0;
+      for (var k = 0; k < line.length; k++) {
+        final c = line.codeUnitAt(k);
+        if (c == 9) {
+          cols += 4;
+        } else if (c >= 0x1100 && (c < 0xDC00 || c > 0xDFFF)) {
+          cols += 2; // CJK / 全角 / emoji(代理对只记一次)
+        } else if (c < 0xDC00 || c > 0xDFFF) {
+          cols += 1;
+        }
+      }
+      if (cols > widest) widest = cols;
+    }
+    final width = widest * _charWidth + 2 * _padH + 48;
+    if (_widthCache.length > 4) _widthCache.clear();
+    _widthCache[controller] = (controller.text, width);
+    return width;
   }
 
   /// 每个文档(controller)一份高亮缓存;分屏两侧各自一份。
@@ -870,8 +914,13 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
     required bool isPrimary,
   }) {
     final lines = controller.lines;
-    final guides = _appearance.showIndentGuides ? _indentLevels(lines) : null;
+    final showGuides = _appearance.showIndentGuides;
     final highlighter = _highlightFor(controller, filePath, lines);
+    // 按行号建好索引:行号栏 / 代码行每行直接查,不再各自把整张诊断列表扫一遍。
+    final diagByLine = <int, List<EditorDiagnostic>>{};
+    for (final d in diagnostics) {
+      (diagByLine[d.line] ??= []).add(d);
+    }
 
     Widget content = Column(
       children: [
@@ -914,7 +963,7 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
                               filePath,
                               ((pos.dy - 8) / 20).floor().clamp(0, lines.length - 1),
                             ),
-                            child: _buildGutter(lines.length, diagnostics: diagnostics, controller: controller),
+                            child: _buildGutter(lines.length, diagByLine: diagByLine, controller: controller),
                           ),
                           _buildGitDiffStripe(
                             lines.length,
@@ -962,24 +1011,39 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
                                   imeBridge?.syncState();
                                 },
                                 // 代码区至少铺满视口:点击最长行右侧的空白也能把光标放到该行末尾。
+                                // 高度按全部行数给足(滚动条长度正确),里面只摆视口附近的行。
                                 child: ConstrainedBox(
                                 constraints: BoxConstraints(minWidth: viewport.maxWidth),
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: _padH, vertical: _padV),
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      ...lines.asMap().entries.map((entry) {
-                                        return _buildCodeLine(
-                                          entry.key,
-                                          entry.value,
-                                          guideLevel: guides?[entry.key] ?? 0,
-                                          controller: controller,
-                                          highlighter: highlighter,
-                                          diagnostics: diagnostics,
-                                        );
-                                      }),
-                                    ],
+                                child: SizedBox(
+                                  width: _contentWidth(controller, lines),
+                                  height: lines.length * _lineHeight + 2 * _padV,
+                                  child: VisibleLines(
+                                    lineCount: lines.length,
+                                    lineHeight: _lineHeight,
+                                    topPadding: _padV,
+                                    builder: (context, first, last) {
+                                      final guides = showGuides ? _indentLevelsRange(lines, first, last) : null;
+                                      return Stack(
+                                        clipBehavior: Clip.none,
+                                        children: [
+                                          for (var i = first; i <= last; i++)
+                                            Positioned(
+                                              key: ValueKey(i),
+                                              top: _padV + i * _lineHeight,
+                                              left: _padH,
+                                              height: _lineHeight,
+                                              child: _buildCodeLine(
+                                                i,
+                                                lines[i],
+                                                guideLevel: guides?[i - first] ?? 0,
+                                                controller: controller,
+                                                highlighter: highlighter,
+                                                diagnostics: diagByLine[i] ?? const [],
+                                              ),
+                                            ),
+                                        ],
+                                      );
+                                    },
                                   ),
                                 ),
                                 ),
@@ -1115,137 +1179,169 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
     );
   }
 
+  /// 行号栏宽度:按最大行号的位数加宽(1000 行以上时四位数不再被截掉)。
+  double _gutterWidthFor(int totalLines) {
+    final digits = math.max(3, '$totalLines'.length);
+    // 书签 14 + 左右留白 + 诊断圆点 10 + 数字
+    return math.max(58, 2 + 14 + 10 + digits * _gutterDigitWidth + 8).ceilToDouble();
+  }
+
   Widget _buildGutter(
     int totalLines, {
-    required List<EditorDiagnostic> diagnostics,
+    required Map<int, List<EditorDiagnostic>> diagByLine,
     required CodeEditorController controller,
   }) {
     final bookmarks = controller.bookmarks;
     final showNumbers = _appearance.showLineNumbers;
     return Container(
       // 关掉行号后仍留出书签 / 诊断标记的位置。
-      width: showNumbers ? 58 : 30,
+      width: showNumbers ? _gutterWidthFor(totalLines) : 30,
       padding: const EdgeInsets.symmetric(vertical: 8),
       color: IntelliJTheme.editorBg,
-      child: Column(
-        children: List.generate(totalLines, (index) {
-          final lineDiags = diagnostics.where((d) => d.line == index).toList();
-          final hasError = lineDiags.any((d) => d.isError);
-          final hasWarning = lineDiags.any((d) => d.isWarning);
-
-          final hasBookmark = bookmarks.containsKey(index);
-          final mnemonic = bookmarks[index];
-          return SizedBox(
-            height: 20,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                const SizedBox(width: 2),
-                SizedBox(
-                  width: 14,
-                  child: !hasBookmark
-                      ? null
-                      : mnemonic == null
-                          ? const Icon(Icons.bookmark, size: 13, color: Color(0xFF8C9AB8))
-                          : Container(
-                              height: 14,
-                              alignment: Alignment.center,
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF3C4A63),
-                                borderRadius: BorderRadius.circular(3),
-                                border: Border.all(color: const Color(0xFF8C9AB8)),
-                              ),
-                              child: Text(
-                                mnemonic,
-                                style: const TextStyle(color: IntelliJTheme.textHigh, fontSize: 9, fontWeight: FontWeight.bold),
-                              ),
-                            ),
+      child: SizedBox(
+        height: totalLines * _lineHeight,
+        child: VisibleLines(
+          lineCount: totalLines,
+          lineHeight: _lineHeight,
+          topPadding: 8,
+          builder: (context, first, last) => Stack(
+            children: [
+              for (var index = first; index <= last; index++)
+                Positioned(
+                  key: ValueKey(index),
+                  top: index * _lineHeight,
+                  left: 0,
+                  right: 0,
+                  height: _lineHeight,
+                  child: _gutterRow(index, diagByLine[index] ?? const [], bookmarks, showNumbers),
                 ),
-                const Spacer(),
-                if (hasError)
-                  Tooltip(
-                    message: lineDiags.firstWhere((d) => d.isError).message,
-                    child: Container(
-                      width: 6,
-                      height: 6,
-                      margin: const EdgeInsets.only(right: 4),
-                      decoration: const BoxDecoration(
-                        color: Color(0xFFF97A7A),
-                        shape: BoxShape.circle,
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _gutterRow(int index, List<EditorDiagnostic> lineDiags, Map<int, String?> bookmarks, bool showNumbers) {
+    final hasError = lineDiags.any((d) => d.isError);
+    final hasWarning = lineDiags.any((d) => d.isWarning);
+    final hasBookmark = bookmarks.containsKey(index);
+    final mnemonic = bookmarks[index];
+    return SizedBox(
+      height: 20,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          const SizedBox(width: 2),
+          SizedBox(
+            width: 14,
+            child: !hasBookmark
+                ? null
+                : mnemonic == null
+                    ? const Icon(Icons.bookmark, size: 13, color: Color(0xFF8C9AB8))
+                    : Container(
+                        height: 14,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF3C4A63),
+                          borderRadius: BorderRadius.circular(3),
+                          border: Border.all(color: const Color(0xFF8C9AB8)),
+                        ),
+                        child: Text(
+                          mnemonic,
+                          style: const TextStyle(color: IntelliJTheme.textHigh, fontSize: 9, fontWeight: FontWeight.bold),
+                        ),
                       ),
-                    ),
-                  )
-                else if (hasWarning)
-                  Tooltip(
-                    message: lineDiags.firstWhere((d) => d.isWarning).message,
-                    child: Container(
-                      width: 6,
-                      height: 6,
-                      margin: const EdgeInsets.only(right: 4),
-                      decoration: const BoxDecoration(
-                        color: Color(0xFFE5C07B),
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                  ),
-                if (showNumbers)
-                  Text(
-                    '${index + 1}',
-                    style: const TextStyle(
-                      color: IntelliJTheme.textGutter,
-                      fontSize: 11,
-                      fontFamily: IntelliJMetrics.codeFontFamily,
-                      fontFamilyFallback: IntelliJMetrics.codeFontFallback,
-                    ),
-                  ),
-                const SizedBox(width: 6),
-              ],
+          ),
+          const Spacer(),
+          if (hasError)
+            Tooltip(
+              message: lineDiags.firstWhere((d) => d.isError).message,
+              child: Container(
+                width: 6,
+                height: 6,
+                margin: const EdgeInsets.only(right: 4),
+                decoration: const BoxDecoration(
+                  color: Color(0xFFF97A7A),
+                  shape: BoxShape.circle,
+                ),
+              ),
+            )
+          else if (hasWarning)
+            Tooltip(
+              message: lineDiags.firstWhere((d) => d.isWarning).message,
+              child: Container(
+                width: 6,
+                height: 6,
+                margin: const EdgeInsets.only(right: 4),
+                decoration: const BoxDecoration(
+                  color: Color(0xFFE5C07B),
+                  shape: BoxShape.circle,
+                ),
+              ),
             ),
-          );
-        }),
+          if (showNumbers)
+            Text('${index + 1}', style: _gutterNumberStyle),
+          const SizedBox(width: 6),
+        ],
       ),
     );
   }
 
   static const int _indentUnit = 4;
 
-  /// 每行的缩进层级(按 4 列一级,tab 记 4 列)。空行取上下非空行中较小的层级,
-  /// 这样代码块中间的空行也有连续的参考线。
-  static List<int> _indentLevels(List<String> lines) {
-    int indentOf(String l) {
-      var cols = 0;
-      for (final c in l.codeUnits) {
-        if (c == 0x20) {
-          cols++;
-        } else if (c == 0x09) {
-          cols += _indentUnit;
-        } else {
-          break;
-        }
-      }
-      return cols ~/ _indentUnit;
-    }
-
-    final levels = List<int?>.generate(lines.length, (i) => lines[i].trim().isEmpty ? null : indentOf(lines[i]));
-    final result = List<int>.filled(lines.length, 0);
+  /// [first]..[last] 每行的缩进层级(按 4 列一级,tab 记 4 列)。空行取上下非空行中较小的层级,
+  /// 这样代码块中间的空行也有连续的参考线。只看可见行及其邻近的非空行,不扫整个文件。
+  static List<int> _indentLevelsRange(List<String> lines, int first, int last) {
+    if (last < first) return const [];
+    int? levelOf(int i) => lines[i].trim().isEmpty ? null : _indentOf(lines[i]);
+    final out = List<int>.filled(last - first + 1, 0);
     int? prev;
-    for (var i = 0; i < lines.length; i++) {
-      final l = levels[i];
+    for (var j = first - 1; j >= 0; j--) {
+      final l = levelOf(j);
       if (l != null) {
         prev = l;
-        result[i] = l;
+        break;
+      }
+    }
+    int? next;
+    var nextAt = -1; // 已找到的「下一个非空行」位置,连续空行共用
+    for (var i = first; i <= last; i++) {
+      final l = levelOf(i);
+      if (l != null) {
+        prev = l;
+        out[i - first] = l;
         continue;
       }
-      int? next;
-      for (var j = i + 1; j < lines.length; j++) {
-        if (levels[j] != null) {
-          next = levels[j];
-          break;
+      if (nextAt <= i) {
+        next = null;
+        for (var j = i + 1; j < lines.length; j++) {
+          final n = levelOf(j);
+          if (n != null) {
+            next = n;
+            nextAt = j;
+            break;
+          }
         }
+        if (next == null) nextAt = lines.length;
       }
-      result[i] = (prev == null || next == null) ? 0 : (prev < next ? prev : next);
+      out[i - first] = (prev == null || next == null) ? 0 : (prev < next ? prev : next);
     }
-    return result;
+    return out;
+  }
+
+  static int _indentOf(String l) {
+    var cols = 0;
+    for (final c in l.codeUnits) {
+      if (c == 0x20) {
+        cols++;
+      } else if (c == 0x09) {
+        cols += _indentUnit;
+      } else {
+        break;
+      }
+    }
+    return cols ~/ _indentUnit;
   }
 
   /// 行号栏右键菜单。
@@ -1351,47 +1447,47 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
     required List<GitLineDiff> hunks,
     required ValueChanged<GitLineDiff> onHunkTap,
   }) {
+    // 按行号(1 起)索引,每行直接查。
+    final byLine = {for (final h in hunks) h.line: h};
     return Container(
       width: 5,
       padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Column(
-        children: List.generate(totalLines, (index) {
-          final lineNum = index + 1;
-          final hunk = hunks.cast<GitLineDiff?>().firstWhere(
-            (h) => h?.line == lineNum,
-            orElse: () => null,
-          );
+      child: SizedBox(
+        height: totalLines * _lineHeight,
+        child: VisibleLines(
+        lineCount: totalLines,
+        lineHeight: _lineHeight,
+        topPadding: 8,
+        builder: (context, first, last) => Stack(
+        children: [for (var index = first; index <= last; index++)
+          if (byLine[index + 1] case final hunk?)
+            Positioned(
+              key: ValueKey(index),
+              top: index * _lineHeight,
+              left: 0,
+              right: 0,
+              height: _lineHeight,
+              child: _stripeCell(hunk, onHunkTap),
+            ),
+        ],
+        ),
+        ),
+      ),
+    );
+  }
 
-          Color color = Colors.transparent;
-          if (hunk != null) {
-            switch (hunk.kind) {
-              case DiffHunkKind.added:
-                color = const Color(0xFF59A869);
-                break;
-              case DiffHunkKind.modified:
-                color = const Color(0xFF3574F0);
-                break;
-              case DiffHunkKind.deleted:
-                color = const Color(0xFFDB5860);
-                break;
-            }
-          }
-
-          Widget stripe = Container(height: 20, color: color);
-
-          if (hunk != null) {
-            return Tooltip(
-              message: '${hunk.kind.name.toUpperCase()} (Line ${hunk.line}) - Click to inspect diff',
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: () => onHunkTap(hunk),
-                child: stripe,
-              ),
-            );
-          }
-
-          return stripe;
-        }),
+  Widget _stripeCell(GitLineDiff hunk, ValueChanged<GitLineDiff> onHunkTap) {
+    final color = switch (hunk.kind) {
+      DiffHunkKind.added => const Color(0xFF59A869),
+      DiffHunkKind.modified => const Color(0xFF3574F0),
+      DiffHunkKind.deleted => const Color(0xFFDB5860),
+    };
+    return Tooltip(
+      message: '${hunk.kind.name.toUpperCase()} (Line ${hunk.line}) - Click to inspect diff',
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => onHunkTap(hunk),
+        child: Container(height: _lineHeight, color: color),
       ),
     );
   }
@@ -1598,18 +1694,23 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
           // 2. Syntax Token Text
           RichText(
             text: TextSpan(style: _codeStyle.copyWith(color: syntaxDefaultColor), children: spans),
+            softWrap: false,
             overflow: TextOverflow.clip,
           ),
 
           // 3. Caret (Blinking Cursor)
-          if (isCaretLine && controller.cursorVisible)
+          if (isCaretLine)
             Positioned(
               left: _xForCol(hl, lineIndex, lineText, caretCol),
               top: 2,
               bottom: 2,
-              child: Container(
-                width: 2,
-                color: const Color(0xFF589DF6),
+              // 只有这一块随闪烁重绘
+              child: ValueListenableBuilder<bool>(
+                valueListenable: controller.caretBlink,
+                builder: (context, visible, _) => Container(
+                  width: 2,
+                  color: visible ? const Color(0xFF589DF6) : Colors.transparent,
+                ),
               ),
             ),
 

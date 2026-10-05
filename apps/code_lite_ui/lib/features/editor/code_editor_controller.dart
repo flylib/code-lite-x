@@ -83,8 +83,11 @@ class CodeEditorController extends ChangeNotifier {
   bool _canUndo = false;
   bool _canRedo = false;
 
-  bool _cursorVisible = true;
   Timer? _blinkTimer;
+
+  /// 光标闪烁的显隐。单独一个通知源:只有光标那一小块订阅它,
+  /// 闪烁(每 500ms)不再触发整个编辑区重建。
+  final ValueNotifier<bool> caretBlink = ValueNotifier(true);
 
   // IME composing range (if active)
   TextRange _composingRange = TextRange.empty;
@@ -125,7 +128,7 @@ class CodeEditorController extends ChangeNotifier {
   bool get isDirty => _isDirty;
   bool get canUndo => _canUndo;
   bool get canRedo => _canRedo;
-  bool get cursorVisible => _cursorVisible;
+  bool get cursorVisible => caretBlink.value;
   TextRange get composingRange => _composingRange;
 
   // ---------------------------------------------------------------------------
@@ -323,18 +326,14 @@ class CodeEditorController extends ChangeNotifier {
 
   void _startBlink() {
     _blinkTimer?.cancel();
-    _cursorVisible = true;
+    caretBlink.value = true;
     _blinkTimer = Timer.periodic(const Duration(milliseconds: 500), (_) {
-      _cursorVisible = !_cursorVisible;
-      notifyListeners();
+      caretBlink.value = !caretBlink.value;
     });
   }
 
-  void _resetBlink() {
-    _cursorVisible = true;
-    _startBlink();
-    notifyListeners();
-  }
+  /// 编辑 / 移动光标后让光标立即显示并重新计时。调用方随后都会 notifyListeners。
+  void _resetBlink() => _startBlink();
 
   // ---------------------------------------------------------------------------
   // 书签(行号栏 Add Bookmark / Mnemonic Bookmark)
@@ -945,6 +944,7 @@ class CodeEditorController extends ChangeNotifier {
   @override
   void dispose() {
     _blinkTimer?.cancel();
+    caretBlink.dispose();
     super.dispose();
   }
 }

@@ -6,6 +6,7 @@ import '../../core/theme/intellij_theme.dart';
 import '../git/diff_view.dart';
 import 'context_menu_region.dart';
 import 'editor_appearance.dart';
+import 'visible_lines.dart';
 
 const String _uncommitted = '0000000000000000000000000000000000000000';
 const double _lineHeight = 20;
@@ -198,18 +199,32 @@ class BlameColumn extends StatelessWidget {
                   child: Text(loading ? 'blame…' : '', style: _style.copyWith(color: IntelliJTheme.textMuted)),
                 ),
               )
-            : Column(
-                children: List.generate(totalLines, (i) {
-                  final c = d.at(i);
-                  final label = blameLabel(c, appearance);
-                  return Container(
-                    height: _lineHeight,
-                    color: blameBackground(c, d, appearance),
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    alignment: Alignment.centerLeft,
-                    child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: _style),
-                  );
-                }),
+            // 只构建视口附近的行(与编辑区共用同一个纵向滚动)。
+            : SizedBox(
+                height: totalLines * _lineHeight,
+                child: VisibleLines(
+                  lineCount: totalLines,
+                  lineHeight: _lineHeight,
+                  topPadding: 8,
+                  builder: (context, first, last) => Stack(
+                    children: [
+                      for (var i = first; i <= last; i++)
+                        Positioned(
+                          key: ValueKey(i),
+                          top: i * _lineHeight,
+                          left: 0,
+                          right: 0,
+                          height: _lineHeight,
+                          child: Container(
+                            color: blameBackground(d.at(i), d, appearance),
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                            alignment: Alignment.centerLeft,
+                            child: Text(blameLabel(d.at(i), appearance), maxLines: 1, overflow: TextOverflow.ellipsis, style: _style),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
               ),
       ),
     );
