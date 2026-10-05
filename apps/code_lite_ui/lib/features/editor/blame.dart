@@ -149,7 +149,11 @@ class BlameColumn extends StatelessWidget {
     required this.totalLines,
     required this.menuBuilder,
     this.loading = false,
+    this.lineHeight = _lineHeight,
   });
+
+  /// 与编辑区一致的行高(随字号变化)。
+  final double lineHeight;
 
   final BlameData? data;
   final EditorAppearance appearance;
@@ -181,7 +185,7 @@ class BlameColumn extends StatelessWidget {
     }
     return ContextMenuRegion(
       menuBuilder: (pos) {
-        final line = ((pos.dy - 8) / _lineHeight).floor().clamp(0, totalLines - 1);
+        final line = ((pos.dy - 8) / lineHeight).floor().clamp(0, totalLines - 1);
         return menuBuilder(line, d?.at(line));
       },
       child: Container(
@@ -193,7 +197,7 @@ class BlameColumn extends StatelessWidget {
         ),
         child: d == null
             ? SizedBox(
-                height: totalLines * _lineHeight,
+                height: totalLines * lineHeight,
                 child: Align(
                   alignment: Alignment.topCenter,
                   child: Text(loading ? 'blame…' : '', style: _style.copyWith(color: IntelliJTheme.textMuted)),
@@ -201,20 +205,20 @@ class BlameColumn extends StatelessWidget {
               )
             // 只构建视口附近的行(与编辑区共用同一个纵向滚动)。
             : SizedBox(
-                height: totalLines * _lineHeight,
+                height: totalLines * lineHeight,
                 child: VisibleLines(
                   lineCount: totalLines,
-                  lineHeight: _lineHeight,
+                  lineHeight: lineHeight,
                   topPadding: 8,
                   builder: (context, first, last) => Stack(
                     children: [
                       for (var i = first; i <= last; i++)
                         Positioned(
                           key: ValueKey(i),
-                          top: i * _lineHeight,
+                          top: i * lineHeight,
                           left: 0,
                           right: 0,
-                          height: _lineHeight,
+                          height: lineHeight,
                           child: Container(
                             color: blameBackground(d.at(i), d, appearance),
                             padding: const EdgeInsets.symmetric(horizontal: 8),

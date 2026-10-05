@@ -387,7 +387,7 @@ class _EditorRegion extends StatelessWidget {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final scroll = tab.verticalScroll;
       if (!scroll.hasClients) return;
-      final target = (line * 20.0 - scroll.position.viewportDimension / 3).clamp(0.0, scroll.position.maxScrollExtent);
+      final target = (line * sessions.appearance.lineHeight - scroll.position.viewportDimension / 3).clamp(0.0, scroll.position.maxScrollExtent);
       scroll.jumpTo(target);
     });
   }

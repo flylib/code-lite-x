@@ -134,16 +134,32 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
 
   double _charWidth = 7.2;
 
-  /// 代码行的文字样式:渲染与测量必须用同一个,光标 / 选区 / 点击才能对齐字形。
-  static const TextStyle _codeStyle = TextStyle(
-    fontSize: IntelliJMetrics.codeFontSize,
-    height: IntelliJMetrics.codeLineHeight,
-    fontFamily: IntelliJMetrics.codeFontFamily,
-    fontFamilyFallback: IntelliJMetrics.codeFontFallback,
-  );
+  /// 代码行的文字样式:渲染与测量必须用同一个,光标 / 选区 / 点击才能对齐字形。字号来自设置。
+  TextStyle get _codeStyle => TextStyle(
+        fontSize: _appearance.fontSize,
+        height: IntelliJMetrics.codeLineHeight,
+        fontFamily: IntelliJMetrics.codeFontFamily,
+        fontFamilyFallback: IntelliJMetrics.codeFontFallback,
+      );
 
   /// 代码区内边距(点击坐标要先减掉它)。
-  static const double _padH = 12, _padV = 8, _lineHeight = 20;
+  static const double _padH = 12, _padV = 8;
+
+  /// 行高:随字号变化(12 号字 → 20px)。
+  double get _lineHeight => _appearance.lineHeight;
+
+  /// 上次测量字宽时的字号;字号变了要重新测量,并作废按旧字号排好的行。
+  double _measuredFontSize = 0;
+
+  void _onAppearanceChanged() {
+    if (_appearance.fontSize == _measuredFontSize) return;
+    _measureCharWidth();
+    for (final p in _linePainters.values) {
+      p.dispose();
+    }
+    _linePainters.clear();
+    _widthCache.clear();
+  }
 
   /// 行文本 → 排好版的 TextPainter(LRU)。光标、选区、点击定位都按真实字形宽度测量,
   /// 中文等全角字符、Tab、回退字体都不会再让光标和插入点错位。
@@ -163,6 +179,7 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
     _initController();
     _initScrollControllers();
     _measureCharWidth();
+    _appearance.addListener(_onAppearanceChanged);
 
     _imeBridge = ImeTextInputBridge(
       controller: _controller,
@@ -252,8 +269,9 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
   }
 
   void _measureCharWidth() {
+    _measuredFontSize = _appearance.fontSize;
     final painter = TextPainter(
-      text: const TextSpan(text: 'M', style: _codeStyle),
+      text: TextSpan(text: 'M', style: _codeStyle),
       textDirection: TextDirection.ltr,
     )..layout();
     if (painter.width > 0) {
@@ -261,19 +279,19 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
     }
     painter.dispose();
     final digits = TextPainter(
-      text: const TextSpan(text: '0000000000', style: _gutterNumberStyle),
+      text: TextSpan(text: '0000000000', style: _gutterNumberStyle),
       textDirection: TextDirection.ltr,
     )..layout();
     if (digits.width > 0) _gutterDigitWidth = digits.width / 10;
     digits.dispose();
   }
 
-  static const TextStyle _gutterNumberStyle = TextStyle(
-    color: IntelliJTheme.textGutter,
-    fontSize: 11,
-    fontFamily: IntelliJMetrics.codeFontFamily,
-    fontFamilyFallback: IntelliJMetrics.codeFontFallback,
-  );
+  TextStyle get _gutterNumberStyle => TextStyle(
+        color: _appearance.colorScheme.lineNumber,
+        fontSize: _appearance.fontSize - 1,
+        fontFamily: IntelliJMetrics.codeFontFamily,
+        fontFamilyFallback: IntelliJMetrics.codeFontFallback,
+      );
   double _gutterDigitWidth = 7;
 
   /// 代码区宽度(横向滚动长度):按最长一行估算 —— 全角字符算两格、Tab 算四格。
@@ -315,7 +333,7 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
     if (_highlighters.length > 2 && !_highlighters.containsKey(controller)) {
       _highlighters.removeWhere((c, _) => c != _controller && c != widget.secondaryTab?.controller);
     }
-    return _highlighters.putIfAbsent(controller, DocumentHighlighter.new)..update(lang, lines);
+    return _highlighters.putIfAbsent(controller, DocumentHighlighter.new)..update(lang, lines, scheme: _appearance.colorScheme);
   }
 
   static LanguageSpec languageOf(String filePath, List<String> lines) =>
@@ -393,6 +411,7 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
 
   @override
   void dispose() {
+    _appearance.removeListener(_onAppearanceChanged);
     _savedSub?.cancel();
     for (final p in _linePainters.values) {
       p.dispose();
@@ -932,6 +951,9 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
           isDirty: controller.isDirty,
         ),
         Expanded(
+          child: ColoredBox(
+          // 代码区底色跟随配色方案
+          color: _appearance.colorScheme.background,
           child: Stack(
             children: [
               Row(
@@ -949,6 +971,7 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
                               loading: _blame[controller]!.loading,
                               appearance: _appearance,
                               totalLines: lines.length,
+                              lineHeight: _lineHeight,
                               menuBuilder: (line, commit) => blameMenu(
                                 context: context,
                                 commit: commit,
@@ -962,7 +985,7 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
                             menuBuilder: (pos) => _gutterMenu(
                               controller,
                               filePath,
-                              ((pos.dy - 8) / 20).floor().clamp(0, lines.length - 1),
+                              ((pos.dy - 8) / _lineHeight).floor().clamp(0, lines.length - 1),
                             ),
                             child: _buildGutter(lines.length, diagByLine: diagByLine, controller: controller),
                           ),
@@ -1061,6 +1084,7 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
               ),
               if (isPrimary) _buildMiniDiffOverlay(),
             ],
+          ),
           ),
         ),
       ],
@@ -1198,7 +1222,7 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
       // 关掉行号后仍留出书签 / 诊断标记的位置。
       width: showNumbers ? _gutterWidthFor(totalLines) : 30,
       padding: const EdgeInsets.symmetric(vertical: 8),
-      color: IntelliJTheme.editorBg,
+      color: _appearance.colorScheme.background,
       child: SizedBox(
         height: totalLines * _lineHeight,
         child: VisibleLines(
@@ -1229,7 +1253,7 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
     final hasBookmark = bookmarks.containsKey(index);
     final mnemonic = bookmarks[index];
     return SizedBox(
-      height: 20,
+      height: _lineHeight,
       child: Row(
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
@@ -1402,7 +1426,7 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
     controller.setCursor(EditorPosition(line, 0));
     final scroll = identical(controller, _controller) ? _verticalScroll : widget.secondaryTab?.verticalScroll;
     if (scroll == null || !scroll.hasClients) return;
-    final target = (line * 20.0 - scroll.position.viewportDimension / 3).clamp(0.0, scroll.position.maxScrollExtent);
+    final target = (line * _lineHeight - scroll.position.viewportDimension / 3).clamp(0.0, scroll.position.maxScrollExtent);
     scroll.jumpTo(target);
   }
 
@@ -1496,7 +1520,7 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
   Widget _buildMiniDiffOverlay() {
     if (_activeHunkOverlay == null) return const SizedBox.shrink();
     final hunk = _activeHunkOverlay!;
-    final topOffset = ((hunk.line - 1) * 20.0).clamp(0.0, 450.0);
+    final topOffset = ((hunk.line - 1) * _lineHeight).clamp(0.0, 450.0);
 
     Color badgeColor = const Color(0xFF3574F0);
     if (hunk.kind == DiffHunkKind.added) badgeColor = const Color(0xFF59A869);
@@ -1667,7 +1691,7 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
     final caretCol = controller.cursorPosition.col;
 
     Widget lineContent = SizedBox(
-      height: 20,
+      height: _lineHeight,
       child: Stack(
         clipBehavior: Clip.none,
         children: [
@@ -1677,7 +1701,7 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
               left: k * _indentUnit * _charWidth,
               top: 0,
               bottom: 0,
-              child: Container(width: 1, color: const Color(0xFF393B40)),
+              child: Container(width: 1, color: _appearance.colorScheme.indentGuide),
             ),
 
           // 1. Selection Highlight Box
@@ -1688,13 +1712,13 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
               top: 0,
               bottom: 0,
               child: Container(
-                color: const Color(0xFF214283),
+                color: _appearance.colorScheme.selection,
               ),
             ),
 
           // 2. Syntax Token Text
           RichText(
-            text: TextSpan(style: _codeStyle.copyWith(color: syntaxDefaultColor), children: spans),
+            text: TextSpan(style: _codeStyle.copyWith(color: _appearance.colorScheme.foreground), children: spans),
             softWrap: false,
             overflow: TextOverflow.clip,
           ),
@@ -1710,7 +1734,7 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
                 valueListenable: controller.caretBlink,
                 builder: (context, visible, _) => Container(
                   width: 2,
-                  color: visible ? const Color(0xFF589DF6) : Colors.transparent,
+                  color: visible ? _appearance.colorScheme.caret : Colors.transparent,
                 ),
               ),
             ),

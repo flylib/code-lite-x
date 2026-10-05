@@ -88,6 +88,8 @@ void main() {
 
     await tester.tap(find.text('Appearance'));
     await tester.pumpAndSettle();
+    // 显示开关在字号、配色之后:滚动到可见
+    await tester.scrollUntilVisible(find.text('显示行号'), 200, scrollable: find.byType(Scrollable).last);
     await tester.tap(find.text('显示行号'));
     await tester.pump();
     expect(sessions.appearance.showLineNumbers, isFalse);

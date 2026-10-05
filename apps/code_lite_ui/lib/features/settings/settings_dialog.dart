@@ -3,6 +3,10 @@ import 'package:flutter/material.dart';
 import '../../core/plugins/plugin_manager.dart';
 import '../../core/state/settings_store.dart';
 import '../../core/theme/intellij_theme.dart';
+import '../editor/editor_appearance.dart';
+import '../editor/syntax/color_schemes.dart';
+import '../editor/syntax/languages.dart';
+import '../editor/syntax/tokenizer.dart';
 import '../plugins/plugins_page.dart';
 
 const TextStyle _text = TextStyle(color: IntelliJTheme.textPrimary, fontSize: 13);
@@ -156,6 +160,57 @@ class _SettingsDialogState extends State<SettingsDialog> {
   List<Widget> _appearance() {
     final a = widget.settings.appearance;
     return [
+      const Text('Font', style: _section),
+      const SizedBox(height: 10),
+      Row(
+        children: [
+          const Text('编辑器字号', style: _text),
+          const SizedBox(width: 14),
+          _StepButton(
+            icon: Icons.remove,
+            tooltip: '减小',
+            onTap: a.fontSize > EditorAppearance.minFontSize ? () => a.setFontSize(a.fontSize - 1) : null,
+          ),
+          Container(
+            width: 52,
+            alignment: Alignment.center,
+            child: Text('${a.fontSize.round()}', key: const ValueKey('font-size-value'), style: _section),
+          ),
+          _StepButton(
+            icon: Icons.add,
+            tooltip: '增大',
+            onTap: a.fontSize < EditorAppearance.maxFontSize ? () => a.setFontSize(a.fontSize + 1) : null,
+          ),
+          const SizedBox(width: 12),
+          for (final size in const [12, 14, 16, 18])
+            Padding(
+              padding: const EdgeInsets.only(right: 6),
+              child: _Chip(label: '$size', selected: a.fontSize.round() == size, onTap: () => a.setFontSize(size.toDouble())),
+            ),
+          const Spacer(),
+          if (a.fontSize != EditorAppearance.defaultFontSize)
+            TextButton(onPressed: () => a.setFontSize(EditorAppearance.defaultFontSize), child: const Text('恢复默认')),
+        ],
+      ),
+      const SizedBox(height: 22),
+      const Text('Color Scheme', style: _section),
+      const SizedBox(height: 4),
+      const Text('只改变代码区的配色;IDE 外框保持 Darcula。', style: _hint),
+      const SizedBox(height: 10),
+      Wrap(
+        spacing: 10,
+        runSpacing: 10,
+        children: [
+          for (final scheme in builtinColorSchemes)
+            _SchemeCard(
+              scheme: scheme,
+              fontSize: a.fontSize,
+              selected: a.colorSchemeId == scheme.id,
+              onTap: () => a.setColorScheme(scheme.id),
+            ),
+        ],
+      ),
+      const SizedBox(height: 22),
       const Text('Editor Appearance', style: _section),
       const SizedBox(height: 10),
       _Toggle(label: '显示行号', value: a.showLineNumbers, onChanged: a.setShowLineNumbers),
@@ -165,6 +220,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
       const Text('这些开关也可以在行号栏右键 ▸ Appearance 里切换。', style: _hint),
     ];
   }
+
 }
 
 class _NavItem extends StatelessWidget {
@@ -229,4 +285,127 @@ class _Toggle extends StatelessWidget {
           ),
         ),
       );
+}
+
+class _StepButton extends StatelessWidget {
+  const _StepButton({required this.icon, required this.tooltip, required this.onTap});
+
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) => Tooltip(
+        message: tooltip,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(4),
+          child: Container(
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(border: Border.all(color: IntelliJTheme.border), borderRadius: BorderRadius.circular(4)),
+            child: Icon(icon, size: 14, color: onTap == null ? IntelliJTheme.textMuted : IntelliJTheme.textHigh),
+          ),
+        ),
+      );
+}
+
+class _Chip extends StatelessWidget {
+  const _Chip({required this.label, required this.selected, required this.onTap});
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(4),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          decoration: BoxDecoration(
+            color: selected ? const Color(0xFF2E436E) : null,
+            border: Border.all(color: selected ? IntelliJTheme.accentBlue : IntelliJTheme.border),
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Text(label, style: _text),
+        ),
+      );
+}
+
+/// 配色方案卡片:用该方案给一小段真实代码着色,所见即所得。
+class _SchemeCard extends StatelessWidget {
+  const _SchemeCard({required this.scheme, required this.fontSize, required this.selected, required this.onTap});
+
+  final EditorColorScheme scheme;
+  final double fontSize;
+  final bool selected;
+  final VoidCallback onTap;
+
+  static const _sample = [
+    '/** 计算总奖池 */',
+    '@Override',
+    'public int total(List<Item> items) {',
+    '    return items.size() * 42;',
+    '}',
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final java = languages.byId('java')!;
+    var state = 0;
+    final lines = <Widget>[];
+    for (final line in _sample) {
+      final r = tokenizeLine(java, line, state);
+      state = r.endState;
+      lines.add(RichText(
+        maxLines: 1,
+        overflow: TextOverflow.clip,
+        text: TextSpan(
+          style: TextStyle(
+            color: scheme.foreground,
+            fontSize: 11,
+            height: 1.45,
+            fontFamily: IntelliJMetrics.codeFontFamily,
+            fontFamilyFallback: IntelliJMetrics.codeFontFallback,
+          ),
+          children: [
+            for (final t in r.tokens) TextSpan(text: line.substring(t.start, t.end), style: scheme.styleOf(t.kind)),
+          ],
+        ),
+      ));
+    }
+    return InkWell(
+      key: ValueKey('scheme-${scheme.id}'),
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(6),
+      child: Container(
+        width: 232,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: selected ? IntelliJTheme.accentBlue : IntelliJTheme.border, width: selected ? 2 : 1),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(
+              color: scheme.background,
+              padding: const EdgeInsets.fromLTRB(10, 8, 6, 8),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: lines),
+            ),
+            Container(
+              color: IntelliJTheme.headerBg,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              child: Row(
+                children: [
+                  Expanded(child: Text(scheme.name, overflow: TextOverflow.ellipsis, style: _text)),
+                  if (selected) const Icon(Icons.check, size: 14, color: IntelliJTheme.accentBlue),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }

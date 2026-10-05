@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 
+import 'syntax/color_schemes.dart';
+
 /// Blame 注释栏的着色方式(View ▸ Colors)。
 enum BlameColorMode { none, author, age }
 
@@ -8,6 +10,15 @@ enum BlameNameMode { full, first, last, initials, email }
 
 /// 编辑器外观开关,所有标签页共用(与 IntelliJ 一样是编辑器级设置,不跟文件走)。
 class EditorAppearance extends ChangeNotifier {
+  /// 编辑区字号(行高随之按比例变化)。
+  static const double defaultFontSize = 12;
+  static const double minFontSize = 9;
+  static const double maxFontSize = 28;
+  double _fontSize = defaultFontSize;
+
+  /// 代码配色方案 id(见 [builtinColorSchemes])。
+  String _colorSchemeId = 'darcula';
+
   bool _showLineNumbers = true;
   bool _showIndentGuides = true;
   bool _showBreadcrumbs = true;
@@ -17,6 +28,25 @@ class EditorAppearance extends ChangeNotifier {
   bool _blameAuthor = true;
   BlameColorMode _blameColors = BlameColorMode.author;
   BlameNameMode _blameNames = BlameNameMode.full;
+
+  double get fontSize => _fontSize;
+
+  /// 每行的高度:字号的 1.65 倍取整(12 → 20,与原来的固定行高一致)。
+  double get lineHeight => (_fontSize * 1.65).roundToDouble();
+
+  String get colorSchemeId => _colorSchemeId;
+  EditorColorScheme get colorScheme => colorSchemeById(_colorSchemeId);
+
+  void setFontSize(double v) {
+    final clamped = v.clamp(minFontSize, maxFontSize).roundToDouble();
+    if (clamped == _fontSize) return;
+    _set(() => _fontSize = clamped);
+  }
+
+  void setColorScheme(String id) {
+    if (id == _colorSchemeId || !builtinColorSchemes.any((s) => s.id == id)) return;
+    _set(() => _colorSchemeId = id);
+  }
 
   bool get showLineNumbers => _showLineNumbers;
   bool get showIndentGuides => _showIndentGuides;
@@ -33,6 +63,8 @@ class EditorAppearance extends ChangeNotifier {
 
   /// 持久化用(设置文件里的 `editor.appearance`)。
   Map<String, dynamic> toJson() => {
+        'fontSize': _fontSize,
+        'colorScheme': _colorSchemeId,
         'lineNumbers': _showLineNumbers,
         'indentGuides': _showIndentGuides,
         'breadcrumbs': _showBreadcrumbs,
@@ -46,6 +78,10 @@ class EditorAppearance extends ChangeNotifier {
   /// 读入设置文件里的值;缺的或类型不对的项保持当前值。
   void applyJson(Map<String, dynamic> j) {
     bool b(String k, bool current) => j[k] is bool ? j[k] as bool : current;
+    final size = j['fontSize'];
+    if (size is num && size >= minFontSize && size <= maxFontSize) _fontSize = size.toDouble().roundToDouble();
+    final scheme = j['colorScheme'];
+    if (scheme is String && builtinColorSchemes.any((s) => s.id == scheme)) _colorSchemeId = scheme;
     _showLineNumbers = b('lineNumbers', _showLineNumbers);
     _showIndentGuides = b('indentGuides', _showIndentGuides);
     _showBreadcrumbs = b('breadcrumbs', _showBreadcrumbs);
