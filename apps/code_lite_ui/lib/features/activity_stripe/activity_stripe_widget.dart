@@ -8,7 +8,7 @@ import 'stripe_button.dart';
 
 export '../../core/state/layout_store.dart' show LeftTool;
 
-/// 左侧活动条。上半段切左侧工具窗,下半段切底部工具窗(IntelliJ 布局),最底是设置。
+/// 左侧活动条。上半段切左侧工具窗,下半段切底部工具窗(IntelliJ 布局)。设置在菜单里(⌘,)。
 ///
 /// 之前左侧工具窗和底部工具窗的按钮混在一个 enum 里,选中态语义也混着;
 /// 现在两组各自独立 —— 与 IntelliJ 一致,也和 design/Main.dc.html 对得上。
@@ -86,31 +86,9 @@ class ActivityStripeWidget extends StatelessWidget {
             isActive: isBottomOpen && bottomTab == BottomToolTab.git,
             onTap: () => onSelectBottomTab(BottomToolTab.git),
           ),
-
-          const _StripeDivider(),
-
-          StripeButton(
-            icon: Icons.tune,
-            tooltip: '设置',
-            isActive: false,
-            onTap: () {},
-          ),
+          // 设置在菜单里:CodeLiteX ▸ Settings…(⌘,)。
         ],
       ),
-    );
-  }
-}
-
-class _StripeDivider extends StatelessWidget {
-  const _StripeDivider();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 18,
-      height: 1,
-      margin: const EdgeInsets.symmetric(vertical: 9),
-      color: IntelliJTheme.border,
     );
   }
 }

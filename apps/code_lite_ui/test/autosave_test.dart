@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:io';
 
 import 'package:code_lite_ui/core/client/api_client.dart';
@@ -37,7 +36,7 @@ void main() {
     expect(tab.isDirty, isTrue);
     expect(disk('a.txt'), 'hello\n', reason: '停顿前还没写');
 
-    await Future<void>.delayed(EditorSessionManager.autosaveDelay + const Duration(milliseconds: 400));
+    await Future<void>.delayed(sessions.autosaveDelay + const Duration(milliseconds: 400));
     expect(disk('a.txt'), 'hello world\n');
     expect(tab.isDirty, isFalse);
     expect(saved, ['a.txt'], reason: 'Commit 窗据此刷新');
@@ -53,7 +52,7 @@ void main() {
       tab.controller.insertText(ch);
       await Future<void>.delayed(const Duration(milliseconds: 100));
     }
-    await Future<void>.delayed(EditorSessionManager.autosaveDelay + const Duration(milliseconds: 400));
+    await Future<void>.delayed(sessions.autosaveDelay + const Duration(milliseconds: 400));
     expect(disk('a.txt'), 'hello12345\n');
     expect(saves, 1);
     await sub.cancel();
@@ -74,7 +73,7 @@ void main() {
     sessions.autosave = false;
     final tab = await sessions.openFile('a.txt');
     tab.controller.insertText('x');
-    await Future<void>.delayed(EditorSessionManager.autosaveDelay + const Duration(milliseconds: 300));
+    await Future<void>.delayed(sessions.autosaveDelay + const Duration(milliseconds: 300));
     expect(disk('a.txt'), 'hello\n');
     expect(await sessions.saveActiveFile(), isTrue);
     expect(disk('a.txt'), 'xhello\n');
@@ -84,7 +83,7 @@ void main() {
     final tab = await sessions.openFile('missing/none.txt', defaultContent: '');
     expect(tab.loadError, isNotNull);
     tab.controller.insertText('oops');
-    await Future<void>.delayed(EditorSessionManager.autosaveDelay + const Duration(milliseconds: 300));
+    await Future<void>.delayed(sessions.autosaveDelay + const Duration(milliseconds: 300));
     expect(File('${dir.path}/missing/none.txt').existsSync(), isFalse);
   });
 }

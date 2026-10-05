@@ -15,3 +15,7 @@ String noProjectRoot() => '.';
 Future<String?> pickSavePath(String suggestedName) async => null;
 
 Future<String?> writeTextFile(String path, String content) async => 'web 预览不支持写文件';
+
+Future<Map<String, dynamic>> loadSettings() async => const {};
+
+Future<void> saveSettings(Map<String, dynamic> settings) async {}

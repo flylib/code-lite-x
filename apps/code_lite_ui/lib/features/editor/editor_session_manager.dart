@@ -67,7 +67,8 @@ class EditorSessionManager extends ChangeNotifier {
   /// 自动保存(IntelliJ 风格):停止输入 [autosaveDelay] 后写回磁盘,无需 ⌘S;
   /// 切换标签、关闭标签、应用失去焦点时立即写。写盘后 Commit 窗的改动列表随之刷新。
   bool autosave = true;
-  static const Duration autosaveDelay = Duration(milliseconds: 600);
+  Duration autosaveDelay = defaultAutosaveDelay;
+  static const Duration defaultAutosaveDelay = Duration(milliseconds: 600);
   final Map<String, Timer> _saveTimers = {};
 
   /// 诊断来得比标签页早(打开文件后服务器很快推送)时先存在这里,建标签时取用。

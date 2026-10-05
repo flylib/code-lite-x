@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'core/client/api_client.dart';
 import 'core/state/layout_store.dart';
 import 'core/state/scopes.dart';
+import 'core/state/settings_store.dart';
 import 'core/platform/workspace_io.dart' as io;
 import 'core/state/workspace_store.dart';
 import 'core/theme/intellij_theme.dart';
@@ -25,6 +26,7 @@ import 'features/pull_requests/pr_store.dart';
 import 'features/pull_requests/pr_timeline_tab.dart';
 import 'features/project_explorer/structure_widget.dart';
 import 'features/search/global_search_modal.dart';
+import 'features/settings/settings_dialog.dart';
 import 'features/status_bar/status_bar_widget.dart';
 import 'features/terminal/terminal_store.dart';
 import 'features/title_bar/title_bar_widget.dart';
@@ -49,6 +51,7 @@ class _CodeLiteAppState extends State<CodeLiteApp> {
   late final TerminalStore _terminals = TerminalStore(_client);
   late final GitLogStore _gitLog = GitLogStore(_client);
   late final PullRequestsStore _prs = PullRequestsStore(_client);
+  late final SettingsStore _settings = SettingsStore(sessions: _sessions);
   String? _lastRoot;
 
   @override
@@ -65,6 +68,7 @@ class _CodeLiteAppState extends State<CodeLiteApp> {
   late final AppLifecycleListener _lifecycle;
 
   Future<void> _bootstrap() async {
+    await _settings.load();
     await _workspace.bootstrap();
   }
 
@@ -83,6 +87,7 @@ class _CodeLiteAppState extends State<CodeLiteApp> {
     _workspace.removeListener(_onWorkspaceChanged);
     _gitLog.dispose();
     _prs.dispose();
+    _settings.dispose(); // 先于 _sessions:它监听 sessions.appearance
     _terminals.dispose();
     _client.dispose(); // 关掉语言服务器进程
     _layout.dispose();
@@ -103,7 +108,7 @@ class _CodeLiteAppState extends State<CodeLiteApp> {
           notifier: _workspace,
           child: SessionScope(
             notifier: _sessions,
-            child: _Workbench(client: _client, terminals: _terminals, gitLog: _gitLog, prs: _prs),
+            child: _Workbench(client: _client, terminals: _terminals, gitLog: _gitLog, prs: _prs, settings: _settings),
           ),
         ),
       ),
@@ -112,12 +117,19 @@ class _CodeLiteAppState extends State<CodeLiteApp> {
 }
 
 class _Workbench extends StatelessWidget {
-  const _Workbench({required this.client, required this.terminals, required this.gitLog, required this.prs});
+  const _Workbench({
+    required this.client,
+    required this.terminals,
+    required this.gitLog,
+    required this.prs,
+    required this.settings,
+  });
 
   final ApiClient client;
   final TerminalStore terminals;
   final GitLogStore gitLog;
   final PullRequestsStore prs;
+  final SettingsStore settings;
 
   @override
   Widget build(BuildContext context) {
@@ -126,8 +138,14 @@ class _Workbench extends StatelessWidget {
     final sessions = context.sessionRead;
 
     return _AppMenuBar(
+      settings: settings,
       child: CallbackShortcuts(
       bindings: <ShortcutActivator, VoidCallback>{
+        // macOS 由系统菜单的 ⌘, 处理;其它平台没有菜单栏,用 IntelliJ 的 Ctrl+Alt+S。
+        if (defaultTargetPlatform != TargetPlatform.macOS) ...{
+          const SingleActivator(LogicalKeyboardKey.keyS, control: true, alt: true): () => showSettingsDialog(context, settings),
+          const SingleActivator(LogicalKeyboardKey.comma, control: true): () => showSettingsDialog(context, settings),
+        },
         const SingleActivator(LogicalKeyboardKey.keyF, meta: true, shift: true): () => _openSearch(context),
         const SingleActivator(LogicalKeyboardKey.keyF, control: true, shift: true): () => _openSearch(context),
       },
@@ -471,9 +489,10 @@ class _EditorRegion extends StatelessWidget {
 /// 原生菜单栏(macOS)。只订阅 workspace 的最近项目 / 是否有项目,
 /// 工作台子树作为 `child` 传入,菜单变化时不会重建它。
 class _AppMenuBar extends StatelessWidget {
-  const _AppMenuBar({required this.child});
+  const _AppMenuBar({required this.child, required this.settings});
 
   final Widget child;
+  final SettingsStore settings;
 
   @override
   Widget build(BuildContext context) {
@@ -485,19 +504,30 @@ class _AppMenuBar extends StatelessWidget {
       child: child,
       builder: (context, child) => PlatformMenuBar(
         menus: <PlatformMenuItem>[
-          const PlatformMenu(
+          PlatformMenu(
             label: 'CodeLiteX',
             menus: <PlatformMenuItem>[
-              PlatformProvidedMenuItem(
-                  type: PlatformProvidedMenuItemType.about),
-              PlatformProvidedMenuItem(
-                  type: PlatformProvidedMenuItemType.servicesSubmenu),
-              PlatformProvidedMenuItem(type: PlatformProvidedMenuItemType.hide),
-              PlatformProvidedMenuItem(
-                  type: PlatformProvidedMenuItemType.hideOtherApplications),
-              PlatformProvidedMenuItem(
-                  type: PlatformProvidedMenuItemType.showAllApplications),
-              PlatformProvidedMenuItem(type: PlatformProvidedMenuItemType.quit),
+              const PlatformMenuItemGroup(members: <PlatformMenuItem>[
+                PlatformProvidedMenuItem(type: PlatformProvidedMenuItemType.about),
+              ]),
+              PlatformMenuItemGroup(members: <PlatformMenuItem>[
+                PlatformMenuItem(
+                  label: 'Settings…',
+                  shortcut: const SingleActivator(LogicalKeyboardKey.comma, meta: true),
+                  onSelected: () => showSettingsDialog(context, settings),
+                ),
+              ]),
+              const PlatformMenuItemGroup(members: <PlatformMenuItem>[
+                PlatformProvidedMenuItem(type: PlatformProvidedMenuItemType.servicesSubmenu),
+              ]),
+              const PlatformMenuItemGroup(members: <PlatformMenuItem>[
+                PlatformProvidedMenuItem(type: PlatformProvidedMenuItemType.hide),
+                PlatformProvidedMenuItem(type: PlatformProvidedMenuItemType.hideOtherApplications),
+                PlatformProvidedMenuItem(type: PlatformProvidedMenuItemType.showAllApplications),
+              ]),
+              const PlatformMenuItemGroup(members: <PlatformMenuItem>[
+                PlatformProvidedMenuItem(type: PlatformProvidedMenuItemType.quit),
+              ]),
             ],
           ),
           _fileMenu(context, workspace),

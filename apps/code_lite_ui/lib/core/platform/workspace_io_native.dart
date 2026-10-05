@@ -76,6 +76,34 @@ Future<void> saveRecentProjects(List<String> paths) async {
   }
 }
 
+File? get _settingsFile {
+  final home = Platform.environment['HOME'];
+  return home == null ? null : File('$home/.codelitex/settings.json');
+}
+
+/// 应用设置(自动保存、编辑器外观);读不到时为空表,按默认值处理。
+Future<Map<String, dynamic>> loadSettings() async {
+  try {
+    final f = _settingsFile;
+    if (f == null || !await f.exists()) return const {};
+    final decoded = jsonDecode(await f.readAsString());
+    return decoded is Map ? Map<String, dynamic>.from(decoded) : const {};
+  } catch (_) {
+    return const {};
+  }
+}
+
+Future<void> saveSettings(Map<String, dynamic> settings) async {
+  try {
+    final f = _settingsFile;
+    if (f == null) return;
+    await f.parent.create(recursive: true);
+    await f.writeAsString(const JsonEncoder.withIndent('  ').convert(settings));
+  } catch (_) {
+    // 写不了设置不应打断用户;下次启动用默认值。
+  }
+}
+
 /// 没打开任何项目时 Rust Core 挂靠的中性目录。
 /// 不能用 '.':从 Finder 启动时 cwd 是 "/",Rust 侧初始化会去扫描整个磁盘。
 String noProjectRoot() {

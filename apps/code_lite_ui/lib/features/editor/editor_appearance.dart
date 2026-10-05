@@ -27,6 +27,39 @@ class EditorAppearance extends ChangeNotifier {
   BlameColorMode get blameColors => _blameColors;
   BlameNameMode get blameNames => _blameNames;
 
+  void setShowLineNumbers(bool v) => _set(() => _showLineNumbers = v);
+  void setShowIndentGuides(bool v) => _set(() => _showIndentGuides = v);
+  void setShowBreadcrumbs(bool v) => _set(() => _showBreadcrumbs = v);
+
+  /// 持久化用(设置文件里的 `editor.appearance`)。
+  Map<String, dynamic> toJson() => {
+        'lineNumbers': _showLineNumbers,
+        'indentGuides': _showIndentGuides,
+        'breadcrumbs': _showBreadcrumbs,
+        'blameRevision': _blameRevision,
+        'blameDate': _blameDate,
+        'blameAuthor': _blameAuthor,
+        'blameColors': _blameColors.name,
+        'blameNames': _blameNames.name,
+      };
+
+  /// 读入设置文件里的值;缺的或类型不对的项保持当前值。
+  void applyJson(Map<String, dynamic> j) {
+    bool b(String k, bool current) => j[k] is bool ? j[k] as bool : current;
+    _showLineNumbers = b('lineNumbers', _showLineNumbers);
+    _showIndentGuides = b('indentGuides', _showIndentGuides);
+    _showBreadcrumbs = b('breadcrumbs', _showBreadcrumbs);
+    final rev = b('blameRevision', _blameRevision), date = b('blameDate', _blameDate), author = b('blameAuthor', _blameAuthor);
+    if (rev || date || author) {
+      _blameRevision = rev;
+      _blameDate = date;
+      _blameAuthor = author;
+    }
+    _blameColors = BlameColorMode.values.firstWhere((m) => m.name == j['blameColors'], orElse: () => _blameColors);
+    _blameNames = BlameNameMode.values.firstWhere((m) => m.name == j['blameNames'], orElse: () => _blameNames);
+    notifyListeners();
+  }
+
   void toggleLineNumbers() => _set(() => _showLineNumbers = !_showLineNumbers);
   void toggleIndentGuides() => _set(() => _showIndentGuides = !_showIndentGuides);
   void toggleBreadcrumbs() => _set(() => _showBreadcrumbs = !_showBreadcrumbs);
