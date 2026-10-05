@@ -279,6 +279,7 @@ class _Workbench extends StatelessWidget {
                   activeFile: workspace.activeFile,
                   diagnostics: workspace.diagnostics,
                   controller: sessions.activeTab?.controller,
+                  client: client,
                 ),
               ),
             ],

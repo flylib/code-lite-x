@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../core/client/api_client.dart';
+import '../../core/lsp/lsp_common.dart' show lspLanguageIdFor, lspServerGroupFor, lspServerCandidates;
 import '../../core/platform/process_stats.dart';
 import '../../core/theme/intellij_theme.dart';
 import '../editor/code_editor_controller.dart';
@@ -20,12 +22,16 @@ class StatusBarWidget extends StatelessWidget {
     required this.activeFile,
     required this.diagnostics,
     this.controller,
+    this.client,
     this.isSaving = false,
   });
 
   final String activeFile;
   final List<EditorDiagnostic> diagnostics;
   final CodeEditorController? controller;
+
+  /// 用来查询语言服务器状态;为 null 时不显示语言服务器。
+  final ApiClient? client;
   final bool isSaving;
 
   @override
@@ -117,11 +123,13 @@ class StatusBarWidget extends StatelessWidget {
         label: '$warnings 个警告',
       );
     }
-    return const _StatusChip(
-      icon: Icons.check_circle_outline,
-      color: IntelliJTheme.gitGreen,
-      label: 'rust-analyzer',
-    );
+    // 没有错误 / 警告时显示当前文件所用的语言服务器(以前这里写死了 rust-analyzer)
+    final c = client;
+    if (c == null || activeFile.isEmpty || isSpecialTabId(activeFile)) return const SizedBox.shrink();
+    final lang = lspLanguageIdFor(activeFile);
+    final group = lang == null ? null : lspServerGroupFor(lang);
+    if (group == null) return const SizedBox.shrink();
+    return LspStatusChip(client: c, group: group);
   }
 
   Widget _buildCaretPosition() {
@@ -264,6 +272,90 @@ class _ResourceIndicatorState extends State<ResourceIndicator> {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// 当前文件所用语言服务器的状态:运行中 / 启动中 / 未安装 / 已退出。每 2 秒查询一次(进程内,开销很小)。
+class LspStatusChip extends StatefulWidget {
+  const LspStatusChip({super.key, required this.client, required this.group, this.interval = const Duration(seconds: 2)});
+
+  final ApiClient client;
+
+  /// 服务端分组(java / go / rust / typescript ……)。
+  final String group;
+  final Duration interval;
+
+  /// 状态栏里显示的服务端名字。
+  static String displayName(String group, String command) {
+    if (group == 'java') return 'jdtls';
+    final exe = command.trim().split(' ').first;
+    if (exe.isNotEmpty) {
+      final base = exe.split(RegExp(r'[/\\]')).last;
+      return base == 'dart' ? 'Dart Analysis Server' : base;
+    }
+    final candidates = lspServerCandidates[group];
+    return candidates == null || candidates.isEmpty ? group : candidates.first.first;
+  }
+
+  @override
+  State<LspStatusChip> createState() => _LspStatusChipState();
+}
+
+class _LspStatusChipState extends State<LspStatusChip> {
+  Map<String, dynamic>? _server;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _poll();
+    _timer = Timer.periodic(widget.interval, (_) => _poll());
+  }
+
+  @override
+  void didUpdateWidget(LspStatusChip old) {
+    super.didUpdateWidget(old);
+    if (old.group != widget.group) {
+      _server = null;
+      _poll();
+    }
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _poll() async {
+    try {
+      final st = await widget.client.lspStatus();
+      final servers = (st['servers'] as List? ?? const []).cast<Map>();
+      Map<String, dynamic>? hit;
+      for (final s in servers) {
+        if (s['language'] == widget.group) hit = Map<String, dynamic>.from(s);
+      }
+      if (mounted) setState(() => _server = hit);
+    } catch (_) {}
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = _server;
+    if (s == null) return const SizedBox.shrink(); // 这个分组还没启动过服务端
+    final name = LspStatusChip.displayName(widget.group, s['command'] as String? ?? '');
+    final error = s['error'] as String?;
+    final (IconData icon, Color color, String label, String tip) = switch (s['state']) {
+      'missing' => (Icons.extension_off_outlined, IntelliJTheme.textMuted, '未安装 $name', '没有找到 $name。可在 CodeLiteX ▸ Plugins… 安装对应的语言插件;目前只做括号配对检查。'),
+      'crashed' => (Icons.error_outline, IntelliJTheme.diagError, '$name 已退出', '$name 反复崩溃,已停用,只做括号配对检查。${error == null ? '' : '\n$error'}'),
+      _ when s['initialized'] != true => (Icons.sync, IntelliJTheme.textMuted, '$name 启动中…', '$name 正在启动(大项目首次打开需要建索引)'),
+      _ => (Icons.check_circle_outline, IntelliJTheme.gitGreen, name, '$name 运行中${s['source'] != null ? '(插件 ${s['source']})' : ''}\n${s['command']}'),
+    };
+    return Tooltip(
+      message: tip,
+      waitDuration: const Duration(milliseconds: 400),
+      child: _StatusChip(icon: icon, color: color, label: label),
     );
   }
 }
