@@ -13,7 +13,7 @@ import 'dart:io';
 
 import 'lsp_common.dart';
 
-export 'lsp_common.dart' show LspDiagnosticsEvent;
+export 'lsp_common.dart' show LspDiagnosticsEvent, LspTextChange;
 
 enum _State { starting, running, missing, crashed }
 
@@ -84,6 +84,9 @@ class _Server {
   int restarts = 0;
   _Proc? proc;
   String? lastError;
+
+  /// 服务端声明的文档同步方式(initialize 返回的 textDocumentSync):1 整篇,2 增量。
+  int syncKind = 1;
 
   /// initialize 完成前排队的请求;参数为 null 表示服务端不可用,应以 null 结束。
   final List<void Function(_Proc? proc)> queue = [];
@@ -188,6 +191,50 @@ class LspService {
         ],
       });
     } catch (_) {}
+  }
+
+  /// 增量同步:把这段时间的改动按顺序发给服务端(服务端声明支持增量时只发改动的范围,
+  /// 否则仍发全文)。本地保存的文档内容同步更新,服务端重启时据此重放。
+  /// 文档还没打开时返回 false,调用方应改用整篇 [didChange]。
+  Future<bool> didChangeIncremental(String relPath, List<LspTextChange> changes) async {
+    try {
+      if (_disposed) return true;
+      final doc = _docs[relPath];
+      if (doc == null) return false;
+      if (changes.isEmpty) return true;
+      doc.text = lspApplyChanges(doc.text, changes);
+      doc.version++;
+      final lang = doc.languageId;
+      if (lang == null) {
+        _emitFallback(relPath, doc.text, lspFallbackLanguageFor(relPath));
+        return true;
+      }
+      final server = _servers[lspServerGroupFor(lang)];
+      if (server == null || server.fallback) {
+        _emitFallback(relPath, doc.text, lang);
+        return true;
+      }
+      // 还在启动:initialize 后会按 doc.text 重放 didOpen。
+      server.ready?.notify('textDocument/didChange', {
+        'textDocument': {'uri': _uriFor(relPath), 'version': doc.version},
+        'contentChanges': server.syncKind == 2
+            ? [for (final c in changes) c.toJson()]
+            : [
+                {'text': doc.text},
+              ],
+      });
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// initialize 结果里的 textDocumentSync:数字,或 `{change: 数字}`。
+  static int _syncKindOf(Object? capabilities) {
+    if (capabilities is! Map) return 1;
+    final sync = capabilities['textDocumentSync'];
+    final kind = sync is num ? sync : (sync is Map ? sync['change'] : null);
+    return kind is num && kind.toInt() == 2 ? 2 : 1;
   }
 
   Future<void> didClose(String relPath) async {
@@ -405,6 +452,7 @@ class LspService {
       return;
     }
 
+    server.syncKind = _syncKindOf(result['capabilities']);
     proc.notify('initialized', <String, Object?>{});
     proc.initialized = true;
     server.state = _State.running;

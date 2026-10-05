@@ -99,6 +99,10 @@ class ApiClient {
 
   Future<void> lspDidChange(String path, String text) => _lsp.didChange(path, text);
 
+  /// 只把这段时间的改动发给语言服务器;文档没打开时返回 false(调用方改发全文)。
+  Future<bool> lspDidChangeIncremental(String path, List<LspTextChange> changes) =>
+      _lsp.didChangeIncremental(path, changes);
+
   Future<void> lspDidClose(String path) => _lsp.didClose(path);
 
   /// 结构大纲:LSP documentSymbol,拿不到时退回正则解析。

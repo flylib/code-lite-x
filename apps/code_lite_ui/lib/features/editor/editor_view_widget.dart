@@ -31,6 +31,10 @@ bool isSpecialTabId(String id) =>
     id.startsWith(diffTabPrefix) || id.startsWith(prDiffTabPrefix) || id.startsWith(prTimelineTabPrefix);
 
 class EditorViewWidget extends StatefulWidget {
+  /// 测试用:标签栏构建次数(验证按键不重建标签栏)。
+  @visibleForTesting
+  static int debugTabBarBuilds = 0;
+
   final List<String> openTabs;
   final String activeFile;
   final String codeContent;
@@ -640,112 +644,102 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
     }
   }
 
+  /// 一个编辑面板:只订阅它自己的 controller 和外观设置。按键 / 光标移动只重建这一块,
+  /// 标签栏等外层不动(标签上的「已修改」圆点随会话层的 dirty 变化刷新)。
+  Widget _paneFor({
+    required CodeEditorController controller,
+    required ScrollController verticalScroll,
+    required ScrollController horizontalScroll,
+    required String filePath,
+    required List<EditorDiagnostic> diagnostics,
+    required FocusNode focusNode,
+    required ImeTextInputBridge? imeBridge,
+    required bool isPrimary,
+  }) {
+    return ListenableBuilder(
+      listenable: Listenable.merge([_appearance, controller]),
+      builder: (context, _) => _buildPane(
+        controller: controller,
+        verticalScroll: verticalScroll,
+        horizontalScroll: horizontalScroll,
+        filePath: filePath,
+        diagnostics: diagnostics,
+        focusNode: focusNode,
+        imeBridge: imeBridge,
+        isPrimary: isPrimary,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final listenables = <Listenable>[
-      _appearance,
-      _controller,
-      if (widget.secondaryTab != null) widget.secondaryTab!.controller,
-    ];
-
-    return AnimatedBuilder(
-      animation: Listenable.merge(listenables),
-      builder: (context, _) {
-        final isSplit = widget.splitDirection != SplitDirection.none && widget.secondaryTab != null;
-
-        return Focus(
+    final isSplit = widget.splitDirection != SplitDirection.none && widget.secondaryTab != null;
+    Widget primary() => _paneFor(
+          controller: _controller,
+          verticalScroll: _verticalScroll,
+          horizontalScroll: _horizontalScroll,
+          filePath: widget.activeFile,
+          diagnostics: widget.diagnostics,
           focusNode: _focusNode,
-          autofocus: true,
-          onKeyEvent: (node, event) => _handlePaneKeyEvent(_controller, _imeBridge, event, isPrimary: true),
-          child: Container(
-            color: IntelliJTheme.editorBg,
-            child: Column(
-              children: [
-                // 1. Tab Bar
-                _buildTabBar(),
+          imeBridge: _imeBridge,
+          isPrimary: true,
+        );
+    Widget secondary() => _paneFor(
+          controller: widget.secondaryTab!.controller,
+          verticalScroll: widget.secondaryTab!.verticalScroll,
+          horizontalScroll: widget.secondaryTab!.horizontalScroll,
+          filePath: widget.secondaryTab!.filePath,
+          diagnostics: widget.secondaryTab!.diagnostics,
+          focusNode: _secondaryFocusNode,
+          imeBridge: _secondaryImeBridge,
+          isPrimary: false,
+        );
 
-                // 2. Editor Panes(非文件标签换成它自己的内容,比如差异视图)
-                Expanded(
-                  child: widget.specialTabBuilder?.call(widget.activeFile) ?? (isSplit
-                      ? (widget.splitDirection == SplitDirection.horizontal
+    // 没有外部提供的 dirty 查询时,标签栏的「已修改」圆点只能看 controller:这时才让它订阅 controller。
+    final tabBar = widget.isTabDirty != null
+        ? _buildTabBar()
+        : ListenableBuilder(listenable: _controller, builder: (context, _) => _buildTabBar());
+
+    return Focus(
+      focusNode: _focusNode,
+      autofocus: true,
+      onKeyEvent: (node, event) => _handlePaneKeyEvent(_controller, _imeBridge, event, isPrimary: true),
+      child: Container(
+        color: IntelliJTheme.editorBg,
+        child: Column(
+          children: [
+            // 1. Tab Bar
+            tabBar,
+
+            // 2. Editor Panes(非文件标签换成它自己的内容,比如差异视图)
+            Expanded(
+              child: widget.specialTabBuilder?.call(widget.activeFile) ??
+                  (!isSplit
+                      ? primary()
+                      : widget.splitDirection == SplitDirection.horizontal
                           ? Row(
                               children: [
-                                Expanded(
-                                  child: _buildPane(
-                                    controller: _controller,
-                                    verticalScroll: _verticalScroll,
-                                    horizontalScroll: _horizontalScroll,
-                                    filePath: widget.activeFile,
-                                    diagnostics: widget.diagnostics,
-                                    focusNode: _focusNode,
-                                    imeBridge: _imeBridge,
-                                    isPrimary: true,
-                                  ),
-                                ),
+                                Expanded(child: primary()),
                                 Container(width: 1, color: IntelliJTheme.borderSubtle),
-                                Expanded(
-                                  child: _buildPane(
-                                    controller: widget.secondaryTab!.controller,
-                                    verticalScroll: widget.secondaryTab!.verticalScroll,
-                                    horizontalScroll: widget.secondaryTab!.horizontalScroll,
-                                    filePath: widget.secondaryTab!.filePath,
-                                    diagnostics: widget.secondaryTab!.diagnostics,
-                                    focusNode: _secondaryFocusNode,
-                                    imeBridge: _secondaryImeBridge,
-                                    isPrimary: false,
-                                  ),
-                                ),
+                                Expanded(child: secondary()),
                               ],
                             )
                           : Column(
                               children: [
-                                Expanded(
-                                  child: _buildPane(
-                                    controller: _controller,
-                                    verticalScroll: _verticalScroll,
-                                    horizontalScroll: _horizontalScroll,
-                                    filePath: widget.activeFile,
-                                    diagnostics: widget.diagnostics,
-                                    focusNode: _focusNode,
-                                    imeBridge: _imeBridge,
-                                    isPrimary: true,
-                                  ),
-                                ),
+                                Expanded(child: primary()),
                                 Container(height: 1, color: IntelliJTheme.borderSubtle),
-                                Expanded(
-                                  child: _buildPane(
-                                    controller: widget.secondaryTab!.controller,
-                                    verticalScroll: widget.secondaryTab!.verticalScroll,
-                                    horizontalScroll: widget.secondaryTab!.horizontalScroll,
-                                    filePath: widget.secondaryTab!.filePath,
-                                    diagnostics: widget.secondaryTab!.diagnostics,
-                                    focusNode: _secondaryFocusNode,
-                                    imeBridge: _secondaryImeBridge,
-                                    isPrimary: false,
-                                  ),
-                                ),
+                                Expanded(child: secondary()),
                               ],
-                            ))
-                      : _buildPane(
-                          controller: _controller,
-                          verticalScroll: _verticalScroll,
-                          horizontalScroll: _horizontalScroll,
-                          filePath: widget.activeFile,
-                          diagnostics: widget.diagnostics,
-                          focusNode: _focusNode,
-                          imeBridge: _imeBridge,
-                          isPrimary: true,
-                        )),
-                ),
-              ],
+                            )),
             ),
-          ),
-        );
-      },
+          ],
+        ),
+      ),
     );
   }
 
   Widget _buildTabBar() {
+    EditorViewWidget.debugTabBarBuilds++;
     return Container(
       height: 34,
       decoration: const BoxDecoration(

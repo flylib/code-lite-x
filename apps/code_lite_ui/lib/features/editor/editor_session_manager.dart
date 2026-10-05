@@ -64,6 +64,13 @@ class EditorSessionManager extends ChangeNotifier {
   StreamSubscription<LspDiagnosticsEvent>? _diagSub;
   final Map<String, Timer> _didChangeTimers = {};
 
+  /// 防抖期间累积的改动(发给语言服务器时一次发出)。
+  final Map<String, List<LspTextChange>> _pendingChanges = {};
+
+  /// 这些文件下次要发全文:整篇重新载入过,或改动太多(多过全文就不划算了)。
+  final Set<String> _needFullSync = {};
+  static const int _maxIncrementalChanges = 200;
+
   /// 自动保存(IntelliJ 风格):停止输入 [autosaveDelay] 后写回磁盘,无需 ⌘S;
   /// 切换标签、关闭标签、应用失去焦点时立即写。写盘后 Commit 窗的改动列表随之刷新。
   bool autosave = true;
@@ -96,15 +103,34 @@ class EditorSessionManager extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 编辑停顿 300ms 再把全文发给语言服务器,避免每个按键都触发一次分析。
-  /// 全文到发送时才取(按键期间不拼接全文)。
+  /// 编辑停顿 300ms 再同步给语言服务器,避免每个按键都触发一次分析。
+  /// 平时只发这段时间的改动(增量);整篇重新载入过、改动太多或服务端还没有这份文档时才发全文。
   void _scheduleDidChange(String path) {
     _didChangeTimers[path]?.cancel();
-    _didChangeTimers[path] = Timer(const Duration(milliseconds: 300), () {
+    _didChangeTimers[path] = Timer(const Duration(milliseconds: 300), () async {
       _didChangeTimers.remove(path);
       final tab = _tabs[path];
-      if (tab != null) client.lspDidChange(path, tab.controller.text);
+      final changes = _pendingChanges.remove(path) ?? const <LspTextChange>[];
+      final full = _needFullSync.remove(path);
+      if (tab == null) return;
+      if (!full && await client.lspDidChangeIncremental(path, changes)) return;
+      client.lspDidChange(path, tab.controller.text);
     });
+  }
+
+  void _queueChange(String path, EditorTextChange c) {
+    if (c.reset) {
+      _pendingChanges.remove(path);
+      _needFullSync.add(path);
+      return;
+    }
+    if (_needFullSync.contains(path)) return;
+    final list = _pendingChanges.putIfAbsent(path, () => []);
+    list.add(LspTextChange(c.start.line, c.start.col, c.end.line, c.end.col, c.text));
+    if (list.length > _maxIncrementalChanges) {
+      _pendingChanges.remove(path);
+      _needFullSync.add(path);
+    }
   }
 
   void _scheduleSave(String path) {
@@ -125,6 +151,8 @@ class EditorSessionManager extends ChangeNotifier {
   void _closeDocument(String path) {
     _saveTimers.remove(path)?.cancel();
     _didChangeTimers.remove(path)?.cancel();
+    _pendingChanges.remove(path);
+    _needFullSync.remove(path);
     _pendingDiagnostics.remove(path);
     client.lspDidClose(path);
   }
@@ -213,12 +241,16 @@ class EditorSessionManager extends ChangeNotifier {
     if (loaded) client.lspDidOpen(path, content);
 
     // 文本就在 controller 里(Dart 是唯一的数据源),这里只需通知 LSP 和界面。
+    // 按键不通知会话层的监听者(否则整个编辑区每敲一个字都重建一遍):
+    // 编辑面板自己订阅 controller;标签上的「已修改」圆点靠下面的 onDirtyChanged。
+    tab.controller.addChangeListener((c) {
+      if (tab.loadError == null) _queueChange(path, c);
+    });
     tab.controller.onTextChanged = () {
       if (tab.loadError == null) {
         _scheduleDidChange(path);
         if (autosave) _scheduleSave(path);
       }
-      notifyListeners();
     };
 
     tab.controller.onDirtyChanged = (_) {
@@ -239,6 +271,9 @@ class EditorSessionManager extends ChangeNotifier {
       final res = await client.fetchFile(path);
       if (res['status'] == 'error') continue; // 文件已被删除:保留编辑器内容,交给用户处理
       tab.controller.setText(res['content'] as String? ?? '');
+      // 直接整篇同步,不必再等防抖
+      _pendingChanges.remove(path);
+      _needFullSync.remove(path);
       client.lspDidChange(path, tab.controller.text);
     }
     notifyListeners();

@@ -71,6 +71,24 @@ class EditorSelection {
 
 enum NavigationDirection { up, down, left, right }
 
+/// 一次文本改动:改动前文档里 [start]..[end] 被换成了 [text]。[reset] 为 true 表示整篇重新载入
+/// ([setText]),此时没有具体范围。依次应用这些改动即可从旧文档得到新文档(LSP 增量同步用)。
+@immutable
+class EditorTextChange {
+  const EditorTextChange(this.start, this.end, this.text) : reset = false;
+
+  const EditorTextChange.reset()
+      : start = EditorPosition.zero,
+        end = EditorPosition.zero,
+        text = '',
+        reset = true;
+
+  final EditorPosition start;
+  final EditorPosition end;
+  final String text;
+  final bool reset;
+}
+
 /// State controller managing text buffer, caret position, selection,
 /// and rich keyboard editing actions for CodeLiteX editor.
 class CodeEditorController extends ChangeNotifier {
@@ -119,6 +137,19 @@ class CodeEditorController extends ChangeNotifier {
   void addTextListener(VoidCallback listener) => _textListeners.add(listener);
 
   void removeTextListener(VoidCallback listener) => _textListeners.remove(listener);
+
+  final List<void Function(EditorTextChange change)> _changeListeners = [];
+
+  /// 逐次改动的监听(带范围)。比 [addTextListener] 先收到通知。
+  void addChangeListener(void Function(EditorTextChange change) listener) => _changeListeners.add(listener);
+
+  void removeChangeListener(void Function(EditorTextChange change) listener) => _changeListeners.remove(listener);
+
+  void _emitChange(EditorTextChange change) {
+    for (final l in List.of(_changeListeners)) {
+      l(change);
+    }
+  }
 
   void _emitTextChanged() {
     onTextChanged?.call();
@@ -280,6 +311,7 @@ class CodeEditorController extends ChangeNotifier {
       _breakGroup = false;
     }
     _syncHistoryState();
+    _emitChange(EditorTextChange(start, end, insertion));
     _emitTextChanged();
     onCursorChanged?.call(_selection.head);
     _resetBlink();
@@ -521,6 +553,7 @@ class CodeEditorController extends ChangeNotifier {
       _isDirty = dirty;
       onDirtyChanged?.call(dirty);
     }
+    _emitChange(const EditorTextChange.reset());
     _resetBlink();
     notifyListeners();
   }

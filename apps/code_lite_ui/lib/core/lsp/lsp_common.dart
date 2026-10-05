@@ -14,6 +14,43 @@ import 'dart:typed_data';
 
 /// 一次诊断推送:[path] 为工作区相对路径(与编辑器 tab 的路径一致),
 /// [diagnostics] 为 LSP 标准 Diagnostic map(`EditorDiagnostic.fromJson` 可直接解析)。
+/// 一处文本改动(LSP 增量同步的 contentChanges 一项):把旧文档里
+/// [startLine]:[startCol]..[endLine]:[endCol] 换成 [text]。行列从 0 起,列按 UTF-16 计。
+/// 一组改动按顺序依次作用,每一项的坐标都相对于前一项应用之后的文档。
+class LspTextChange {
+  const LspTextChange(this.startLine, this.startCol, this.endLine, this.endCol, this.text);
+
+  final int startLine;
+  final int startCol;
+  final int endLine;
+  final int endCol;
+  final String text;
+
+  Map<String, Object?> toJson() => {
+        'range': {
+          'start': {'line': startLine, 'character': startCol},
+          'end': {'line': endLine, 'character': endCol},
+        },
+        'text': text,
+      };
+}
+
+/// 把 [changes] 依次应用到 [text](按行操作,整组只切分 / 拼接一次)。
+String lspApplyChanges(String text, List<LspTextChange> changes) {
+  final lines = text.split('\n');
+  for (final c in changes) {
+    final sl = c.startLine.clamp(0, lines.length - 1);
+    final el = c.endLine.clamp(sl, lines.length - 1);
+    final prefix = lines[sl].substring(0, c.startCol.clamp(0, lines[sl].length));
+    final suffix = lines[el].substring(c.endCol.clamp(0, lines[el].length));
+    final pieces = c.text.split('\n');
+    pieces[0] = '$prefix${pieces[0]}';
+    pieces[pieces.length - 1] = '${pieces.last}$suffix';
+    lines.replaceRange(sl, el + 1, pieces);
+  }
+  return lines.join('\n');
+}
+
 class LspDiagnosticsEvent {
   const LspDiagnosticsEvent(this.path, this.diagnostics);
 

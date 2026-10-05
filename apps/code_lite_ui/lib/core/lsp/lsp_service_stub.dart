@@ -5,7 +5,7 @@ import 'dart:async';
 
 import 'lsp_common.dart';
 
-export 'lsp_common.dart' show LspDiagnosticsEvent;
+export 'lsp_common.dart' show LspDiagnosticsEvent, LspTextChange;
 
 class LspService {
   LspService(
@@ -38,6 +38,9 @@ class LspService {
     _open.add(relPath);
     _check(relPath, text);
   }
+
+  /// web 没有语言服务器:返回 false,调用方改用整篇 [didChange]。
+  Future<bool> didChangeIncremental(String relPath, List<LspTextChange> changes) async => false;
 
   Future<void> didClose(String relPath) async {
     if (_open.remove(relPath)) _emit(relPath, const []);

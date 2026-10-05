@@ -21,6 +21,27 @@ bool cfgOk = false, progressOk = false, unknownOk = false;
 String rootPath = '';
 late List<String> args;
 
+/// --incremental 模式下服务端自己保存的文档内容(按收到的范围逐项应用)。
+final Map<String, List<String>> docs = {};
+
+void applyChange(String uri, Map change) {
+  final range = change['range'] as Map?;
+  final text = change['text'] as String;
+  if (range == null) {
+    docs[uri] = text.split('\n');
+    return;
+  }
+  final lines = docs[uri]!;
+  final s = range['start'] as Map, e = range['end'] as Map;
+  final sl = s['line'] as int, el = e['line'] as int;
+  final prefix = lines[sl].substring(0, s['character'] as int);
+  final suffix = lines[el].substring(e['character'] as int);
+  final pieces = text.split('\n');
+  pieces[0] = '$prefix${pieces[0]}';
+  pieces[pieces.length - 1] = '${pieces.last}$suffix';
+  lines.replaceRange(sl, el + 1, pieces);
+}
+
 void send(Map<String, Object?> m) {
   final body = utf8.encode(jsonEncode({'jsonrpc': '2.0', ...m}));
   // 头与体分两次写,制造跨 chunk 的帧。
@@ -66,7 +87,10 @@ void handle(Map msg) {
       send({
         'id': id,
         'result': {
-          'capabilities': {'textDocumentSync': 1, 'documentSymbolProvider': true},
+          'capabilities': {
+            'textDocumentSync': args.contains('--incremental') ? {'openClose': true, 'change': 2} : 1,
+            'documentSymbolProvider': true,
+          },
           'serverInfo': {'name': 'fake'},
         },
       });
@@ -78,14 +102,25 @@ void handle(Map msg) {
     case 'textDocument/didOpen':
       if (args.contains('--crash-on-open')) exit(3);
       final doc = params['textDocument'] as Map;
+      docs[doc['uri'] as String] = (doc['text'] as String).split('\n');
       publish(doc['uri'] as String, 'echo: ${(doc['text'] as String).split('\n').first}');
       publish(Uri.file('$rootPath/other dir/ü.rs').toString(), 'decoded');
       final resolved = Directory(rootPath).resolveSymbolicLinksSync();
       publish(Uri.file('$resolved/resolved.rs').toString(), 'resolved');
     case 'textDocument/didChange':
       final doc = params['textDocument'] as Map;
-      final text = ((params['contentChanges'] as List).last as Map)['text'] as String;
-      publish(doc['uri'] as String, 'echo: ${text.split('\n').first} v${doc['version']}');
+      final changes = (params['contentChanges'] as List).cast<Map>();
+      if (args.contains('--incremental')) {
+        final uri = doc['uri'] as String;
+        for (final c in changes) {
+          applyChange(uri, c);
+        }
+        final kind = changes.every((c) => c.containsKey('range')) ? 'ranges' : 'full';
+        publish(uri, 'doc v${doc['version']} $kind: ${docs[uri]!.join('\\n')}');
+      } else {
+        final text = changes.last['text'] as String;
+        publish(doc['uri'] as String, 'echo: ${text.split('\n').first} v${doc['version']}');
+      }
     case 'textDocument/documentSymbol':
       send({
         'id': id,
@@ -774,6 +809,37 @@ int main(int argc, char **argv) {
       await lsp.dispose();
       expect(sw.elapsed, lessThan(const Duration(seconds: 8)));
       expect(await _pidAlive(pid), isFalse);
+    }, skip: dart == null ? 'no dart binary found' : false, timeout: const Timeout(Duration(seconds: 60)));
+
+    test('incremental sync: ranges when the server supports it, full text otherwise', () async {
+      for (final incremental in [true, false]) {
+        final lsp = LspService(root.path, serverOverrides: {
+          'rust': [...serverCmd, if (incremental) '--incremental'],
+        });
+        final events = <LspDiagnosticsEvent>[];
+        final sub = lsp.diagnostics.listen(events.add);
+        expect(await lsp.didChangeIncremental('src/x.rs', const [LspTextChange(0, 0, 0, 0, 'x')]), isFalse,
+            reason: '没打开的文档要求调用方改发全文');
+        await lsp.didOpen('src/x.rs', 'fn a() {}\nlet b = 1;\n中文 c');
+        await _waitFor(() async => events, (e) => e.any((x) => x.path == 'src/x.rs'));
+        const changes = [
+          LspTextChange(1, 4, 1, 5, 'beta'), // b → beta
+          LspTextChange(0, 9, 1, 0, ' // joined '), // 合并前两行
+          LspTextChange(1, 2, 1, 3, 'D\nE'), // 中文 c 的 ' ' → 'D\nE'(按 UTF-16 列)
+        ];
+        expect(await lsp.didChangeIncremental('src/x.rs', changes), isTrue);
+        final expected = lspApplyChanges('fn a() {}\nlet b = 1;\n中文 c', changes);
+        expect(expected, 'fn a() {} // joined let beta = 1;\n中文D\nEc');
+        if (incremental) {
+          await _waitFor(() async => events, (e) => e.any((x) => x.diagnostics.any((d) => (d['message'] as String).startsWith('doc v2'))));
+          final msg = events.lastWhere((x) => x.path == 'src/x.rs').diagnostics.single['message'] as String;
+          expect(msg, 'doc v2 ranges: ${expected.replaceAll('\n', '\\n')}', reason: '服务端按范围应用后与编辑器内容一致');
+        } else {
+          await _waitFor(() async => events, (e) => e.any((x) => x.diagnostics.any((d) => d['message'] == 'echo: fn a() {} // joined let beta = 1; v2')));
+        }
+        await lsp.dispose();
+        await sub.cancel();
+      }
     }, skip: dart == null ? 'no dart binary found' : false, timeout: const Timeout(Duration(seconds: 60)));
 
     test('crashing server restarts at most 3 times, then falls back', () async {
