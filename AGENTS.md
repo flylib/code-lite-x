@@ -14,7 +14,7 @@ CodeLiteX 是一款高性能的原生跨平台代码编辑器，内置 Git 管�
 | 模块 / 目录 | 角色 | 技术栈 | 交付产物 | 架构定位 |
 | :--- | :--- | :--- | :--- | :--- |
 | `crates/` | Rust Core 核心引擎 | Rust 2021 (portable-pty, vt100) | `libcodelite.dylib`, `code-lite-app` | PTY 终端(正逐模块迁到 Dart:Git、文件树、全局搜索、LSP、编辑器内核已迁完;无本地数据库) |
-| `apps/code_lite_ui/` | 桌面端图形界面 | Flutter 3.35+ (Dart 3.9) + FFI | macOS / Linux / Windows 桌面 GUI | IntelliJ Darcula 风格编辑器、Git 操作台、全局搜索模态框、交互终端 |
+| `apps/code_lite_ui/` | 桌面端图形界面 | Flutter 3.47+ (Dart 3.13) + FFI;macOS 12+ | macOS / Linux / Windows 桌面 GUI | IntelliJ Darcula 风格编辑器、Git 操作台、全局搜索模态框、交互终端 |
 | `scripts/` | 构建与原生打包 | Bash + cargo + flutter CLI + install_name_tool | `CodeLiteX.app` / `dist/release/macos/` | 自动化独立发布构建、动态库嵌入与 rpath/代码签名修复 |
 
 > [!NOTE]

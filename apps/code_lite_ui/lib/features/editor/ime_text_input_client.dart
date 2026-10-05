@@ -174,6 +174,10 @@ class ImeTextInputBridge implements TextInputClient {
   @override
   void showAutocorrectionPromptRect(int start, int end) {}
 
+  /// Flutter 3.4x 新增:浏览器自动填充时平台把焦点交还输入框。桌面端不会调用,沿用默认实现。
+  @override
+  bool onFocusReceived() => false;
+
   @override
   void didChangeInputControl(TextInputControl? oldControl, TextInputControl? newControl) {}
 
