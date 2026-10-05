@@ -214,6 +214,7 @@ class ResourceIndicator extends StatefulWidget {
 class _ResourceIndicatorState extends State<ResourceIndicator> {
   late final ProcessStatsSampler _sampler = widget.sampler ?? ProcessStatsSampler();
   ResourceSnapshot? _snap;
+  Set<int> _prevPids = const {};
   Timer? _timer;
 
   @override
@@ -231,7 +232,13 @@ class _ResourceIndicatorState extends State<ResourceIndicator> {
 
   void _tick() {
     try {
-      final s = _sampler.sample();
+      final raw = _sampler.sample();
+      // 只算连续两次都在的子进程:git、gh 这类一闪而过的命令不该让数字跳动
+      final pids = {for (final p in raw.processes) p.pid};
+      final s = raw.processes.isEmpty
+          ? raw
+          : ResourceSnapshot([raw.processes.first, ...raw.processes.skip(1).where((p) => _prevPids.contains(p.pid))]);
+      _prevPids = pids;
       if (mounted) setState(() => _snap = s);
     } catch (_) {
       // 采样失败不影响界面
@@ -250,16 +257,17 @@ class _ResourceIndicatorState extends State<ResourceIndicator> {
     final s = _snap;
     if (s == null || s.processes.isEmpty) return const SizedBox.shrink();
     final hasCpu = _sampler.detailed;
-    final label = hasCpu
-        ? 'Mem ${formatBytes(s.totalMemoryBytes)} · CPU ${formatCpu(s.totalCpuPercent)}'
-        : 'Mem ${formatBytes(s.totalMemoryBytes)}';
+    // 标签只显示 IDE 本身;语言服务器(gopls、jdtls……)是独立进程,内存随它自己的 GC 起伏
+    // 上百 MB,算进来数字会来回跳。它们和合计放在悬停提示里。
+    final self = s.processes.first;
+    final label = hasCpu ? 'Mem ${formatBytes(self.memoryBytes)} · CPU ${formatCpu(self.cpuPercent)}' : 'Mem ${formatBytes(self.memoryBytes)}';
     final details = [
       for (final p in s.processes)
-        '${p.pid == s.processes.first.pid ? 'CodeLiteX' : p.name}  ${formatBytes(p.memoryBytes)}${hasCpu ? ' · CPU ${formatCpu(p.cpuPercent)}' : ''}',
+        '${p.pid == self.pid ? 'CodeLiteX' : p.name}  ${formatBytes(p.memoryBytes)}${hasCpu ? ' · CPU ${formatCpu(p.cpuPercent)}' : ''}',
       if (s.processes.length > 1) '合计  ${formatBytes(s.totalMemoryBytes)}${hasCpu ? ' · CPU ${formatCpu(s.totalCpuPercent)}' : ''}',
     ].join('\n');
     return Tooltip(
-      message: '${s.processes.length > 1 ? 'IDE 及其子进程(语言服务器等)\n' : ''}$details',
+      message: '${s.processes.length > 1 ? 'IDE 本身 + 子进程(语言服务器等)\n' : ''}$details',
       waitDuration: const Duration(milliseconds: 400),
       child: Padding(
         padding: const EdgeInsets.only(left: 6),
