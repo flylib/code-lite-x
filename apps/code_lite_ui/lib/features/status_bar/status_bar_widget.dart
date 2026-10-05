@@ -215,7 +215,14 @@ class _ResourceIndicatorState extends State<ResourceIndicator> {
   late final ProcessStatsSampler _sampler = widget.sampler ?? ProcessStatsSampler();
   ResourceSnapshot? _snap;
   Set<int> _prevPids = const {};
+  String? _label;
   Timer? _timer;
+
+  /// IDE 本身最近 [_peakWindow] 次采样的内存。界面每画一帧,渲染器(Impeller)都要临时分配
+  /// 整窗大小的 GPU 帧缓冲(Retina 全屏约 80 MB),停止绘制约一秒后释放 —— 瞬时值因此
+  /// 在两档之间来回跳。标签显示近期峰值,即 IDE 正常绘制时真正需要的量。
+  final List<int> _selfHistory = [];
+  static const int _peakWindow = 15;
 
   @override
   void initState() {
@@ -239,7 +246,14 @@ class _ResourceIndicatorState extends State<ResourceIndicator> {
           ? raw
           : ResourceSnapshot([raw.processes.first, ...raw.processes.skip(1).where((p) => _prevPids.contains(p.pid))]);
       _prevPids = pids;
-      if (mounted) setState(() => _snap = s);
+      if (s.processes.isNotEmpty) {
+        _selfHistory.add(s.processes.first.memoryBytes);
+        if (_selfHistory.length > _peakWindow) _selfHistory.removeAt(0);
+      }
+      _snap = s;
+      // 文字没变就不重建:每次重建都会让整个窗口重画一帧(以及上面说的帧缓冲分配)
+      final label = _labelFor(s);
+      if (label != _label && mounted) setState(() => _label = label);
     } catch (_) {
       // 采样失败不影响界面
     }
@@ -252,32 +266,46 @@ class _ResourceIndicatorState extends State<ResourceIndicator> {
 
   static String formatCpu(double? cpu) => cpu == null ? '—' : (cpu < 10 ? '${cpu.toStringAsFixed(1)}%' : '${cpu.round()}%');
 
+  int get _selfPeak => _selfHistory.fold(0, (a, b) => a > b ? a : b);
+
+  String? _labelFor(ResourceSnapshot s) {
+    if (s.processes.isEmpty) return null;
+    final mem = 'Mem ${formatBytes(_selfPeak)}';
+    return _sampler.detailed ? '$mem · CPU ${formatCpu(s.processes.first.cpuPercent)}' : mem;
+  }
+
   @override
   Widget build(BuildContext context) {
     final s = _snap;
-    if (s == null || s.processes.isEmpty) return const SizedBox.shrink();
+    final label = _label;
+    if (s == null || label == null) return const SizedBox.shrink();
     final hasCpu = _sampler.detailed;
     // 标签只显示 IDE 本身;语言服务器(gopls、jdtls……)是独立进程,内存随它自己的 GC 起伏
     // 上百 MB,算进来数字会来回跳。它们和合计放在悬停提示里。
     final self = s.processes.first;
-    final label = hasCpu ? 'Mem ${formatBytes(self.memoryBytes)} · CPU ${formatCpu(self.cpuPercent)}' : 'Mem ${formatBytes(self.memoryBytes)}';
+    final peak = _selfPeak;
     final details = [
       for (final p in s.processes)
         '${p.pid == self.pid ? 'CodeLiteX' : p.name}  ${formatBytes(p.memoryBytes)}${hasCpu ? ' · CPU ${formatCpu(p.cpuPercent)}' : ''}',
       if (s.processes.length > 1) '合计  ${formatBytes(s.totalMemoryBytes)}${hasCpu ? ' · CPU ${formatCpu(s.totalCpuPercent)}' : ''}',
+      if (peak > self.memoryBytes) 'CodeLiteX 近 30 秒峰值 ${formatBytes(peak)}(界面绘制时的 GPU 帧缓冲,停止绘制后释放)',
     ].join('\n');
-    return Tooltip(
-      message: '${s.processes.length > 1 ? 'IDE 本身 + 子进程(语言服务器等)\n' : ''}$details',
-      waitDuration: const Duration(milliseconds: 400),
-      child: Padding(
-        padding: const EdgeInsets.only(left: 6),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.memory, size: 12, color: IntelliJTheme.textMuted),
-            const SizedBox(width: 4),
-            Text(label, key: const ValueKey('resource-usage'), style: const TextStyle(color: IntelliJTheme.textMuted, fontSize: 10)),
-          ],
+    // 悬停时刷新一次,提示里的数字不会停在上次重建时
+    return MouseRegion(
+      onEnter: (_) => setState(() {}),
+      child: Tooltip(
+        message: '${s.processes.length > 1 ? 'IDE 本身 + 子进程(语言服务器等)\n' : ''}当前占用:\n$details',
+        waitDuration: const Duration(milliseconds: 400),
+        child: Padding(
+          padding: const EdgeInsets.only(left: 6),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.memory, size: 12, color: IntelliJTheme.textMuted),
+              const SizedBox(width: 4),
+              Text(label, key: const ValueKey('resource-usage'), style: const TextStyle(color: IntelliJTheme.textMuted, fontSize: 10)),
+            ],
+          ),
         ),
       ),
     );
@@ -344,8 +372,17 @@ class _LspStatusChipState extends State<LspStatusChip> {
       for (final s in servers) {
         if (s['language'] == widget.group) hit = Map<String, dynamic>.from(s);
       }
-      if (mounted) setState(() => _server = hit);
+      // 状态没变就不重建(每次重建都会重画整个窗口)
+      if (mounted && !_sameServer(hit, _server)) setState(() => _server = hit);
     } catch (_) {}
+  }
+
+  static bool _sameServer(Map<String, dynamic>? a, Map<String, dynamic>? b) {
+    if (a == null || b == null) return a == b;
+    for (final k in const ['state', 'initialized', 'command', 'error', 'source']) {
+      if (a[k] != b[k]) return false;
+    }
+    return true;
   }
 
   @override
