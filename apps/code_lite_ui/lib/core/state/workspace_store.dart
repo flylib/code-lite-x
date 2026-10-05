@@ -225,6 +225,9 @@ class WorkspaceStore extends ChangeNotifier {
   bool isDirty(String path) => _sessions.tabs[path]?.isDirty ?? false;
 
   Future<void> save() => _sessions.saveActiveFile();
+
+  /// 保存指定标签(关闭标签前用)。
+  Future<bool> saveFile(String path) => _sessions.saveFile(path);
   Future<void> undo() => _sessions.undoActive();
   Future<void> redo() => _sessions.redoActive();
 }

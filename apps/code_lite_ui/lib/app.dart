@@ -57,8 +57,12 @@ class _CodeLiteAppState extends State<CodeLiteApp> {
     _sessions = EditorSessionManager(client: _client);
     _workspace = WorkspaceStore(client: _client, sessions: _sessions);
     _workspace.addListener(_onWorkspaceChanged);
+    // 自动保存:应用失去焦点(切到终端 / 浏览器)时立刻把改动写盘,外部工具看到的就是最新内容。
+    _lifecycle = AppLifecycleListener(onInactive: _sessions.saveAll, onHide: _sessions.saveAll);
     _bootstrap();
   }
+
+  late final AppLifecycleListener _lifecycle;
 
   Future<void> _bootstrap() async {
     await _workspace.bootstrap();
@@ -75,6 +79,7 @@ class _CodeLiteAppState extends State<CodeLiteApp> {
 
   @override
   void dispose() {
+    _lifecycle.dispose();
     _workspace.removeListener(_onWorkspaceChanged);
     _gitLog.dispose();
     _prs.dispose();
@@ -416,10 +421,13 @@ class _EditorRegion extends StatelessWidget {
     );
   }
 
-  void _closeTab(BuildContext context, String path) {
+  Future<void> _closeTab(BuildContext context, String path) async {
     if (path.isEmpty) return;
     final workspace = context.workspaceRead;
 
+    // 自动保存:关之前先把还没落盘的改动写掉;只有写不了(文件打开失败等)才询问。
+    if (workspace.isDirty(path) && workspace.sessions.autosave) await workspace.saveFile(path);
+    if (!context.mounted) return;
     if (!workspace.isDirty(path)) {
       workspace.closeTab(path);
       return;
@@ -449,7 +457,7 @@ class _EditorRegion extends StatelessWidget {
           ElevatedButton(
             onPressed: () async {
               Navigator.of(ctx).pop();
-              await workspace.save();
+              await workspace.saveFile(path);
               workspace.closeTab(path, force: true);
             },
             child: const Text('保存'),
@@ -582,7 +590,9 @@ class _AppMenuBar extends StatelessWidget {
   /// 切换项目会丢弃未保存的标签,有脏标签时先确认。
   Future<bool> _confirmDiscard(
       BuildContext context, WorkspaceStore workspace) async {
+    if (workspace.sessions.autosave) await workspace.sessions.saveAll();
     if (!workspace.sessions.hasDirtyTabs) return true;
+    if (!context.mounted) return false;
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(

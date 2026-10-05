@@ -64,6 +64,12 @@ class EditorSessionManager extends ChangeNotifier {
   StreamSubscription<LspDiagnosticsEvent>? _diagSub;
   final Map<String, Timer> _didChangeTimers = {};
 
+  /// 自动保存(IntelliJ 风格):停止输入 [autosaveDelay] 后写回磁盘,无需 ⌘S;
+  /// 切换标签、关闭标签、应用失去焦点时立即写。写盘后 Commit 窗的改动列表随之刷新。
+  bool autosave = true;
+  static const Duration autosaveDelay = Duration(milliseconds: 600);
+  final Map<String, Timer> _saveTimers = {};
+
   /// 诊断来得比标签页早(打开文件后服务器很快推送)时先存在这里,建标签时取用。
   final Map<String, List<EditorDiagnostic>> _pendingDiagnostics = {};
 
@@ -98,7 +104,23 @@ class EditorSessionManager extends ChangeNotifier {
     });
   }
 
+  void _scheduleSave(String path) {
+    _saveTimers[path]?.cancel();
+    _saveTimers[path] = Timer(autosaveDelay, () {
+      _saveTimers.remove(path);
+      saveFile(path);
+    });
+  }
+
+  /// 立即保存所有有改动的标签(切换标签 / 应用失去焦点 / 切换项目前调用)。
+  Future<void> saveAll() async {
+    for (final path in _tabs.keys.toList()) {
+      if (_tabs[path]?.isDirty ?? false) await saveFile(path);
+    }
+  }
+
   void _closeDocument(String path) {
+    _saveTimers.remove(path)?.cancel();
     _didChangeTimers.remove(path)?.cancel();
     _pendingDiagnostics.remove(path);
     client.lspDidClose(path);
@@ -161,6 +183,7 @@ class EditorSessionManager extends ChangeNotifier {
 
   /// Opens a tab or switches to it if already open.
   Future<EditorTabState> openFile(String path, {String? defaultContent}) async {
+    if (autosave && _activePath != path) unawaited(saveAll());
     if (!_tabOrder.contains(path)) {
       _tabOrder.add(path);
     }
@@ -188,7 +211,10 @@ class EditorSessionManager extends ChangeNotifier {
 
     // 文本就在 controller 里(Dart 是唯一的数据源),这里只需通知 LSP 和界面。
     tab.controller.onTextChanged = (newText) {
-      if (tab.loadError == null) _scheduleDidChange(path, newText);
+      if (tab.loadError == null) {
+        _scheduleDidChange(path, newText);
+        if (autosave) _scheduleSave(path);
+      }
       notifyListeners();
     };
 
@@ -238,6 +264,7 @@ class EditorSessionManager extends ChangeNotifier {
 
   /// Selects an already open tab.
   void selectTab(String path) {
+    if (autosave && _activePath != path) unawaited(saveAll());
     if (isSpecialTab(path) && _tabOrder.contains(path) && _activePath != path) {
       _activePath = path;
       notifyListeners();
@@ -286,6 +313,10 @@ class EditorSessionManager extends ChangeNotifier {
 
   /// 丢弃全部标签(切换/关闭项目)。未保存的修改一并丢弃,调用方先确认。
   void closeAll() {
+    for (final t in _saveTimers.values) {
+      t.cancel();
+    }
+    _saveTimers.clear();
     for (final path in _tabs.keys) {
       _closeDocument(path);
     }
@@ -302,16 +333,25 @@ class EditorSessionManager extends ChangeNotifier {
 
   bool get hasDirtyTabs => _tabs.values.any((t) => t.isDirty);
 
-  /// 把当前标签的文本写回磁盘。打开失败的标签拒绝保存(见 [EditorTabState.loadError])。
+  /// 把当前标签的文本写回磁盘。
   Future<bool> saveActiveFile() async {
-    final active = activeTab;
-    if (active == null || active.loadError != null) return false;
+    final path = _activePath;
+    if (path == null) return false;
+    return saveFile(path);
+  }
 
-    final text = active.controller.text;
-    final res = await client.saveFile(active.filePath, text);
+  /// 把 [path] 标签的文本写回磁盘。打开失败的标签拒绝保存(见 [EditorTabState.loadError])。
+  Future<bool> saveFile(String path) async {
+    _saveTimers.remove(path)?.cancel();
+    final tab = _tabs[path];
+    if (tab == null || tab.loadError != null) return false;
+    if (!tab.isDirty) return true;
+
+    final text = tab.controller.text;
+    final res = await client.saveFile(tab.filePath, text);
     if (res['status'] == 'ok') {
       // 保存期间可能又敲了字:只有磁盘内容仍等于当前文本时才算"未修改"。
-      if (active.controller.text == text) active.controller.markSaved();
+      if (_tabs[path] == tab && tab.controller.text == text) tab.controller.markSaved();
       notifyListeners();
       return true;
     }
@@ -330,7 +370,7 @@ class EditorSessionManager extends ChangeNotifier {
   @override
   void dispose() {
     _diagSub?.cancel();
-    for (final t in _didChangeTimers.values) {
+    for (final t in [..._didChangeTimers.values, ..._saveTimers.values]) {
       t.cancel();
     }
     diagnosticsRevision.dispose();
