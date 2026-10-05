@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
+import '../../core/platform/process_stats.dart';
 import '../../core/theme/intellij_theme.dart';
 import '../editor/code_editor_controller.dart';
 import '../editor/editor_view_widget.dart' show isSpecialTabId;
@@ -16,14 +19,12 @@ class StatusBarWidget extends StatelessWidget {
     super.key,
     required this.activeFile,
     required this.diagnostics,
-    required this.branch,
     this.controller,
     this.isSaving = false,
   });
 
   final String activeFile;
   final List<EditorDiagnostic> diagnostics;
-  final String branch;
   final CodeEditorController? controller;
   final bool isSaving;
 
@@ -49,12 +50,8 @@ class StatusBarWidget extends StatelessWidget {
           const _StatusText('UTF-8'),
           const _StatusText('4 spaces'),
           const SizedBox(width: 4),
-          const Icon(Icons.call_split, size: 12, color: IntelliJTheme.gitGreen),
-          const SizedBox(width: 4),
-          Text(
-            branch,
-            style: const TextStyle(color: IntelliJTheme.textMuted, fontSize: 10, fontFamily: 'monospace'),
-          ),
+          // 当前分支已在标题栏显示;这里改为 IDE 的内存 / CPU 占用
+          const ResourceIndicator(),
         ],
       ),
     );
@@ -187,6 +184,85 @@ class _StatusChip extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// 状态栏右下角:IDE(含语言服务器等子进程)当前的内存与 CPU 占用,每 2 秒刷新。
+/// 内存口径与「活动监视器」一致(phys_footprint);悬停显示每个进程的明细。
+class ResourceIndicator extends StatefulWidget {
+  const ResourceIndicator({super.key, this.interval = const Duration(seconds: 2), this.sampler});
+
+  final Duration interval;
+
+  /// 测试可注入。
+  final ProcessStatsSampler? sampler;
+
+  @override
+  State<ResourceIndicator> createState() => _ResourceIndicatorState();
+}
+
+class _ResourceIndicatorState extends State<ResourceIndicator> {
+  late final ProcessStatsSampler _sampler = widget.sampler ?? ProcessStatsSampler();
+  ResourceSnapshot? _snap;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _tick();
+    _timer = Timer.periodic(widget.interval, (_) => _tick());
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  void _tick() {
+    try {
+      final s = _sampler.sample();
+      if (mounted) setState(() => _snap = s);
+    } catch (_) {
+      // 采样失败不影响界面
+    }
+  }
+
+  static String formatBytes(int bytes) {
+    final mb = bytes / 1048576;
+    return mb >= 1024 ? '${(mb / 1024).toStringAsFixed(1)} GB' : '${mb.round()} MB';
+  }
+
+  static String formatCpu(double? cpu) => cpu == null ? '—' : (cpu < 10 ? '${cpu.toStringAsFixed(1)}%' : '${cpu.round()}%');
+
+  @override
+  Widget build(BuildContext context) {
+    final s = _snap;
+    if (s == null || s.processes.isEmpty) return const SizedBox.shrink();
+    final hasCpu = _sampler.detailed;
+    final label = hasCpu
+        ? '内存 ${formatBytes(s.totalMemoryBytes)} · CPU ${formatCpu(s.totalCpuPercent)}'
+        : '内存 ${formatBytes(s.totalMemoryBytes)}';
+    final details = [
+      for (final p in s.processes)
+        '${p.pid == s.processes.first.pid ? 'CodeLiteX' : p.name}  ${formatBytes(p.memoryBytes)}${hasCpu ? ' · CPU ${formatCpu(p.cpuPercent)}' : ''}',
+      if (s.processes.length > 1) '合计  ${formatBytes(s.totalMemoryBytes)}${hasCpu ? ' · CPU ${formatCpu(s.totalCpuPercent)}' : ''}',
+    ].join('\n');
+    return Tooltip(
+      message: '${s.processes.length > 1 ? 'IDE 及其子进程(语言服务器等)\n' : ''}$details',
+      waitDuration: const Duration(milliseconds: 400),
+      child: Padding(
+        padding: const EdgeInsets.only(left: 6),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.memory, size: 12, color: IntelliJTheme.textMuted),
+            const SizedBox(width: 4),
+            Text(label, key: const ValueKey('resource-usage'), style: const TextStyle(color: IntelliJTheme.textMuted, fontSize: 10)),
+          ],
+        ),
       ),
     );
   }

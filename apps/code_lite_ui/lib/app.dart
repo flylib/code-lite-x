@@ -278,7 +278,6 @@ class _Workbench extends StatelessWidget {
                 builder: (context, _) => StatusBarWidget(
                   activeFile: workspace.activeFile,
                   diagnostics: workspace.diagnostics,
-                  branch: 'main',
                   controller: sessions.activeTab?.controller,
                 ),
               ),
