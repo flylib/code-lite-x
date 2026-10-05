@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'core/client/api_client.dart';
 import 'core/state/layout_store.dart';
 import 'core/state/scopes.dart';
+import 'core/plugins/plugin_manager.dart';
 import 'core/state/settings_store.dart';
 import 'core/platform/workspace_io.dart' as io;
 import 'core/state/workspace_store.dart';
@@ -19,6 +20,7 @@ import 'features/editor/code_editor_controller.dart' show EditorPosition;
 import 'features/editor/editor_session_manager.dart';
 import 'features/editor/editor_view_widget.dart';
 import 'features/git/git_log_store.dart';
+import 'features/plugins/plugin_banner.dart';
 import 'features/project_explorer/project_explorer_widget.dart';
 import 'features/pull_requests/pr_diff_tab.dart';
 import 'features/pull_requests/pr_panel.dart';
@@ -52,6 +54,7 @@ class _CodeLiteAppState extends State<CodeLiteApp> {
   late final GitLogStore _gitLog = GitLogStore(_client);
   late final PullRequestsStore _prs = PullRequestsStore(_client);
   late final SettingsStore _settings = SettingsStore(sessions: _sessions);
+  late final PluginManager _plugins = PluginManager(client: _client);
   String? _lastRoot;
 
   @override
@@ -68,6 +71,8 @@ class _CodeLiteAppState extends State<CodeLiteApp> {
   late final AppLifecycleListener _lifecycle;
 
   Future<void> _bootstrap() async {
+    // 先接入已装插件(着色规则、语言服务器启动方式),再打开上次的项目
+    _plugins.load();
     await _settings.load();
     await _workspace.bootstrap();
   }
@@ -88,6 +93,7 @@ class _CodeLiteAppState extends State<CodeLiteApp> {
     _gitLog.dispose();
     _prs.dispose();
     _settings.dispose(); // 先于 _sessions:它监听 sessions.appearance
+    _plugins.dispose();
     _terminals.dispose();
     _client.dispose(); // 关掉语言服务器进程
     _layout.dispose();
@@ -108,7 +114,7 @@ class _CodeLiteAppState extends State<CodeLiteApp> {
           notifier: _workspace,
           child: SessionScope(
             notifier: _sessions,
-            child: _Workbench(client: _client, terminals: _terminals, gitLog: _gitLog, prs: _prs, settings: _settings),
+            child: _Workbench(client: _client, terminals: _terminals, gitLog: _gitLog, prs: _prs, settings: _settings, plugins: _plugins),
           ),
         ),
       ),
@@ -123,6 +129,7 @@ class _Workbench extends StatelessWidget {
     required this.gitLog,
     required this.prs,
     required this.settings,
+    required this.plugins,
   });
 
   final ApiClient client;
@@ -130,6 +137,7 @@ class _Workbench extends StatelessWidget {
   final GitLogStore gitLog;
   final PullRequestsStore prs;
   final SettingsStore settings;
+  final PluginManager plugins;
 
   @override
   Widget build(BuildContext context) {
@@ -139,12 +147,13 @@ class _Workbench extends StatelessWidget {
 
     return _AppMenuBar(
       settings: settings,
+      plugins: plugins,
       child: CallbackShortcuts(
       bindings: <ShortcutActivator, VoidCallback>{
         // macOS 由系统菜单的 ⌘, 处理;其它平台没有菜单栏,用 IntelliJ 的 Ctrl+Alt+S。
         if (defaultTargetPlatform != TargetPlatform.macOS) ...{
-          const SingleActivator(LogicalKeyboardKey.keyS, control: true, alt: true): () => showSettingsDialog(context, settings),
-          const SingleActivator(LogicalKeyboardKey.comma, control: true): () => showSettingsDialog(context, settings),
+          const SingleActivator(LogicalKeyboardKey.keyS, control: true, alt: true): () => showSettingsDialog(context, settings, plugins: plugins),
+          const SingleActivator(LogicalKeyboardKey.comma, control: true): () => showSettingsDialog(context, settings, plugins: plugins),
         },
         const SingleActivator(LogicalKeyboardKey.keyF, meta: true, shift: true): () => _openSearch(context),
         const SingleActivator(LogicalKeyboardKey.keyF, control: true, shift: true): () => _openSearch(context),
@@ -232,7 +241,7 @@ class _Workbench extends StatelessWidget {
                     Expanded(
                       child: Column(
                         children: [
-                          Expanded(child: _EditorRegion(client: client, gitLog: gitLog, prs: prs)),
+                          Expanded(child: _EditorRegion(client: client, gitLog: gitLog, prs: prs, plugins: plugins)),
                           ListenableBuilder(
                             listenable: layout,
                             builder: (context, _) {
@@ -317,11 +326,12 @@ class _Workbench extends StatelessWidget {
 /// 编辑区。只订阅会话层 —— 换标签、分屏会重建这里,
 /// 但项目树、底部日志、右侧面板不动。
 class _EditorRegion extends StatelessWidget {
-  const _EditorRegion({required this.client, required this.gitLog, required this.prs});
+  const _EditorRegion({required this.client, required this.gitLog, required this.prs, required this.plugins});
 
   final ApiClient client;
   final GitLogStore gitLog;
   final PullRequestsStore prs;
+  final PluginManager plugins;
 
   /// PR 差异里「打开本地文件」:[repoPath] 相对仓库根,换算成相对项目的路径(项目可能是仓库的子目录)。
   Future<void> _openPrLocal(BuildContext context, String repoPath, int line) async {
@@ -402,8 +412,9 @@ class _EditorRegion extends StatelessWidget {
     final sessions = context.sessionRead;
     final workspace = context.workspaceRead;
 
+    // 插件变化(装好 / 卸载)要重新着色、显示 / 收起提示条:一并订阅(很少触发)。
     return ListenableBuilder(
-      listenable: sessions,
+      listenable: Listenable.merge([sessions, plugins]),
       builder: (context, _) {
         final active = sessions.activeTab;
 
@@ -413,6 +424,7 @@ class _EditorRegion extends StatelessWidget {
           onShowInHistory: (hash, path) => _showInHistory(context, hash, path),
           specialTabBuilder: (id) => _specialTab(context, id, workspace, sessions),
           specialTabTitle: _specialTitle,
+          bannerBuilder: (path) => PluginBanner(plugins: plugins, filePath: path),
           openTabs: sessions.openPaths,
           activeFile: sessions.activePath ?? '',
           // 有 controller 时编辑器直接读它;这里不传全文,免得每次按键都拼一次。
@@ -490,10 +502,11 @@ class _EditorRegion extends StatelessWidget {
 /// 原生菜单栏(macOS)。只订阅 workspace 的最近项目 / 是否有项目,
 /// 工作台子树作为 `child` 传入,菜单变化时不会重建它。
 class _AppMenuBar extends StatelessWidget {
-  const _AppMenuBar({required this.child, required this.settings});
+  const _AppMenuBar({required this.child, required this.settings, required this.plugins});
 
   final Widget child;
   final SettingsStore settings;
+  final PluginManager plugins;
 
   @override
   Widget build(BuildContext context) {
@@ -515,7 +528,11 @@ class _AppMenuBar extends StatelessWidget {
                 PlatformMenuItem(
                   label: 'Settings…',
                   shortcut: const SingleActivator(LogicalKeyboardKey.comma, meta: true),
-                  onSelected: () => showSettingsDialog(context, settings),
+                  onSelected: () => showSettingsDialog(context, settings, plugins: plugins),
+                ),
+                PlatformMenuItem(
+                  label: 'Plugins…',
+                  onSelected: () => showSettingsDialog(context, settings, plugins: plugins, openPlugins: true),
                 ),
               ]),
               const PlatformMenuItemGroup(members: <PlatformMenuItem>[

@@ -105,21 +105,52 @@ class LanguageSpec {
   String toString() => 'LanguageSpec($id)';
 }
 
-/// 按文件路径识别语言。
+/// 按文件路径识别语言。内置语言之外,插件可以在运行时 [register] 新语言(或覆盖同 id 的定义)。
 class LanguageRegistry {
-  LanguageRegistry(this.languages)
-      : _byExt = {
-          for (final l in languages)
-            for (final e in l.extensions) e: l,
-        },
-        _byName = {
-          for (final l in languages)
-            for (final n in l.fileNames) n.toLowerCase(): l,
-        };
+  LanguageRegistry(List<LanguageSpec> builtin) : _builtin = List.of(builtin) {
+    _rebuild();
+  }
 
-  final List<LanguageSpec> languages;
-  final Map<String, LanguageSpec> _byExt;
-  final Map<String, LanguageSpec> _byName;
+  final List<LanguageSpec> _builtin;
+  final Map<String, LanguageSpec> _plugins = {};
+  final Map<String, LanguageSpec> _byExt = {};
+  final Map<String, LanguageSpec> _byName = {};
+
+  /// 每次注册 / 注销加一(界面据此知道要重新着色)。
+  int revision = 0;
+
+  /// 全部语言(插件贡献的覆盖同 id 的内置定义)。
+  List<LanguageSpec> get languages => [
+        for (final l in _builtin)
+          if (!_plugins.containsKey(l.id)) l,
+        ..._plugins.values,
+      ];
+
+  /// 是否有内置(不靠插件)的定义。
+  bool isBuiltin(String id) => _builtin.any((l) => l.id == id);
+
+  void register(LanguageSpec spec) {
+    _plugins[spec.id] = spec;
+    _rebuild();
+  }
+
+  void unregister(String id) {
+    if (_plugins.remove(id) != null) _rebuild();
+  }
+
+  void _rebuild() {
+    _byExt.clear();
+    _byName.clear();
+    for (final l in languages) {
+      for (final e in l.extensions) {
+        _byExt[e] = l;
+      }
+      for (final n in l.fileNames) {
+        _byName[n.toLowerCase()] = l;
+      }
+    }
+    revision++;
+  }
 
   static const LanguageSpec plainText = LanguageSpec(id: 'plaintext', name: 'Plain Text', mode: SyntaxMode.plain);
 

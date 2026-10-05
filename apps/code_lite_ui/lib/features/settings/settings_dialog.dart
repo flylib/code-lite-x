@@ -1,31 +1,38 @@
 import 'package:flutter/material.dart';
 
+import '../../core/plugins/plugin_manager.dart';
 import '../../core/state/settings_store.dart';
 import '../../core/theme/intellij_theme.dart';
+import '../plugins/plugins_page.dart';
 
 const TextStyle _text = TextStyle(color: IntelliJTheme.textPrimary, fontSize: 13);
 const TextStyle _hint = TextStyle(color: IntelliJTheme.textMuted, fontSize: 12);
 const TextStyle _section = TextStyle(color: IntelliJTheme.textHigh, fontSize: 13, fontWeight: FontWeight.w600);
 
 /// 打开设置(CodeLiteX ▸ Settings…,⌘,)。改动立即生效并写入 ~/.codelitex/settings.json。
-Future<void> showSettingsDialog(BuildContext context, SettingsStore settings) => showDialog<void>(
+Future<void> showSettingsDialog(BuildContext context, SettingsStore settings, {PluginManager? plugins, bool openPlugins = false}) =>
+    showDialog<void>(
       context: context,
-      builder: (_) => SettingsDialog(settings: settings),
+      builder: (_) => SettingsDialog(settings: settings, plugins: plugins, openPlugins: openPlugins),
     );
 
-enum _Page { general, appearance }
+enum _Page { general, appearance, plugins }
 
 class SettingsDialog extends StatefulWidget {
-  const SettingsDialog({super.key, required this.settings});
+  const SettingsDialog({super.key, required this.settings, this.plugins, this.openPlugins = false});
 
   final SettingsStore settings;
+  final PluginManager? plugins;
+
+  /// 直接打开 Plugins 页(菜单 CodeLiteX ▸ Plugins…)。
+  final bool openPlugins;
 
   @override
   State<SettingsDialog> createState() => _SettingsDialogState();
 }
 
 class _SettingsDialogState extends State<SettingsDialog> {
-  _Page _page = _Page.general;
+  late _Page _page = widget.openPlugins && widget.plugins != null ? _Page.plugins : _Page.general;
 
   @override
   Widget build(BuildContext context) {
@@ -76,6 +83,10 @@ class _SettingsDialogState extends State<SettingsDialog> {
                           ),
                           _NavItem(label: 'General', selected: _page == _Page.general, onTap: () => setState(() => _page = _Page.general)),
                           _NavItem(label: 'Appearance', selected: _page == _Page.appearance, onTap: () => setState(() => _page = _Page.appearance)),
+                          if (widget.plugins != null) ...[
+                            const SizedBox(height: 10),
+                            _NavItem(label: 'Plugins', selected: _page == _Page.plugins, onTap: () => setState(() => _page = _Page.plugins)),
+                          ],
                         ],
                       ),
                     ),
@@ -86,6 +97,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
                         children: switch (_page) {
                           _Page.general => _general(),
                           _Page.appearance => _appearance(),
+                          _Page.plugins => [PluginsPage(plugins: widget.plugins!)],
                         },
                       ),
                     ),

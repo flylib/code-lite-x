@@ -5,7 +5,7 @@ import 'dart:async';
 
 import 'lsp_common.dart';
 
-export 'lsp_common.dart' show LspDiagnosticsEvent, LspTextChange;
+export 'lsp_common.dart' show LspDiagnosticsEvent, LspTextChange, LspLaunch, LspLaunchResolver;
 
 class LspService {
   LspService(
@@ -13,7 +13,12 @@ class LspService {
     Map<String, List<String>>? serverOverrides,
     this.requestTimeout = const Duration(seconds: 10),
     this.initializeTimeout = const Duration(seconds: 30),
+    this.jdtlsDataRoot,
+    this.launchResolver,
   });
+
+  final String? jdtlsDataRoot;
+  final LspLaunchResolver? launchResolver;
 
   final String root;
   final Duration requestTimeout;
@@ -38,6 +43,8 @@ class LspService {
     _open.add(relPath);
     _check(relPath, text);
   }
+
+  Future<void> reloadServer(String group) async {}
 
   /// web 没有语言服务器:返回 false,调用方改用整篇 [didChange]。
   Future<bool> didChangeIncremental(String relPath, List<LspTextChange> changes) async => false;

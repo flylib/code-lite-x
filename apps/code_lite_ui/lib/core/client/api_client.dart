@@ -18,7 +18,7 @@ class ApiClient {
   String _root;
   GitService _git;
   GitHubService _github;
-  LspService _lsp;
+  late LspService _lsp;
   StreamSubscription<LspDiagnosticsEvent>? _lspSub;
   final StreamController<LspDiagnosticsEvent> _lspEvents = StreamController.broadcast();
   final StreamController<String> _fileSaved = StreamController.broadcast();
@@ -26,8 +26,8 @@ class ApiClient {
   ApiClient({String initialRoot = '.'})
       : _root = initialRoot,
         _git = GitService(initialRoot),
-        _github = GitHubService(initialRoot),
-        _lsp = LspService(initialRoot) {
+        _github = GitHubService(initialRoot) {
+    _lsp = LspService(initialRoot, launchResolver: _launchFor);
     _ffi.initialize(initialRoot);
     _attachLsp();
   }
@@ -36,6 +36,15 @@ class ApiClient {
 
   /// 当前工作区根目录。
   String get rootPath => _root;
+
+  /// 插件提供的语言服务器启动方式(由 PluginManager 设置);语言服务器每次启动时查询。
+  LspLaunchResolver? lspLaunchResolver;
+
+  // 转发给当前的 resolver:之后再设置 / 更换 resolver 不必重建 LspService。
+  LspLaunch? _launchFor(String group) => lspLaunchResolver?.call(group);
+
+  /// 插件装好 / 卸载之后,让对应分组的语言服务器按新的启动方式重启。
+  Future<void> lspReloadServer(String group) => _lsp.reloadServer(group);
 
   /// GitHub Pull Requests(经本机 gh 命令行);随工作区切换。
   GitHubService get github => _github;
@@ -47,7 +56,7 @@ class ApiClient {
     _github = GitHubService(path);
     // 旧项目的语言服务器在后台关掉,不阻塞切换。
     final oldLsp = _lsp;
-    _lsp = LspService(path);
+    _lsp = LspService(path, launchResolver: _launchFor);
     _attachLsp();
     oldLsp.dispose();
     return _ffi.reinitialize(path);

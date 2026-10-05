@@ -14,6 +14,24 @@ import 'dart:typed_data';
 
 /// 一次诊断推送:[path] 为工作区相对路径(与编辑器 tab 的路径一致),
 /// [diagnostics] 为 LSP 标准 Diagnostic map(`EditorDiagnostic.fromJson` 可直接解析)。
+/// 由插件提供的语言服务器启动方式(变量已展开)。
+class LspLaunch {
+  const LspLaunch(this.argv, {this.env = const {}, this.initializeTimeout, this.requestTimeout, this.source});
+
+  final List<String> argv;
+  final Map<String, String> env;
+  final Duration? initializeTimeout;
+
+  /// 单个请求的超时(jdtls 导入大项目期间首批请求很慢)。
+  final Duration? requestTimeout;
+
+  /// 来源(插件 id),状态里展示用。
+  final String? source;
+}
+
+/// 分组 → 插件提供的启动方式;没有插件接管时返回 null(按系统里找到的命令启动)。
+typedef LspLaunchResolver = LspLaunch? Function(String group);
+
 /// 一处文本改动(LSP 增量同步的 contentChanges 一项):把旧文档里
 /// [startLine]:[startCol]..[endLine]:[endCol] 换成 [text]。行列从 0 起,列按 UTF-16 计。
 /// 一组改动按顺序依次作用,每一项的坐标都相对于前一项应用之后的文档。

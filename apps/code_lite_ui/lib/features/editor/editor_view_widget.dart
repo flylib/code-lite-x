@@ -77,6 +77,9 @@ class EditorViewWidget extends StatefulWidget {
   /// 特殊标签的标题(如 PR Timeline 显示「PR 标题 #号」);返回 null 用默认标题。
   final String? Function(String tabId)? specialTabTitle;
 
+  /// 标签栏与编辑区之间的提示条(比如「安装 Java 插件」);只对普通文件标签显示。
+  final Widget? Function(String filePath)? bannerBuilder;
+
   const EditorViewWidget({
     super.key,
     this.projectName = '',
@@ -84,6 +87,7 @@ class EditorViewWidget extends StatefulWidget {
     this.onShowInHistory,
     this.specialTabBuilder,
     this.specialTabTitle,
+    this.bannerBuilder,
     required this.openTabs,
     required this.activeFile,
     required this.codeContent,
@@ -710,6 +714,8 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
           children: [
             // 1. Tab Bar
             tabBar,
+            if (widget.activeFile.isNotEmpty && !isSpecialTabId(widget.activeFile))
+              widget.bannerBuilder?.call(widget.activeFile) ?? const SizedBox.shrink(),
 
             // 2. Editor Panes(非文件标签换成它自己的内容,比如差异视图)
             Expanded(

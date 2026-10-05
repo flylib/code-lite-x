@@ -57,25 +57,6 @@ const kotlin = LanguageSpec(
   upperCaseIsType: true,
 );
 
-const scala = LanguageSpec(
-  id: 'scala',
-  name: 'Scala',
-  extensions: ['scala', 'sc', 'sbt'],
-  keywords: {
-    'abstract', 'case', 'catch', 'class', 'def', 'do', 'else', 'extends', 'final', 'finally', 'for', 'forSome',
-    'if', 'implicit', 'import', 'lazy', 'match', 'new', 'object', 'override', 'package', 'private', 'protected',
-    'return', 'sealed', 'super', 'this', 'throw', 'trait', 'try', 'type', 'val', 'var', 'while', 'with', 'yield',
-    'given', 'using', 'enum', 'then', 'export',
-  },
-  constants: _nullBool,
-  lineComments: _cLine,
-  blockComments: [('/**', '*/'), ('/*', '*/')],
-  docComment: '/**',
-  strings: [StringRule('"""', '"""', true, false), _dq, _charLit],
-  annotation: '@',
-  upperCaseIsType: true,
-);
-
 const groovy = LanguageSpec(
   id: 'groovy',
   name: 'Groovy',
@@ -375,23 +356,6 @@ const shell = LanguageSpec(
   variableSigil: r'$',
 );
 
-const powershell = LanguageSpec(
-  id: 'powershell',
-  name: 'PowerShell',
-  extensions: ['ps1', 'psm1', 'psd1'],
-  keywords: {
-    'begin', 'break', 'catch', 'class', 'continue', 'data', 'do', 'dynamicparam', 'else', 'elseif', 'end', 'exit',
-    'filter', 'finally', 'for', 'foreach', 'from', 'function', 'if', 'in', 'param', 'process', 'return', 'switch',
-    'throw', 'trap', 'try', 'until', 'using', 'while',
-  },
-  constants: {r'$true', r'$false', r'$null'},
-  lineComments: ['#'],
-  blockComments: [('<#', '#>')],
-  strings: [_dq, _sq],
-  caseInsensitive: true,
-  variableSigil: r'$',
-);
-
 const sql = LanguageSpec(
   id: 'sql',
   name: 'SQL',
@@ -416,40 +380,6 @@ const sql = LanguageSpec(
   blockComments: _cBlock,
   strings: [StringRule("'", "'", true), StringRule('"', '"'), StringRule('`', '`', false, false)],
   caseInsensitive: true,
-);
-
-const lua = LanguageSpec(
-  id: 'lua',
-  name: 'Lua',
-  extensions: ['lua'],
-  shebangs: ['lua'],
-  keywords: {
-    'and', 'break', 'do', 'else', 'elseif', 'end', 'for', 'function', 'goto', 'if', 'in', 'local', 'not', 'or',
-    'repeat', 'return', 'then', 'until', 'while',
-  },
-  constants: {'true', 'false', 'nil'},
-  lineComments: ['--'],
-  blockComments: [('--[[', ']]')],
-  strings: [StringRule('[[', ']]', true, false), _dq, _sq],
-);
-
-const protobuf = LanguageSpec(
-  id: 'proto',
-  name: 'Protocol Buffers',
-  extensions: ['proto'],
-  keywords: {
-    'syntax', 'package', 'import', 'option', 'message', 'enum', 'service', 'rpc', 'returns', 'repeated',
-    'optional', 'required', 'oneof', 'map', 'reserved', 'extend', 'stream', 'public', 'weak',
-  },
-  types: {
-    'double', 'float', 'int32', 'int64', 'uint32', 'uint64', 'sint32', 'sint64', 'fixed32', 'fixed64', 'sfixed32',
-    'sfixed64', 'bool', 'string', 'bytes',
-  },
-  constants: {'true', 'false'},
-  lineComments: _cLine,
-  blockComments: _cBlock,
-  strings: [_dq, _sq],
-  upperCaseIsType: true,
 );
 
 const css = LanguageSpec(
@@ -490,22 +420,6 @@ const makefile = LanguageSpec(
   lineComments: ['#'],
   strings: [_dq, _sq],
   variableSigil: r'$',
-);
-
-const graphql = LanguageSpec(
-  id: 'graphql',
-  name: 'GraphQL',
-  extensions: ['graphql', 'gql'],
-  keywords: {
-    'query', 'mutation', 'subscription', 'fragment', 'on', 'type', 'interface', 'union', 'enum', 'input', 'scalar',
-    'schema', 'extend', 'implements', 'directive',
-  },
-  types: {'Int', 'Float', 'String', 'Boolean', 'ID'},
-  constants: _nullBool,
-  lineComments: ['#'],
-  strings: [StringRule('"""', '"""', true), _dq],
-  annotation: '@',
-  upperCaseIsType: true,
 );
 
 // ---- 非类 C 结构的格式 ----
@@ -583,9 +497,10 @@ const gitignore = LanguageSpec(
 );
 
 /// 全部内置语言。顺序只影响 `#!` 识别时的先后。
+/// 常用语言开箱即用;Scala、Lua、PowerShell、Protobuf、GraphQL 等改由插件提供着色规则(见 builtin_catalog.dart)。
 const List<LanguageSpec> builtinLanguages = [
-  java, kotlin, scala, groovy, dart, rust, go, c, cpp, csharp, swift, javascript, typescript, python, ruby, php,
-  shell, powershell, sql, lua, protobuf, css, dockerfile, makefile, graphql, xml, html, jsonLang, yaml, markdown,
+  java, kotlin, groovy, dart, rust, go, c, cpp, csharp, swift, javascript, typescript, python, ruby, php,
+  shell, sql, css, dockerfile, makefile, xml, html, jsonLang, yaml, markdown,
   toml, ini, properties, gitignore,
 ];
 

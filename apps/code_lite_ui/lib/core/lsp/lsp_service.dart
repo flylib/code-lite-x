@@ -13,7 +13,7 @@ import 'dart:io';
 
 import 'lsp_common.dart';
 
-export 'lsp_common.dart' show LspDiagnosticsEvent, LspTextChange;
+export 'lsp_common.dart' show LspDiagnosticsEvent, LspTextChange, LspLaunch, LspLaunchResolver;
 
 enum _State { starting, running, missing, crashed }
 
@@ -88,6 +88,16 @@ class _Server {
   /// 服务端声明的文档同步方式(initialize 返回的 textDocumentSync):1 整篇,2 增量。
   int syncKind = 1;
 
+  /// 插件提供的启动环境与超时(由插件接管时)。
+  Map<String, String> env = const {};
+  Duration? initializeTimeout;
+  Duration? requestTimeout;
+  String? source;
+  bool get fromPlugin => source != null;
+
+  /// 已被替换(插件装好后重启):它的退出回调不再触发自动重启。
+  bool retired = false;
+
   /// initialize 完成前排队的请求;参数为 null 表示服务端不可用,应以 null 结束。
   final List<void Function(_Proc? proc)> queue = [];
 
@@ -103,6 +113,7 @@ class LspService {
     this.requestTimeout = const Duration(seconds: 10),
     this.initializeTimeout = const Duration(seconds: 30),
     this.jdtlsDataRoot,
+    this.launchResolver,
   }) : _overrides = serverOverrides ?? const {} {
     _resolvedRoot = _tryResolve(root);
   }
@@ -118,6 +129,9 @@ class LspService {
 
   /// jdtls 工作区缓存的父目录;默认 ~/.codelitex/jdtls(测试里换成临时目录)。
   final String? jdtlsDataRoot;
+
+  /// 插件提供的启动方式(优先于系统里找到的命令;serverOverrides 仍最优先)。
+  final LspLaunchResolver? launchResolver;
 
   /// 崩溃后最多重启次数,超过即停在降级模式。
   static const int maxRestarts = 3;
@@ -241,6 +255,24 @@ class LspService {
     return kind is num && kind.toInt() == 2 ? 2 : 1;
   }
 
+  /// 重启某个分组的语言服务器(插件装好 / 卸载 / 启停之后):按新的启动方式重新拉起,
+  /// 并为该分组已打开的文档重放 didOpen;没有可用服务端时这些文档转入降级诊断。
+  Future<void> reloadServer(String group) async {
+    if (_disposed) return;
+    final old = _servers.remove(group);
+    if (old != null) {
+      old.retired = true;
+      await _shutdown(old);
+    }
+    _Server? server;
+    for (final e in _docs.entries) {
+      final lang = e.value.languageId;
+      if (lang == null || lspServerGroupFor(lang) != group) continue;
+      server ??= _serverFor(lang);
+      if (server == null || server.fallback) _emitFallback(e.key, e.value.text, lang);
+    }
+  }
+
   Future<void> didClose(String relPath) async {
     try {
       if (_disposed) return;
@@ -326,6 +358,7 @@ class LspService {
           },
           'initialized': s.ready != null,
           'restarts': s.restarts,
+          if (s.source != null) 'source': s.source,
           if (proc != null && !proc.exited) 'pid': proc.process.pid,
           if (s.lastError != null) 'error': s.lastError,
         });
@@ -385,6 +418,17 @@ class LspService {
     if (existing != null) return existing;
     final server = _Server(group);
     _servers[group] = server;
+    final launch = _overrides.isEmpty ? launchResolver?.call(group) : null;
+    if (launch != null && launch.argv.isNotEmpty && _findExecutable(launch.argv.first) != null) {
+      server
+        ..argv = launch.argv
+        ..env = launch.env
+        ..initializeTimeout = launch.initializeTimeout
+        ..requestTimeout = launch.requestTimeout
+        ..source = launch.source ?? 'plugin';
+      unawaited(_start(server));
+      return server;
+    }
     final argv = _resolveCommand(group);
     if (argv == null) {
       server.state = _State.missing;
@@ -402,9 +446,9 @@ class LspService {
     server.state = _State.starting;
     final Process process;
     try {
-      final env = <String, String>{'PATH': _searchDirs().join(Platform.isWindows ? ';' : ':')};
+      final env = <String, String>{'PATH': _searchDirs().join(Platform.isWindows ? ';' : ':'), ...server.env};
       var argv = server.argv;
-      if (server.group == 'java') {
+      if (server.group == 'java' && !server.fromPlugin) {
         // jdtls 需要 Java 21+ 运行;找不到时交给它自己报错(会进入降级)。
         final javaHome = findJavaHome(minVersion: 21);
         if (javaHome != null) {
@@ -457,7 +501,7 @@ class LspService {
     unawaited(process.exitCode.then((code) => _onExit(server, proc, code)));
 
     // jdtls 首次打开大 Maven / Gradle 项目要先建索引,initialize 应答明显更慢。
-    final timeout = server.group == 'java' ? const Duration(minutes: 3) : initializeTimeout;
+    final timeout = server.initializeTimeout ?? (server.group == 'java' ? const Duration(minutes: 3) : initializeTimeout);
     final result = await proc.request('initialize', _initializeParams(), timeout);
     if (_disposed || server.proc != proc || proc.exited) return; // 退出由 _onExit 处理
     if (result is! Map) {
@@ -488,7 +532,7 @@ class LspService {
   void _onExit(_Server server, _Proc proc, int code) {
     proc.exited = true;
     proc.failPending();
-    if (_disposed || server.proc != proc || server.fallback) return;
+    if (_disposed || server.retired || server.proc != proc || server.fallback) return;
     final tail = proc.stderrTail.isEmpty ? '' : ': ${proc.stderrTail.last}';
     server.lastError = 'exited with code $code$tail';
     // rustup 代理在组件未安装时以错误退出:本质是「没装」,不必反复重启。
@@ -501,7 +545,7 @@ class LspService {
   }
 
   void _onCrash(_Server server) {
-    if (_disposed) return;
+    if (_disposed || server.retired) return;
     server.restarts++;
     if (server.restarts > maxRestarts) {
       server.state = _State.crashed;
@@ -542,7 +586,7 @@ class LspService {
         if (!c.isCompleted) c.complete(null);
         return;
       }
-      proc.request(method, params, requestTimeout).then((r) {
+      proc.request(method, params, server.requestTimeout ?? requestTimeout).then((r) {
         if (!c.isCompleted) c.complete(r);
       });
     }
@@ -553,7 +597,7 @@ class LspService {
     } else {
       server.queue.add(op);
     }
-    return c.future.timeout(requestTimeout, onTimeout: () => null);
+    return c.future.timeout(server.requestTimeout ?? requestTimeout, onTimeout: () => null);
   }
 
   void _sendDidOpen(_Proc proc, String relPath, _Doc doc) {
@@ -749,7 +793,17 @@ class LspService {
   /// 搜索目录:PATH 之外补上常见安装位置。Finder 启动的 macOS app 的 PATH 只有 /usr/bin:/bin:/usr/sbin:/sbin,
   /// 只靠 PATH 会找不到 cargo/homebrew/go/nvm 装的服务端。这份目录列表同时作为子进程的 PATH,
   /// 让 `#!/usr/bin/env node` 之类的脚本型服务端也能找到解释器。
-  List<String> _searchDirs() {
+  /// 找可执行文件用的目录:PATH 之外补上常见安装位置(插件安装器也用它找 go / npm 等)。
+  static List<String> searchDirs() => _searchDirsImpl();
+
+  /// 在 [searchDirs] 里找命令;传入路径时检查文件是否存在。
+  static String? findExecutable(String name) => _findExecutableImpl(name);
+
+  List<String> _searchDirs() => _searchDirsImpl();
+
+  String? _findExecutable(String name) => _findExecutableImpl(name);
+
+  static List<String> _searchDirsImpl() {
     final env = Platform.environment;
     final home = env['HOME'] ?? env['USERPROFILE'] ?? '';
     final sep = Platform.isWindows ? ';' : ':';
@@ -863,13 +917,13 @@ class LspService {
     ];
   }
 
-  String? _findExecutable(String name) {
+  static String? _findExecutableImpl(String name) {
     try {
       if (name.contains('/') || name.contains('\\')) {
         return File(name).existsSync() ? name : null;
       }
       final exts = Platform.isWindows ? const ['.exe', '.cmd', '.bat', ''] : const [''];
-      for (final dir in _searchDirs()) {
+      for (final dir in _searchDirsImpl()) {
         for (final ext in exts) {
           final candidate = '$dir${Platform.pathSeparator}$name$ext';
           final type = FileSystemEntity.typeSync(candidate);

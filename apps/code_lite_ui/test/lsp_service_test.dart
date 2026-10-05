@@ -868,6 +868,28 @@ int main(int argc, char **argv) {
       await sub.cancel();
     }, skip: dart == null ? 'no dart binary found' : false, timeout: const Timeout(Duration(seconds: 60)));
 
+    test('plugin launch: resolver supplies the command; reloadServer switches the running server', () async {
+      var launch = LspLaunch(serverCmd, source: 'plugin.one');
+      final lsp = LspService(root.path, launchResolver: (g) => g == 'rust' ? launch : null);
+      final events = <LspDiagnosticsEvent>[];
+      final sub = lsp.diagnostics.listen(events.add);
+      await lsp.didOpen('src/p.rs', 'first\n');
+      final st1 = await _waitFor(() => _serverStatus(lsp), (s) => s['initialized'] == true);
+      expect(st1['source'], 'plugin.one');
+      final pid1 = st1['pid'] as int;
+      await _waitFor(() async => events, (e) => e.any((x) => x.path == 'src/p.rs'));
+      final before = events.where((x) => x.path == 'src/p.rs').length;
+
+      launch = LspLaunch([...serverCmd, '--incremental'], source: 'plugin.two');
+      await lsp.reloadServer('rust');
+      final st2 = await _waitFor(() => _serverStatus(lsp), (s) => s['initialized'] == true && s['source'] == 'plugin.two');
+      expect(st2['pid'], isNot(pid1));
+      expect(await _pidAlive(pid1), isFalse, reason: '旧进程已停,也不会被自动重启');
+      await _waitFor(() async => events, (e) => e.where((x) => x.path == 'src/p.rs').length > before);
+      await lsp.dispose();
+      await sub.cancel();
+    }, skip: dart == null ? 'no dart binary found' : false, timeout: const Timeout(Duration(seconds: 60)));
+
     test('javaMajorVersion reads the JDK release file', () {
       final jdk = Directory('${tmp.path}/fake-jdk')..createSync();
       File('${jdk.path}/bin/java')
