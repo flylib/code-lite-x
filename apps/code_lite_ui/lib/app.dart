@@ -415,7 +415,8 @@ class _EditorRegion extends StatelessWidget {
           specialTabTitle: _specialTitle,
           openTabs: sessions.openPaths,
           activeFile: sessions.activePath ?? '',
-          codeContent: active?.controller.text ?? '',
+          // 有 controller 时编辑器直接读它;这里不传全文,免得每次按键都拼一次。
+          codeContent: '',
           activeSymbol: workspace.activeSymbol,
           diagnostics: active?.diagnostics ?? const [],
           controller: active?.controller,
@@ -423,7 +424,6 @@ class _EditorRegion extends StatelessWidget {
           horizontalScroll: active?.horizontalScroll,
           onSelectTab: workspace.openFile,
           onCloseTab: (path) => _closeTab(context, path),
-          onCodeChanged: (_) {},
           onSave: workspace.save,
           isTabDirty: workspace.isDirty,
           apiClient: client,

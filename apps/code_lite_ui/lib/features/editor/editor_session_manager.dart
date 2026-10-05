@@ -97,11 +97,13 @@ class EditorSessionManager extends ChangeNotifier {
   }
 
   /// 编辑停顿 300ms 再把全文发给语言服务器,避免每个按键都触发一次分析。
-  void _scheduleDidChange(String path, String text) {
+  /// 全文到发送时才取(按键期间不拼接全文)。
+  void _scheduleDidChange(String path) {
     _didChangeTimers[path]?.cancel();
     _didChangeTimers[path] = Timer(const Duration(milliseconds: 300), () {
       _didChangeTimers.remove(path);
-      client.lspDidChange(path, text);
+      final tab = _tabs[path];
+      if (tab != null) client.lspDidChange(path, tab.controller.text);
     });
   }
 
@@ -211,9 +213,9 @@ class EditorSessionManager extends ChangeNotifier {
     if (loaded) client.lspDidOpen(path, content);
 
     // 文本就在 controller 里(Dart 是唯一的数据源),这里只需通知 LSP 和界面。
-    tab.controller.onTextChanged = (newText) {
+    tab.controller.onTextChanged = () {
       if (tab.loadError == null) {
-        _scheduleDidChange(path, newText);
+        _scheduleDidChange(path);
         if (autosave) _scheduleSave(path);
       }
       notifyListeners();

@@ -155,7 +155,7 @@ void main() {
 
     test('undo/redo notify text listeners without recording new history', () {
       final seen = <String>[];
-      c.addTextListener(seen.add);
+      c.addTextListener(() => seen.add(c.text));
       c.setCursor(const EditorPosition(0, 3));
       type(c, 'Z');
       c.undo();

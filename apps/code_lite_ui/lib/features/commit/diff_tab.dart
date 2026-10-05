@@ -75,7 +75,7 @@ class _DiffTabState extends State<DiffTab> {
     super.dispose();
   }
 
-  void _onLiveText(String _) {
+  void _onLiveText() {
     _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 300), () => _recompute(_live?.text));
   }

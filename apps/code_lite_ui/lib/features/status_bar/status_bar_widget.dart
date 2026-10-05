@@ -44,7 +44,7 @@ class StatusBarWidget extends StatelessWidget {
           _buildCaretPosition(),
           // 语法引擎识别出的文件类型(按扩展名 / 文件名 / #! 首行)
           if (activeFile.isNotEmpty && !isSpecialTabId(activeFile))
-            _StatusText(languages.detect(activeFile, firstLine: controller?.lines.firstOrNull).name),
+            _StatusText(languages.detect(activeFile, firstLine: controller?.lineAt(0)).name),
           const _StatusText('LF'),
           const _StatusText('UTF-8'),
           const _StatusText('4 spaces'),

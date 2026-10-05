@@ -38,7 +38,8 @@ class EditorViewWidget extends StatefulWidget {
   final List<EditorDiagnostic> diagnostics;
   final ValueChanged<String> onSelectTab;
   final ValueChanged<String> onCloseTab;
-  final ValueChanged<String> onCodeChanged;
+  /// 文本变了。传了它就会在每次按键时拼一次全文,大文件里能不传就不传。
+  final ValueChanged<String>? onCodeChanged;
 
   final CodeEditorController? controller;
   final ScrollController? verticalScroll;
@@ -86,7 +87,7 @@ class EditorViewWidget extends StatefulWidget {
     this.diagnostics = const [],
     required this.onSelectTab,
     required this.onCloseTab,
-    required this.onCodeChanged,
+    this.onCodeChanged,
     this.controller,
     this.verticalScroll,
     this.horizontalScroll,
@@ -219,8 +220,8 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
     _controller.addTextListener(_onControllerText);
   }
 
-  void _onControllerText(String newText) {
-    widget.onCodeChanged(newText);
+  void _onControllerText() {
+    widget.onCodeChanged?.call(_controller.text);
     _imeBridge.syncState();
   }
 
@@ -269,11 +270,11 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
 
   /// 代码区宽度(横向滚动长度):按最长一行估算 —— 全角字符算两格、Tab 算四格。
   /// 不逐行排版(那正是要避免的整文件开销);同一版文本只算一次。
-  final Map<CodeEditorController, (String, double)> _widthCache = {};
+  final Map<CodeEditorController, (int, double)> _widthCache = {};
 
   double _contentWidth(CodeEditorController controller, List<String> lines) {
     final cached = _widthCache[controller];
-    if (cached != null && identical(cached.$1, controller.text)) return cached.$2;
+    if (cached != null && cached.$1 == controller.version) return cached.$2;
     var widest = 0;
     for (final line in lines) {
       if (line.length * 4 <= widest) continue; // 全是 Tab 也超不过当前最宽:跳过
@@ -292,7 +293,7 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
     }
     final width = widest * _charWidth + 2 * _padH + 48;
     if (_widthCache.length > 4) _widthCache.clear();
-    _widthCache[controller] = (controller.text, width);
+    _widthCache[controller] = (controller.version, width);
     return width;
   }
 
@@ -363,9 +364,9 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
       if (_ownsController) _controller.dispose();
       _initController();
       _imeBridge = ImeTextInputBridge(controller: _controller, focusNode: _focusNode);
-    } else if (widget.codeContent != oldWidget.codeContent &&
-        widget.codeContent != _controller.text &&
-        _ownsController) {
+    } else if (_ownsController &&
+        widget.codeContent != oldWidget.codeContent &&
+        widget.codeContent != _controller.text) {
       _controller.setText(widget.codeContent, markDirty: false);
     }
 
@@ -1414,7 +1415,7 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
       return;
     }
     final session = _BlameSession();
-    session.listener = (_) {
+    session.listener = () {
       session.timer?.cancel();
       session.timer = Timer(const Duration(milliseconds: 600), () => _loadBlame(controller, filePath, session));
     };
@@ -1789,7 +1790,7 @@ class _BlameSession {
   BlameData? data;
   bool loading = false;
   Timer? timer;
-  void Function(String)? listener;
+  VoidCallback? listener;
 
   void dispose(CodeEditorController controller) {
     timer?.cancel();

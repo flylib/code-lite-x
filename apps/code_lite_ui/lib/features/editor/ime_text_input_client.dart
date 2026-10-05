@@ -52,40 +52,46 @@ class ImeTextInputBridge implements TextInputClient {
     _syncFromController();
   }
 
+  /// 发给输入法的「窗口」:光标 / 选区所在的那几行(不是整个文件)。
+  /// 以前每次按键都把全文作为编辑值发给系统输入法,大文件里这一步就要拼接并传输几 MB。
+  int _windowStartLine = 0;
+
   void _syncFromController() {
-    final text = controller.text;
-    final cur = controller.cursorPosition;
+    final sel = controller.selection;
+    final first = sel.start.line;
+    final last = sel.end.line;
+    _windowStartLine = first;
+    final text = first == last
+        ? controller.lineAt(first)
+        : [for (var i = first; i <= last; i++) controller.lineAt(i)].join('\n');
 
-    // Convert line/col to 1D index
-    int offset = 0;
-    for (int i = 0; i < cur.line && i < controller.lines.length; i++) {
-      offset += controller.lines[i].length + 1; // +1 for '\n'
-    }
-    if (cur.line < controller.lines.length) {
-      offset += cur.col.clamp(0, controller.lines[cur.line].length);
-    }
-    offset = offset.clamp(0, text.length);
-
-    int anchorOffset = offset;
-    if (controller.hasSelection) {
-      final anchor = controller.selection.anchor;
-      anchorOffset = 0;
-      for (int i = 0; i < anchor.line && i < controller.lines.length; i++) {
-        anchorOffset += controller.lines[i].length + 1;
+    int offsetOf(EditorPosition p) {
+      var o = 0;
+      for (var i = first; i < p.line; i++) {
+        o += controller.lineAt(i).length + 1; // +1 for '\n'
       }
-      if (anchor.line < controller.lines.length) {
-        anchorOffset += anchor.col.clamp(0, controller.lines[anchor.line].length);
-      }
-      anchorOffset = anchorOffset.clamp(0, text.length);
+      return (o + p.col).clamp(0, text.length);
     }
 
+    final composing = controller.composingRange;
     _currentValue = TextEditingValue(
       text: text,
-      selection: TextSelection(baseOffset: anchorOffset, extentOffset: offset),
-      composing: controller.composingRange,
+      selection: TextSelection(baseOffset: offsetOf(sel.anchor), extentOffset: offsetOf(sel.head)),
+      composing: composing.isValid && composing.end <= text.length ? composing : TextRange.empty,
     );
 
     _connection?.setEditingState(_currentValue);
+  }
+
+  /// 窗口内偏移 → 文档位置。
+  EditorPosition _positionInWindow(int offset) {
+    var line = _windowStartLine;
+    var rest = offset;
+    while (line < controller.lineCount - 1 && rest > controller.lineAt(line).length) {
+      rest -= controller.lineAt(line).length + 1;
+      line++;
+    }
+    return EditorPosition(line, rest.clamp(0, controller.lineAt(line).length));
   }
 
   @override
@@ -102,55 +108,31 @@ class ImeTextInputBridge implements TextInputClient {
       controller.setComposingRange(TextRange.empty);
     }
 
-    // If text changed, detect insertion or replacement from IME
-    if (value.text != _currentValue.text) {
-      // If previous had selection and now replaced
-      if (_currentValue.selection.isValid && !_currentValue.selection.isCollapsed) {
-        final start = _currentValue.selection.start;
-        final end = _currentValue.selection.end;
-        final inserted = value.text.length >= (start + (value.text.length - (_currentValue.text.length - (end - start))))
-            ? value.text.substring(start, value.text.length - (_currentValue.text.length - end))
-            : '';
-        if (inserted.isNotEmpty) {
-          controller.insertText(inserted);
-        } else {
-          controller.replaceAllText(value.text);
-        }
-      } else {
-        // Delta text diff
-        final oldText = _currentValue.text;
-        final newText = value.text;
-
-        int prefixLen = 0;
-        while (prefixLen < oldText.length &&
-            prefixLen < newText.length &&
-            oldText.codeUnitAt(prefixLen) == newText.codeUnitAt(prefixLen)) {
-          prefixLen++;
-        }
-
-        int suffixLen = 0;
-        while (suffixLen < (oldText.length - prefixLen) &&
-            suffixLen < (newText.length - prefixLen) &&
-            oldText.codeUnitAt(oldText.length - 1 - suffixLen) ==
-                newText.codeUnitAt(newText.length - 1 - suffixLen)) {
-          suffixLen++;
-        }
-
-        final inserted = newText.substring(prefixLen, newText.length - suffixLen);
-        final deletedCount = oldText.length - prefixLen - suffixLen;
-
-        if (deletedCount > 0) {
-          for (int i = 0; i < deletedCount; i++) {
-            controller.deleteBackward();
-          }
-        }
-        if (inserted.isNotEmpty) {
-          controller.insertText(inserted);
-        }
-      }
+    final oldText = _currentValue.text;
+    final newText = value.text;
+    if (newText == oldText) {
+      _currentValue = value;
+      return;
     }
 
-    _currentValue = value;
+    // 输入法改动的是窗口里的一段:取公共前后缀,一次替换到文档里。
+    var prefixLen = 0;
+    while (prefixLen < oldText.length &&
+        prefixLen < newText.length &&
+        oldText.codeUnitAt(prefixLen) == newText.codeUnitAt(prefixLen)) {
+      prefixLen++;
+    }
+    var suffixLen = 0;
+    while (suffixLen < (oldText.length - prefixLen) &&
+        suffixLen < (newText.length - prefixLen) &&
+        oldText.codeUnitAt(oldText.length - 1 - suffixLen) == newText.codeUnitAt(newText.length - 1 - suffixLen)) {
+      suffixLen++;
+    }
+    final start = _positionInWindow(prefixLen);
+    final end = _positionInWindow(oldText.length - suffixLen);
+    controller.replaceRange(start, end, newText.substring(prefixLen, newText.length - suffixLen));
+    // 以文档为准重新生成窗口(换行后窗口会移到新行),保证下次比对的基准一致。
+    _syncFromController();
   }
 
   @override
