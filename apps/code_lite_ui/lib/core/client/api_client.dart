@@ -21,6 +21,7 @@ class ApiClient {
   LspService _lsp;
   StreamSubscription<LspDiagnosticsEvent>? _lspSub;
   final StreamController<LspDiagnosticsEvent> _lspEvents = StreamController.broadcast();
+  final StreamController<String> _fileSaved = StreamController.broadcast();
 
   ApiClient({String initialRoot = '.'})
       : _root = initialRoot,
@@ -72,8 +73,16 @@ class ApiClient {
     };
   }
 
-  /// 把编辑器里的文本写回磁盘(原子写入)。
-  Future<Map<String, dynamic>> saveFile(String path, String content) => fs.writeTextFile(_root, path, content);
+  /// 把编辑器里的文本写回磁盘(原子写入)。成功后经 [onFileSaved] 广播该路径。
+  Future<Map<String, dynamic>> saveFile(String path, String content) async {
+    final res = await fs.writeTextFile(_root, path, content);
+    if (res['status'] == 'ok' && !_fileSaved.isClosed) _fileSaved.add(path);
+    return res;
+  }
+
+  /// 有文件写回了磁盘(编辑器保存、差异视图「>>」恢复):Commit 窗的改动列表、
+  /// 行号栏的改动标记据此刷新。参数是相对项目的路径。
+  Stream<String> get onFileSaved => _fileSaved.stream;
 
   // ---------------------------------------------------------------------------
   // LSP:纯 Dart 客户端(LspService),按语言拉起 rust-analyzer / gopls / dart 等;
@@ -104,6 +113,8 @@ class ApiClient {
     await _lspSub?.cancel();
     await _lsp.dispose();
     await _lspEvents.close();
+    // 不等它:close 的 future 要等所有监听者收完事件,监听者已卸载时会一直挂着。
+    unawaited(_fileSaved.close());
   }
 
   /// Searches the workspace(纯 Dart,后台 isolate,不卡界面)。

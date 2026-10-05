@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:code_lite_ui/core/client/api_client.dart';
@@ -181,7 +182,7 @@ void main() {
       await tester.runAsync(client.dispose);
     });
 
-    testWidgets('DiffTab >> edits the open editor buffer (undoable) instead of the disk', (tester) async {
+    testWidgets('DiffTab >> on an open file edits the buffer (undoable) and saves it', (tester) async {
       write('src/a.txt', 'one\nTWO\nthree\n');
       final client = ApiClient(initialRoot: repo.path);
       final ctrl = CodeEditorController(initialText: 'one\nTWO\nthree\n');
@@ -201,12 +202,24 @@ void main() {
           await tester.pump();
         }
       });
-      await tester.tap(find.byTooltip('恢复为 HEAD 版本'));
-      await tester.pump();
+      final saved = <String>[];
+      late StreamSubscription<String> sub;
+      await tester.runAsync(() async {
+        sub = client.onFileSaved.listen(saved.add);
+        await tester.tap(find.byTooltip('恢复为 HEAD 版本'));
+        for (var i = 0; i < 20; i++) {
+          await Future<void>.delayed(const Duration(milliseconds: 30));
+          await tester.pump();
+        }
+      });
       expect(ctrl.text, 'one\ntwo\nthree\n');
-      expect(File('${repo.path}/src/a.txt').readAsStringSync(), 'one\nTWO\nthree\n', reason: '磁盘不动,由用户保存');
+      expect(File('${repo.path}/src/a.txt').readAsStringSync(), 'one\ntwo\nthree\n', reason: '与 IntelliJ 一样直接存盘');
+      expect(ctrl.isDirty, isFalse);
+      expect(saved, ['src/a.txt']);
       expect(ctrl.undo(), isTrue);
       expect(ctrl.text, 'one\nTWO\nthree\n');
+      expect(ctrl.isDirty, isTrue, reason: '撤销后与磁盘不一致');
+      await tester.runAsync(sub.cancel);
       await tester.pumpWidget(const SizedBox());
       ctrl.dispose();
       await tester.runAsync(client.dispose);
@@ -271,6 +284,39 @@ void main() {
         }
       });
       expect(find.text('没有 stash'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+      await tester.runAsync(client.dispose);
+    });
+
+    testWidgets('CommitPanel drops a file once it is saved back to the HEAD content', (tester) async {
+      write('src/a.txt', 'changed\n');
+      final client = ApiClient(initialRoot: repo.path);
+      await tester.binding.setSurfaceSize(const Size(400, 700));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      Future<void> settle(bool Function() done) async {
+        await tester.runAsync(() async {
+          for (var i = 0; i < 60 && !done(); i++) {
+            await Future<void>.delayed(const Duration(milliseconds: 50));
+            await tester.pump();
+          }
+        });
+      }
+
+      await tester.runAsync(() async {
+        await tester.pumpWidget(MaterialApp(
+          home: Scaffold(
+            body: CommitPanel(client: client, onOpenDiff: (_) {}, onOpenFile: (_) {}, onCommitted: () {}),
+          ),
+        ));
+      });
+      final a = find.textContaining('a.txt', findRichText: true);
+      await settle(() => a.evaluate().isNotEmpty);
+      expect(a, findsOneWidget);
+
+      // 编辑器保存 / 「>>」恢复都走 saveFile:内容回到 HEAD 后文件应自动从 Changes 消失。
+      await tester.runAsync(() => client.saveFile('src/a.txt', 'one\ntwo\nthree\n'));
+      await settle(() => a.evaluate().isEmpty);
+      expect(a, findsNothing);
       await tester.pumpWidget(const SizedBox());
       await tester.runAsync(client.dispose);
     });

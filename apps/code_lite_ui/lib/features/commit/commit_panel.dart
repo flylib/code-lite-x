@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -52,16 +54,32 @@ class _CommitPanelState extends State<CommitPanel> {
   bool _amend = false;
   bool _committing = false;
 
+  StreamSubscription<String>? _savedSub;
+  AppLifecycleListener? _lifecycle;
+  Timer? _refreshDebounce;
+
   @override
   void initState() {
     super.initState();
     _refresh();
+    // 文件保存 / 「>>」恢复后改动列表要跟着变;切回应用时也刷新一次(终端里改的文件)。
+    _savedSub = widget.client.onFileSaved.listen((_) => _scheduleRefresh());
+    _lifecycle = AppLifecycleListener(onResume: _scheduleRefresh);
   }
 
   @override
   void dispose() {
+    _savedSub?.cancel();
+    _lifecycle?.dispose();
+    _refreshDebounce?.cancel();
     _message.dispose();
     super.dispose();
+  }
+
+  /// 连续保存多个文件时合并成一次 git status。
+  void _scheduleRefresh() {
+    _refreshDebounce?.cancel();
+    _refreshDebounce = Timer(const Duration(milliseconds: 250), _refresh);
   }
 
   Future<void> _refresh() async {

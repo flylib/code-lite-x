@@ -167,7 +167,13 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
 
     _initSecondaryBridge();
     _fetchDiffHunks();
+    // 保存后行号栏的改动标记(相对 HEAD)要跟着更新。
+    _savedSub = widget.apiClient?.onFileSaved.listen((path) {
+      if (path == widget.activeFile) _fetchDiffHunks();
+    });
   }
+
+  StreamSubscription<String>? _savedSub;
 
   void _initSecondaryBridge() {
     if (widget.secondaryTab != null) {
@@ -318,6 +324,7 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
 
   @override
   void dispose() {
+    _savedSub?.cancel();
     for (final p in _linePainters.values) {
       p.dispose();
     }

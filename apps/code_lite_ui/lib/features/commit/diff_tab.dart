@@ -241,8 +241,9 @@ class _DiffTabState extends State<DiffTab> {
     );
   }
 
-  /// 「>>」:把 [block] 这段改动恢复成左侧 HEAD 的内容。
-  /// 文件已在编辑器里打开时改编辑器(可 ⌘Z 撤销、由用户决定何时保存),否则直接写回磁盘。
+  /// 「>>」:把 [block] 这段改动恢复成左侧 HEAD 的内容,并写回磁盘(与 IntelliJ 的自动保存一致,
+  /// Commit 窗的改动列表随之更新;全部恢复后文件就从列表里消失)。
+  /// 文件已在编辑器里打开时同时改编辑器缓冲区,可 ⌘Z 撤销。
   Future<void> _revertBlock(int block) async {
     final start = _blocks[block];
     var end = start;
@@ -270,17 +271,19 @@ class _DiffTabState extends State<DiffTab> {
     final text = newRight.isEmpty ? '' : '${newRight.join('\n')}${_rightTrailingNewline ? '\n' : ''}';
 
     final live = _live;
-    if (live != null) {
-      live.replaceAllText(text); // 文本监听会触发重算
-      return;
-    }
+    live?.replaceAllText(text); // 文本监听会触发重算
     final res = await widget.client.saveFile(_sourcePath, text);
     if (!mounted) return;
     if (res['status'] != 'ok') {
       ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(content: Text('恢复失败: ${res['error']}')));
       return;
     }
-    _recompute(text);
+    if (live != null) {
+      // 保存期间若又有编辑,缓冲区仍算未保存。
+      if (live.text == text) live.markSaved();
+    } else {
+      _recompute(text);
+    }
   }
 
   int _blockOf(int row) {
