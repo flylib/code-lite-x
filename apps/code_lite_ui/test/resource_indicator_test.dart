@@ -26,10 +26,10 @@ void main() {
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(body: Center(child: ResourceIndicator(sampler: sampler, interval: const Duration(seconds: 2)))),
     ));
-    expect(find.text('内存 1.4 GB · CPU —'), findsOneWidget, reason: '第一次采样还没有 CPU 增量');
+    expect(find.text('Mem 1.4 GB · CPU —'), findsOneWidget, reason: '第一次采样还没有 CPU 增量');
     await tester.pump(const Duration(seconds: 2));
     expect(sampler.calls, 2);
-    expect(find.text('内存 1.4 GB · CPU 14%'), findsOneWidget);
+    expect(find.text('Mem 1.4 GB · CPU 14%'), findsOneWidget);
     final tip = tester.widget<Tooltip>(find.byType(Tooltip)).message!;
     expect(tip, contains('CodeLiteX  300 MB · CPU 1.5%'));
     expect(tip, contains('java  1.1 GB · CPU 12%'));

@@ -243,8 +243,8 @@ class _ResourceIndicatorState extends State<ResourceIndicator> {
     if (s == null || s.processes.isEmpty) return const SizedBox.shrink();
     final hasCpu = _sampler.detailed;
     final label = hasCpu
-        ? '内存 ${formatBytes(s.totalMemoryBytes)} · CPU ${formatCpu(s.totalCpuPercent)}'
-        : '内存 ${formatBytes(s.totalMemoryBytes)}';
+        ? 'Mem ${formatBytes(s.totalMemoryBytes)} · CPU ${formatCpu(s.totalCpuPercent)}'
+        : 'Mem ${formatBytes(s.totalMemoryBytes)}';
     final details = [
       for (final p in s.processes)
         '${p.pid == s.processes.first.pid ? 'CodeLiteX' : p.name}  ${formatBytes(p.memoryBytes)}${hasCpu ? ' · CPU ${formatCpu(p.cpuPercent)}' : ''}',
