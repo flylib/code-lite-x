@@ -93,6 +93,15 @@ class IntelliJMetrics {
   static const double codeFontSize = 12;
   static const double codeLineHeight = 1.4;
   static const double charWidth = 7.2;
+
+  /// 编辑器等宽字体。macOS 上 Flutter 不认 'monospace' 这个通用名,会回退到比例字体
+  /// (San Francisco),导致按列计算的光标位置和实际字形错位,所以显式指定 Menlo。
+  static const String codeFontFamily = 'Menlo';
+  static const List<String> codeFontFallback = [
+    'SF Mono', 'Monaco', 'JetBrains Mono', 'Consolas', 'DejaVu Sans Mono', 'Liberation Mono',
+    'PingFang SC', 'Noto Sans CJK SC', 'Microsoft YaHei', 'monospace',
+  ];
+
   static const double cargoPanel = 250;
   static const double contextSources = 300;
   static const double contextDetail = 340;

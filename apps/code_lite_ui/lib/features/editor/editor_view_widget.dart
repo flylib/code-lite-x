@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -108,6 +109,21 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
 
   double _charWidth = 7.2;
 
+  /// 代码行的文字样式:渲染与测量必须用同一个,光标 / 选区 / 点击才能对齐字形。
+  static const TextStyle _codeStyle = TextStyle(
+    fontSize: IntelliJMetrics.codeFontSize,
+    height: IntelliJMetrics.codeLineHeight,
+    fontFamily: IntelliJMetrics.codeFontFamily,
+    fontFamilyFallback: IntelliJMetrics.codeFontFallback,
+  );
+
+  /// 代码区内边距(点击坐标要先减掉它)。
+  static const double _padH = 12, _padV = 8, _lineHeight = 20;
+
+  /// 行文本 → 排好版的 TextPainter(LRU)。光标、选区、点击定位都按真实字形宽度测量,
+  /// 中文等全角字符、Tab、回退字体都不会再让光标和插入点错位。
+  final Map<String, TextPainter> _linePainters = {};
+
   List<GitLineDiff> _diffHunks = [];
   GitLineDiff? _activeHunkOverlay;
 
@@ -206,18 +222,47 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
 
   void _measureCharWidth() {
     final painter = TextPainter(
-      text: const TextSpan(
-        text: 'M',
-        style: TextStyle(
-          fontSize: 12,
-          fontFamily: 'monospace',
-        ),
-      ),
+      text: const TextSpan(text: 'M', style: _codeStyle),
       textDirection: TextDirection.ltr,
     )..layout();
     if (painter.width > 0) {
       _charWidth = painter.width;
     }
+    painter.dispose();
+  }
+
+  static String _langOf(String filePath) => filePath.endsWith('.dart') ? 'dart' : 'rust';
+
+  TextPainter _painterFor(String lineText, String lang) {
+    final key = '$lang\u0000$lineText';
+    final cached = _linePainters.remove(key);
+    if (cached != null) return _linePainters[key] = cached; // 重新插入 = 标为最近使用
+    if (_linePainters.length >= 512) {
+      _linePainters.remove(_linePainters.keys.first)!.dispose();
+    }
+    return _linePainters[key] = TextPainter(
+      text: TextSpan(style: _codeStyle, children: SyntaxHighlighter.highlightLine(lineText, language: lang)),
+      textDirection: TextDirection.ltr,
+      maxLines: 1,
+    )..layout();
+  }
+
+  /// 第 [col] 列(字符偏移)左边缘的 x 坐标。
+  double _xForCol(String lineText, int col, String lang) {
+    if (col <= 0 || lineText.isEmpty) return 0;
+    final c = math.min(col, lineText.length);
+    return _painterFor(lineText, lang).getOffsetForCaret(TextPosition(offset: c), Rect.zero).dx;
+  }
+
+  /// 代码区内的点击坐标 → 行列(取离点击点最近的字符边界)。
+  EditorPosition _positionAt(Offset local, List<String> lines, String lang) {
+    if (lines.isEmpty) return const EditorPosition(0, 0);
+    final line = ((local.dy - _padV) / _lineHeight).floor().clamp(0, lines.length - 1);
+    final x = local.dx - _padH;
+    final text = lines[line];
+    if (x <= 0 || text.isEmpty) return EditorPosition(line, 0);
+    final col = _painterFor(text, lang).getPositionForOffset(Offset(x, _lineHeight / 2)).offset;
+    return EditorPosition(line, col);
   }
 
   @override
@@ -260,6 +305,10 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
 
   @override
   void dispose() {
+    for (final p in _linePainters.values) {
+      p.dispose();
+    }
+    _linePainters.clear();
     _imeBridge.detach();
     _secondaryImeBridge?.detach();
     _focusNode.dispose();
@@ -836,7 +885,8 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
                             },
                           ),
                           Expanded(
-                            child: SingleChildScrollView(
+                            child: LayoutBuilder(
+                              builder: (context, viewport) => SingleChildScrollView(
                               controller: horizontalScroll,
                               scrollDirection: Axis.horizontal,
                               child: GestureDetector(
@@ -844,32 +894,31 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
                                 onTapDown: (details) {
                                   focusNode.requestFocus();
                                   imeBridge?.attach();
-                                  final line = (details.localPosition.dy / 20.0).floor();
-                                  final col = (details.localPosition.dx / _charWidth).round();
-                                  controller.setCursor(EditorPosition(line, col));
+                                  final pos = _positionAt(details.localPosition, lines, _langOf(filePath));
+                                  controller.setCursor(pos);
                                   imeBridge?.syncState();
                                 },
                                 onDoubleTapDown: (details) {
-                                  final line = (details.localPosition.dy / 20.0).floor();
-                                  final col = (details.localPosition.dx / _charWidth).round();
-                                  controller.selectWord(EditorPosition(line, col));
+                                  final pos = _positionAt(details.localPosition, lines, _langOf(filePath));
+                                  controller.selectWord(pos);
                                   imeBridge?.syncState();
                                 },
                                 onPanStart: (details) {
                                   focusNode.requestFocus();
-                                  final line = (details.localPosition.dy / 20.0).floor();
-                                  final col = (details.localPosition.dx / _charWidth).round();
-                                  controller.setCursor(EditorPosition(line, col));
+                                  final pos = _positionAt(details.localPosition, lines, _langOf(filePath));
+                                  controller.setCursor(pos);
                                   imeBridge?.syncState();
                                 },
                                 onPanUpdate: (details) {
-                                  final line = (details.localPosition.dy / 20.0).floor();
-                                  final col = (details.localPosition.dx / _charWidth).round();
-                                  controller.setCursor(EditorPosition(line, col), extendSelection: true);
+                                  final pos = _positionAt(details.localPosition, lines, _langOf(filePath));
+                                  controller.setCursor(pos, extendSelection: true);
                                   imeBridge?.syncState();
                                 },
+                                // 代码区至少铺满视口:点击最长行右侧的空白也能把光标放到该行末尾。
+                                child: ConstrainedBox(
+                                constraints: BoxConstraints(minWidth: viewport.maxWidth),
                                 child: Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                  padding: const EdgeInsets.symmetric(horizontal: _padH, vertical: _padV),
                                   child: Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
@@ -886,7 +935,9 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
                                     ],
                                   ),
                                 ),
+                                ),
                               ),
+                            ),
                             ),
                           ),
                         ],
@@ -1096,7 +1147,8 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
                     style: const TextStyle(
                       color: IntelliJTheme.textGutter,
                       fontSize: 11,
-                      fontFamily: 'monospace',
+                      fontFamily: IntelliJMetrics.codeFontFamily,
+                      fontFamilyFallback: IntelliJMetrics.codeFontFallback,
                     ),
                   ),
                 const SizedBox(width: 6),
@@ -1439,7 +1491,7 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
     required List<EditorDiagnostic> diagnostics,
     int guideLevel = 0,
   }) {
-    final lang = filePath.endsWith('.dart') ? 'dart' : 'rust';
+    final lang = _langOf(filePath);
     final spans = SyntaxHighlighter.highlightLine(lineText, language: lang);
 
     final lineDiags = diagnostics.where((d) => d.line == lineIndex).toList();
@@ -1487,8 +1539,8 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
           // 1. Selection Highlight Box
           if (isLineSelected && selEndCol > selStartCol)
             Positioned(
-              left: selStartCol * _charWidth,
-              width: (selEndCol - selStartCol) * _charWidth,
+              left: _xForCol(lineText, selStartCol, lang),
+              width: _xForCol(lineText, selEndCol, lang) - _xForCol(lineText, selStartCol, lang),
               top: 0,
               bottom: 0,
               child: Container(
@@ -1498,21 +1550,14 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
 
           // 2. Syntax Token Text
           RichText(
-            text: TextSpan(
-              style: const TextStyle(
-                fontSize: 12,
-                fontFamily: 'monospace',
-                height: 1.4,
-              ),
-              children: spans,
-            ),
+            text: TextSpan(style: _codeStyle, children: spans),
             overflow: TextOverflow.clip,
           ),
 
           // 3. Caret (Blinking Cursor)
           if (isCaretLine && controller.cursorVisible)
             Positioned(
-              left: (caretCol * _charWidth).clamp(0.0, 99999.0),
+              left: _xForCol(lineText, caretCol, lang),
               top: 2,
               bottom: 2,
               child: Container(
