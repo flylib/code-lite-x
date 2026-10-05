@@ -61,6 +61,9 @@ class ApiClient {
     return tree.isNotEmpty ? tree : _fallbackWorkspace();
   }
 
+  /// 展开文件树里还没扫描到的深层目录(`loaded: false` 的节点)。
+  Future<Map<String, dynamic>> listDirectory(String path) => fs.listDirectory(path);
+
   /// 读取文件内容(纯 Dart)。web 预览读不了磁盘,给出占位内容。
   Future<Map<String, dynamic>> fetchFile(String relativePath) async {
     final res = await fs.readTextFile(_root, relativePath);

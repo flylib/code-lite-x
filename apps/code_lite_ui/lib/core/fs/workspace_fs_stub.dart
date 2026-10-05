@@ -2,6 +2,8 @@
 
 Future<Map<String, dynamic>> scanTree(String root, {int maxDepth = 4}) async => const {};
 
+Future<Map<String, dynamic>> listDirectory(String path, {int depth = 2}) async => const {};
+
 Future<Map<String, dynamic>> searchWorkspace(String root, String query, [Map<String, dynamic>? options]) async =>
     const {'status': 'error', 'error': 'web 预览不支持全局搜索'};
 

@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/intellij_theme.dart';
 import '../editor/code_editor_controller.dart';
+import '../editor/editor_view_widget.dart' show isSpecialTabId;
 import '../editor/lsp_overlay.dart';
+import '../editor/syntax/languages.dart';
 
 /// 底部状态栏。左侧是当前文件在工作区里的位置,右侧是光标位置与文件属性。
 ///
@@ -40,6 +42,9 @@ class StatusBarWidget extends StatelessWidget {
           const SizedBox(width: 12),
           _buildDiagnostics(),
           _buildCaretPosition(),
+          // 语法引擎识别出的文件类型(按扩展名 / 文件名 / #! 首行)
+          if (activeFile.isNotEmpty && !isSpecialTabId(activeFile))
+            _StatusText(languages.detect(activeFile, firstLine: controller?.lines.firstOrNull).name),
           const _StatusText('LF'),
           const _StatusText('UTF-8'),
           const _StatusText('4 spaces'),

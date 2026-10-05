@@ -14,7 +14,9 @@ import 'code_editor_controller.dart';
 import 'editor_session_manager.dart';
 import 'ime_text_input_client.dart';
 import 'lsp_overlay.dart';
-import 'syntax_highlighter.dart';
+import 'syntax/document_highlighter.dart';
+import 'syntax/language.dart';
+import 'syntax/languages.dart';
 
 /// 差异标签的 id 前缀:`diff:<相对仓库根的路径>`。
 const String diffTabPrefix = 'diff:';
@@ -250,37 +252,51 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
     painter.dispose();
   }
 
-  static String _langOf(String filePath) => filePath.endsWith('.dart') ? 'dart' : 'rust';
+  /// 每个文档(controller)一份高亮缓存;分屏两侧各自一份。
+  final Map<CodeEditorController, DocumentHighlighter> _highlighters = {};
 
-  TextPainter _painterFor(String lineText, String lang) {
-    final key = '$lang\u0000$lineText';
+  /// 按文件名(无扩展名时看首行 #!)识别语言,并刷新该文档的高亮缓存。
+  DocumentHighlighter _highlightFor(CodeEditorController controller, String filePath, List<String> lines) {
+    final lang = languageOf(filePath, lines);
+    // 只保留当前两侧在用的文档:关掉的标签不再占着缓存。
+    if (_highlighters.length > 2 && !_highlighters.containsKey(controller)) {
+      _highlighters.removeWhere((c, _) => c != _controller && c != widget.secondaryTab?.controller);
+    }
+    return _highlighters.putIfAbsent(controller, DocumentHighlighter.new)..update(lang, lines);
+  }
+
+  static LanguageSpec languageOf(String filePath, List<String> lines) =>
+      languages.detect(filePath, firstLine: lines.isEmpty ? null : lines.first);
+
+  TextPainter _painterFor(DocumentHighlighter hl, int line, String lineText) {
+    final key = '${hl.language?.id}\u0000${hl.startStateAt(line)}\u0000$lineText';
     final cached = _linePainters.remove(key);
     if (cached != null) return _linePainters[key] = cached; // 重新插入 = 标为最近使用
     if (_linePainters.length >= 512) {
       _linePainters.remove(_linePainters.keys.first)!.dispose();
     }
     return _linePainters[key] = TextPainter(
-      text: TextSpan(style: _codeStyle, children: SyntaxHighlighter.highlightLine(lineText, language: lang)),
+      text: TextSpan(style: _codeStyle, children: hl.spansAt(line)),
       textDirection: TextDirection.ltr,
       maxLines: 1,
     )..layout();
   }
 
-  /// 第 [col] 列(字符偏移)左边缘的 x 坐标。
-  double _xForCol(String lineText, int col, String lang) {
+  /// 第 [line] 行第 [col] 列(字符偏移)左边缘的 x 坐标。
+  double _xForCol(DocumentHighlighter hl, int line, String lineText, int col) {
     if (col <= 0 || lineText.isEmpty) return 0;
     final c = math.min(col, lineText.length);
-    return _painterFor(lineText, lang).getOffsetForCaret(TextPosition(offset: c), Rect.zero).dx;
+    return _painterFor(hl, line, lineText).getOffsetForCaret(TextPosition(offset: c), Rect.zero).dx;
   }
 
   /// 代码区内的点击坐标 → 行列(取离点击点最近的字符边界)。
-  EditorPosition _positionAt(Offset local, List<String> lines, String lang) {
+  EditorPosition _positionAt(Offset local, List<String> lines, DocumentHighlighter hl) {
     if (lines.isEmpty) return const EditorPosition(0, 0);
     final line = ((local.dy - _padV) / _lineHeight).floor().clamp(0, lines.length - 1);
     final x = local.dx - _padH;
     final text = lines[line];
     if (x <= 0 || text.isEmpty) return EditorPosition(line, 0);
-    final col = _painterFor(text, lang).getPositionForOffset(Offset(x, _lineHeight / 2)).offset;
+    final col = _painterFor(hl, line, text).getPositionForOffset(Offset(x, _lineHeight / 2)).offset;
     return EditorPosition(line, col);
   }
 
@@ -855,6 +871,7 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
   }) {
     final lines = controller.lines;
     final guides = _appearance.showIndentGuides ? _indentLevels(lines) : null;
+    final highlighter = _highlightFor(controller, filePath, lines);
 
     Widget content = Column(
       children: [
@@ -924,23 +941,23 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
                                 onTapDown: (details) {
                                   focusNode.requestFocus();
                                   imeBridge?.attach();
-                                  final pos = _positionAt(details.localPosition, lines, _langOf(filePath));
+                                  final pos = _positionAt(details.localPosition, lines, highlighter);
                                   controller.setCursor(pos);
                                   imeBridge?.syncState();
                                 },
                                 onDoubleTapDown: (details) {
-                                  final pos = _positionAt(details.localPosition, lines, _langOf(filePath));
+                                  final pos = _positionAt(details.localPosition, lines, highlighter);
                                   controller.selectWord(pos);
                                   imeBridge?.syncState();
                                 },
                                 onPanStart: (details) {
                                   focusNode.requestFocus();
-                                  final pos = _positionAt(details.localPosition, lines, _langOf(filePath));
+                                  final pos = _positionAt(details.localPosition, lines, highlighter);
                                   controller.setCursor(pos);
                                   imeBridge?.syncState();
                                 },
                                 onPanUpdate: (details) {
-                                  final pos = _positionAt(details.localPosition, lines, _langOf(filePath));
+                                  final pos = _positionAt(details.localPosition, lines, highlighter);
                                   controller.setCursor(pos, extendSelection: true);
                                   imeBridge?.syncState();
                                 },
@@ -958,7 +975,7 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
                                           entry.value,
                                           guideLevel: guides?[entry.key] ?? 0,
                                           controller: controller,
-                                          filePath: filePath,
+                                          highlighter: highlighter,
                                           diagnostics: diagnostics,
                                         );
                                       }),
@@ -1517,12 +1534,12 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
     int lineIndex,
     String lineText, {
     required CodeEditorController controller,
-    required String filePath,
+    required DocumentHighlighter highlighter,
     required List<EditorDiagnostic> diagnostics,
     int guideLevel = 0,
   }) {
-    final lang = _langOf(filePath);
-    final spans = SyntaxHighlighter.highlightLine(lineText, language: lang);
+    final hl = highlighter;
+    final spans = hl.spansAt(lineIndex);
 
     final lineDiags = diagnostics.where((d) => d.line == lineIndex).toList();
     final hasError = lineDiags.any((d) => d.isError);
@@ -1569,8 +1586,8 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
           // 1. Selection Highlight Box
           if (isLineSelected && selEndCol > selStartCol)
             Positioned(
-              left: _xForCol(lineText, selStartCol, lang),
-              width: _xForCol(lineText, selEndCol, lang) - _xForCol(lineText, selStartCol, lang),
+              left: _xForCol(hl, lineIndex, lineText, selStartCol),
+              width: _xForCol(hl, lineIndex, lineText, selEndCol) - _xForCol(hl, lineIndex, lineText, selStartCol),
               top: 0,
               bottom: 0,
               child: Container(
@@ -1580,14 +1597,14 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
 
           // 2. Syntax Token Text
           RichText(
-            text: TextSpan(style: _codeStyle, children: spans),
+            text: TextSpan(style: _codeStyle.copyWith(color: syntaxDefaultColor), children: spans),
             overflow: TextOverflow.clip,
           ),
 
           // 3. Caret (Blinking Cursor)
           if (isCaretLine && controller.cursorVisible)
             Positioned(
-              left: _xForCol(lineText, caretCol, lang),
+              left: _xForCol(hl, lineIndex, lineText, caretCol),
               top: 2,
               bottom: 2,
               child: Container(

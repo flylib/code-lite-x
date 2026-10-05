@@ -194,6 +194,7 @@ class _Workbench extends StatelessWidget {
                                 treeData: workspace.tree,
                                 activeFilePath: workspace.activeFile,
                                 onSelectFile: workspace.openFile,
+                                onLoadChildren: client.listDirectory,
                               ),
                             LeftTool.commit => CommitPanel(
                                 key: ValueKey(workspace.rootPath),

@@ -15,9 +15,15 @@ const Set<String> _searchIgnored = {'target', 'node_modules', 'build', '.dart_to
 
 const int _defaultMaxResults = 500;
 
-/// 扫描工作区目录树。返回根节点:`{path, name, is_dir, size_bytes, modified_ms, children}`。
+/// 扫描工作区目录树。返回根节点:`{path, name, is_dir, size_bytes, modified_ms, children, loaded}`。
+/// 只扫 [maxDepth] 层;更深的目录 `loaded: false`、`children: null`,展开时用 [listDirectory] 再取。
+/// 只含一个子目录的链(Java 的 com/acme/app)会一直往下扫,文件树才能把包名压成一行。
 Future<Map<String, dynamic>> scanTree(String root, {int maxDepth = 4}) =>
     Isolate.run(() => _scanDir(Directory(root), 0, maxDepth));
+
+/// 展开一个还没扫描的目录:返回它的节点,下面再带一层(子目录能直接显示有没有内容)。
+Future<Map<String, dynamic>> listDirectory(String path, {int depth = 2}) =>
+    Isolate.run(() => _scanDir(Directory(path), 0, depth));
 
 /// 全局搜索。返回 `{"status":"ok","query","total","matches":[{file_path,line_number,col_start,col_end,line_snippet}]}`,
 /// 正则写错时返回 `{"status":"error","error":...}`。
@@ -115,7 +121,8 @@ String _basename(String path) {
 
 Map<String, dynamic> _scanDir(Directory dir, int depth, int maxDepth) {
   final children = <Map<String, dynamic>>[];
-  if (depth < maxDepth) {
+  final loaded = depth < maxDepth;
+  if (loaded) {
     List<FileSystemEntity> entries;
     try {
       entries = dir.listSync(followLinks: false);
@@ -132,9 +139,11 @@ Map<String, dynamic> _scanDir(Directory dir, int depth, int maxDepth) {
       if (ad != bd) return ad ? -1 : 1;
       return _basename(a.path).compareTo(_basename(b.path));
     });
+    // 只有一个子目录、没有文件:沿着这条链继续往下扫(不占层数)。
+    final chain = kept.length == 1 && kept.first is Directory;
     for (final e in kept) {
       if (e is Directory) {
-        children.add(_scanDir(e, depth + 1, maxDepth));
+        children.add(_scanDir(e, depth + 1, chain ? maxDepth + 1 : maxDepth));
       } else if (e is File) {
         FileStat stat;
         try {
@@ -160,7 +169,8 @@ Map<String, dynamic> _scanDir(Directory dir, int depth, int maxDepth) {
     'is_dir': true,
     'size_bytes': 0,
     'modified_ms': 0,
-    'children': children,
+    'children': loaded ? children : null,
+    'loaded': loaded,
   };
 }
 

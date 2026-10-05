@@ -98,6 +98,7 @@ cargo build --release --offline -p code-lite-app
 * `lib/core/client/`：高层业务客户端（`api_client.dart`），封装异步 Future/Stream，并在 FFI 动态库未加载时无缝回退至离线 Mock 逻辑；
 * `lib/core/theme/`：全局主题与样式（`intellij_theme.dart`），锁定 JetBrains Darcula 经典配比；
 * `lib/features/editor/`：代码编辑器区域（纯 Dart：文本、撤销/重做历史、语法高亮、文件读写）；
+* `lib/features/editor/syntax/`：语法引擎。`languages.dart` 是各语言的声明式定义（关键字、注释、字符串、注解……），`LanguageRegistry` 按扩展名 / 文件名 / `#!` 识别语言；`tokenizer.dart` 逐行分词并携带跨行状态；`DocumentHighlighter` 只重算改动行。新增语言＝加一份 `LanguageSpec`；
 * `lib/features/tree/`：左侧工作区文件树（`project_explorer.dart`）；
 * `lib/features/bottom_tools/`：底部工具箱（`bottom_tools_widget.dart`），整合真实 Git 分支控制台与交互终端；
 * `lib/features/pull_requests/`：左侧 Pull Requests 工具窗（列表/筛选/详情）、PR 并排差异标签（行内评审评论、右键菜单）与 Timeline 标签；

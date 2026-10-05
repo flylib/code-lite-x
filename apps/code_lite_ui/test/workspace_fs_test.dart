@@ -41,10 +41,12 @@ void main() {
       expect(a['children'], isNull);
       expect(a['path'], '${root.path}/a.txt');
 
-      // maxDepth=2:root(0) → src(1) → deep(2) 已到深度上限,不再展开。
+      // maxDepth=2:root(0) → src(1) → deep(2) 已到深度上限,不再展开:标成未加载,文件树展开时再读。
       final src = (tree['children'] as List).first as Map;
       final deep = (src['children'] as List).firstWhere((c) => c['name'] == 'deep') as Map;
-      expect(deep['children'], isEmpty);
+      expect(deep['children'], isNull);
+      expect(deep['loaded'], isFalse);
+      expect(src['loaded'], isTrue);
     });
 
     test('a missing root yields an empty directory node instead of throwing', () async {
