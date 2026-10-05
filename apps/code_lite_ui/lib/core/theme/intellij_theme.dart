@@ -102,7 +102,6 @@ class IntelliJMetrics {
     'PingFang SC', 'Noto Sans CJK SC', 'Microsoft YaHei', 'monospace',
   ];
 
-  static const double cargoPanel = 250;
   static const double contextSources = 300;
   static const double contextDetail = 340;
   static const double reviewFileList = 280;

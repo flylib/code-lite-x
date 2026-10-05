@@ -1,22 +1,12 @@
 import 'package:flutter/material.dart';
 
-import '../../core/state/layout_store.dart';
 import '../../core/theme/intellij_theme.dart';
 import 'stripe_button.dart';
 
-/// 右侧活动条。切右侧工具窗 —— 与左侧同一套按钮语义。
-///
-/// 右栏目前只有 Cargo 工具窗;再点一次当前项收起该栏。
+/// 右侧活动条。目前只有通知;以后插件贡献的右侧工具窗也放在这里。
 class RightActivityStripe extends StatelessWidget {
-  const RightActivityStripe({
-    super.key,
-    required this.rightTool,
-    required this.onSelectRightTool,
-    this.hasNotification = false,
-  });
+  const RightActivityStripe({super.key, this.hasNotification = false});
 
-  final RightTool rightTool;
-  final ValueChanged<RightTool> onSelectRightTool;
   final bool hasNotification;
 
   @override
@@ -36,13 +26,6 @@ class RightActivityStripe extends StatelessWidget {
             isActive: false,
             badgeColor: hasNotification ? IntelliJTheme.accentYellow : null,
             onTap: () {},
-          ),
-          const SizedBox(height: 6),
-          StripeButton(
-            icon: Icons.inventory_2_outlined,
-            tooltip: 'Cargo',
-            isActive: rightTool == RightTool.cargo,
-            onTap: () => onSelectRightTool(RightTool.cargo),
           ),
         ],
       ),

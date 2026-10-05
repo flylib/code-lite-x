@@ -13,7 +13,6 @@ import 'core/theme/intellij_theme.dart';
 import 'features/activity_stripe/activity_stripe_widget.dart';
 import 'features/activity_stripe/right_activity_stripe.dart';
 import 'features/bottom_tools/bottom_tools_widget.dart';
-import 'features/cargo/cargo_panel.dart';
 import 'features/commit/commit_panel.dart';
 import 'features/commit/diff_tab.dart';
 import 'features/editor/code_editor_controller.dart' show EditorPosition;
@@ -267,29 +266,8 @@ class _Workbench extends StatelessWidget {
                       ),
                     ),
 
-                    // 右工具窗 + 右活动条。
-                    ListenableBuilder(
-                      listenable: layout,
-                      builder: (context, _) => Row(
-                        children: [
-                          switch (layout.rightTool) {
-                            RightTool.none => const SizedBox.shrink(),
-                            RightTool.cargo => ListenableBuilder(
-                                listenable: workspace,
-                                builder: (context, _) => CargoPanel(
-                                  client: client,
-                                  tree: workspace.tree,
-                                  onClose: layout.closeRight,
-                                ),
-                              ),
-                          },
-                          RightActivityStripe(
-                            rightTool: layout.rightTool,
-                            onSelectRightTool: layout.selectRightTool,
-                          ),
-                        ],
-                      ),
-                    ),
+                    // 右活动条(通知)。
+                    const RightActivityStripe(),
                   ],
                 ),
               ),

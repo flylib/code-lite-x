@@ -29,28 +29,19 @@ void main() {
     expect(find.byTooltip('助手'), findsNothing); // AI 助手已移除
     expect(find.byTooltip('Commit (⌘0)'), findsOneWidget);
 
-    // The right column starts closed — no tool window should pay FFI cost on boot.
+    // Cargo 工具窗已移除。
     expect(find.text('Cargo'), findsNothing);
   });
 
-  testWidgets('right activity stripe opens and collapses the Cargo tool window', (WidgetTester tester) async {
+  testWidgets('right activity stripe has no Cargo tool window any more', (WidgetTester tester) async {
     await tester.binding.setSurfaceSize(const Size(1280, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
     await tester.pumpWidget(const CodeLiteApp());
     await tester.pump();
 
-    // Nothing is docked on the right until asked for.
-    expect(find.text('Cargo'), findsNothing);
-
-    await tester.tap(find.byTooltip('Cargo'));
-    await tester.pump();
-    expect(find.text('Cargo'), findsOneWidget);
-
-    // Selecting the open tool again collapses the column.
-    await tester.tap(find.byTooltip('Cargo'));
-    await tester.pump();
-    expect(find.text('Cargo'), findsNothing);
+    expect(find.byTooltip('Cargo'), findsNothing);
+    expect(find.byTooltip('通知'), findsOneWidget);
   });
 
   testWidgets('left activity stripe collapses the project panel on re-tap', (WidgetTester tester) async {

@@ -5,9 +5,6 @@ import '../../features/bottom_tools/bottom_tools_widget.dart';
 /// 左侧工具窗(活动条上半段选择的那一栏)。
 enum LeftTool { project, commit, pullRequests, structure }
 
-/// 右侧工具窗(右侧活动条选择的那一栏)。
-enum RightTool { none, cargo }
-
 /// 面板显隐与选中项。只放"哪个面板开着、选中了什么",
 /// 不放文件内容 —— 那些在 [WorkspaceStore] 与 EditorSessionManager 里。
 ///
@@ -15,8 +12,6 @@ enum RightTool { none, cargo }
 /// 布局变化和编辑变化各自通知各自的订阅者。
 class LayoutStore extends ChangeNotifier {
   LeftTool _leftTool = LeftTool.project;
-  // 默认不打开右栏:用户点右活动条再开。
-  RightTool _rightTool = RightTool.none;
   BottomToolTab _bottomTab = BottomToolTab.git;
   bool _isLeftOpen = true;
   // 底部工具窗默认收起:打开 Git 窗口会立刻跑 git log,不该为用户还没要看的面板付这个代价。
@@ -31,7 +26,6 @@ class LayoutStore extends ChangeNotifier {
   static const double minBottomHeight = 140;
 
   LeftTool get leftTool => _leftTool;
-  RightTool get rightTool => _rightTool;
   BottomToolTab get bottomTab => _bottomTab;
   bool get isLeftOpen => _isLeftOpen;
   bool get isBottomOpen => _isBottomOpen;
@@ -45,7 +39,6 @@ class LayoutStore extends ChangeNotifier {
     _leftWidth = clamped;
     notifyListeners();
   }
-  bool get isRightOpen => _rightTool != RightTool.none;
 
   /// 再点一次当前工具会收起该栏 —— 与 IntelliJ 的行为一致。
   void selectLeftTool(LeftTool tool) {
@@ -55,11 +48,6 @@ class LayoutStore extends ChangeNotifier {
       _leftTool = tool;
       _isLeftOpen = true;
     }
-    notifyListeners();
-  }
-
-  void selectRightTool(RightTool tool) {
-    _rightTool = _rightTool == tool ? RightTool.none : tool;
     notifyListeners();
   }
 
@@ -84,12 +72,6 @@ class LayoutStore extends ChangeNotifier {
 
   void toggleBottom() {
     _isBottomOpen = !_isBottomOpen;
-    notifyListeners();
-  }
-
-  void closeRight() {
-    if (_rightTool == RightTool.none) return;
-    _rightTool = RightTool.none;
     notifyListeners();
   }
 }
