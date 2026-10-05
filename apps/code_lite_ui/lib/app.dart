@@ -19,6 +19,10 @@ import 'features/editor/editor_session_manager.dart';
 import 'features/editor/editor_view_widget.dart';
 import 'features/git/git_log_store.dart';
 import 'features/project_explorer/project_explorer_widget.dart';
+import 'features/pull_requests/pr_diff_tab.dart';
+import 'features/pull_requests/pr_panel.dart';
+import 'features/pull_requests/pr_store.dart';
+import 'features/pull_requests/pr_timeline_tab.dart';
 import 'features/project_explorer/structure_widget.dart';
 import 'features/search/global_search_modal.dart';
 import 'features/status_bar/status_bar_widget.dart';
@@ -44,6 +48,7 @@ class _CodeLiteAppState extends State<CodeLiteApp> {
   final LayoutStore _layout = LayoutStore();
   late final TerminalStore _terminals = TerminalStore(_client);
   late final GitLogStore _gitLog = GitLogStore(_client);
+  late final PullRequestsStore _prs = PullRequestsStore(_client);
   String? _lastRoot;
 
   @override
@@ -65,12 +70,14 @@ class _CodeLiteAppState extends State<CodeLiteApp> {
     if (root == _lastRoot) return;
     _lastRoot = root;
     _gitLog.invalidate();
+    _prs.invalidate();
   }
 
   @override
   void dispose() {
     _workspace.removeListener(_onWorkspaceChanged);
     _gitLog.dispose();
+    _prs.dispose();
     _terminals.dispose();
     _client.dispose(); // 关掉语言服务器进程
     _layout.dispose();
@@ -91,7 +98,7 @@ class _CodeLiteAppState extends State<CodeLiteApp> {
           notifier: _workspace,
           child: SessionScope(
             notifier: _sessions,
-            child: _Workbench(client: _client, terminals: _terminals, gitLog: _gitLog),
+            child: _Workbench(client: _client, terminals: _terminals, gitLog: _gitLog, prs: _prs),
           ),
         ),
       ),
@@ -100,11 +107,12 @@ class _CodeLiteAppState extends State<CodeLiteApp> {
 }
 
 class _Workbench extends StatelessWidget {
-  const _Workbench({required this.client, required this.terminals, required this.gitLog});
+  const _Workbench({required this.client, required this.terminals, required this.gitLog, required this.prs});
 
   final ApiClient client;
   final TerminalStore terminals;
   final GitLogStore gitLog;
+  final PullRequestsStore prs;
 
   @override
   Widget build(BuildContext context) {
@@ -172,6 +180,14 @@ class _Workbench extends StatelessWidget {
                                 onCommitted: gitLog.refresh,
                                 onFilesReverted: sessions.reloadFromDisk,
                               ),
+                            LeftTool.pullRequests => PullRequestsPanel(
+                                store: prs,
+                                onOpenDiff: (number, path) {
+                                  prs.session(number).showFile(path);
+                                  workspace.openSpecial('$prDiffTabPrefix$number');
+                                },
+                                onOpenTimeline: (number) => workspace.openSpecial('$prTimelineTabPrefix$number'),
+                              ),
                             LeftTool.structure => StructureWidget(
                                 activeFile: workspace.activeFile,
                                 outline: workspace.outline,
@@ -192,7 +208,7 @@ class _Workbench extends StatelessWidget {
                     Expanded(
                       child: Column(
                         children: [
-                          Expanded(child: _EditorRegion(client: client, gitLog: gitLog)),
+                          Expanded(child: _EditorRegion(client: client, gitLog: gitLog, prs: prs)),
                           ListenableBuilder(
                             listenable: layout,
                             builder: (context, _) {
@@ -277,10 +293,56 @@ class _Workbench extends StatelessWidget {
 /// 编辑区。只订阅会话层 —— 换标签、分屏会重建这里,
 /// 但项目树、底部日志、右侧面板不动。
 class _EditorRegion extends StatelessWidget {
-  const _EditorRegion({required this.client, required this.gitLog});
+  const _EditorRegion({required this.client, required this.gitLog, required this.prs});
 
   final ApiClient client;
   final GitLogStore gitLog;
+  final PullRequestsStore prs;
+
+  /// PR 差异里「打开本地文件」:[repoPath] 相对仓库根,换算成相对项目的路径(项目可能是仓库的子目录)。
+  Future<void> _openPrLocal(BuildContext context, String repoPath, int line) async {
+    final workspace = context.workspaceRead;
+    final sessions = context.sessionRead;
+    final info = await client.gitCall('git.repo_info');
+    final prefix = info['status'] == 'ok' ? info['prefix'] as String? ?? '' : '';
+    final top = info['toplevel'] as String?;
+    final path = prefix.isEmpty
+        ? repoPath
+        : repoPath.startsWith(prefix)
+            ? repoPath.substring(prefix.length)
+            : (top == null ? repoPath : '$top/$repoPath');
+    await _openSourceAt(workspace, sessions, path, line);
+  }
+
+  Widget? _specialTab(BuildContext context, String id, WorkspaceStore workspace, EditorSessionManager sessions) {
+    if (sessions.isDiffTab(id)) {
+      return DiffTab(
+        key: ValueKey(id),
+        client: client,
+        repoPath: id.substring(diffTabPrefix.length),
+        findOpenController: (path) => sessions.tabs[path]?.controller,
+        onOpenSource: (path, line) => _openSourceAt(workspace, sessions, path, line),
+      );
+    }
+    final number = prNumberOfTab(id);
+    if (number == null) return null;
+    if (id.startsWith(prDiffTabPrefix)) {
+      return PrDiffTab(
+        key: ValueKey(id),
+        session: prs.session(number),
+        onOpenLocal: (path, line) => _openPrLocal(context, path, line),
+      );
+    }
+    return PrTimelineTab(key: ValueKey(id), session: prs.session(number));
+  }
+
+  String? _specialTitle(String id) {
+    if (!id.startsWith(prTimelineTabPrefix)) return null;
+    final number = prNumberOfTab(id);
+    if (number == null) return null;
+    final title = prs.session(number).detail?.title ?? prs.summaryOf(number)?.title;
+    return title == null ? null : '$title #$number';
+  }
 
   /// 差异视图的「跳到源文件」:打开文件,光标放到 [line] 并滚动到可见处。
   Future<void> _openSourceAt(WorkspaceStore workspace, EditorSessionManager sessions, String path, int line) async {
@@ -325,15 +387,8 @@ class _EditorRegion extends StatelessWidget {
           projectName: workspace.projectName,
           appearance: sessions.appearance,
           onShowInHistory: (hash, path) => _showInHistory(context, hash, path),
-          specialTabBuilder: (id) => !sessions.isDiffTab(id)
-              ? null
-              : DiffTab(
-                  key: ValueKey(id),
-                  client: client,
-                  repoPath: id.substring(diffTabPrefix.length),
-                  findOpenController: (path) => sessions.tabs[path]?.controller,
-                  onOpenSource: (path, line) => _openSourceAt(workspace, sessions, path, line),
-                ),
+          specialTabBuilder: (id) => _specialTab(context, id, workspace, sessions),
+          specialTabTitle: _specialTitle,
           openTabs: sessions.openPaths,
           activeFile: sessions.activePath ?? '',
           codeContent: active?.controller.text ?? '',

@@ -172,9 +172,17 @@ class WorkspaceStore extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// 打开 PR 差异 / Timeline 等特殊标签(没有大纲)。
+  void openSpecial(String id) {
+    _sessions.openSpecial(id);
+    _outline = const [];
+    _activeSymbol = null;
+    notifyListeners();
+  }
+
   Future<void> openFile(String path) async {
     // 差异标签(「Commit: 文件名」)不是文件:只切换,没有大纲。
-    if (_sessions.isDiffTab(path)) {
+    if (_sessions.isSpecialTab(path)) {
       _sessions.selectTab(path);
       _outline = const [];
       _activeSymbol = null;

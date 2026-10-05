@@ -5,27 +5,13 @@ import 'package:flutter/material.dart';
 import '../../core/client/api_client.dart';
 import '../../core/theme/intellij_theme.dart';
 import '../editor/code_editor_controller.dart';
+import 'diff_cells.dart';
 import 'line_diff.dart';
-
-const double _rowHeight = 20;
 
 /// 中间:左行号 36 + 「>>」恢复按钮 20 + 间隔 4 + 右行号 36。
 const double _gutterWidth = 96;
-const TextStyle _code = TextStyle(
-  fontFamily: 'Menlo',
-  fontFamilyFallback: ['monospace'],
-  fontSize: 12,
-  height: 1.4,
-  color: IntelliJTheme.textPrimary,
-);
-const TextStyle _small = TextStyle(color: IntelliJTheme.textSecondary, fontSize: 12);
-
-// IntelliJ Darcula 的差异底色:修改蓝、新增绿、删除灰;行内真正改动的部分再深一档。
-const Color _modBg = Color(0xFF293A4F);
-const Color _modWord = Color(0xFF385A82);
-const Color _insBg = Color(0xFF294436);
-const Color _delBg = Color(0xFF484A4A);
-const Color _gapBg = Color(0xFF232427);
+const double _rowHeight = diffRowHeight;
+const TextStyle _small = diffSmallStyle;
 
 /// 「Commit: 文件名」标签页:左边 HEAD,右边当前版本,改动处高亮。两侧只读;
 /// 双击右侧某行或点 ✎ 跳到源文件对应行。
@@ -137,12 +123,7 @@ class _DiffTabState extends State<DiffTab> {
     setState(() => _loading = false);
   }
 
-  static List<String> _split(String text) {
-    if (text.isEmpty) return const [];
-    final lines = text.split('\n');
-    if (lines.last.isEmpty) lines.removeLast(); // 末尾换行不算一行
-    return lines;
-  }
+  static List<String> _split(String text) => splitDiffLines(text);
 
   /// 当前版本末尾是否有换行(拆行时去掉了,写回时要还原)。
   bool _rightTrailingNewline = true;
@@ -195,14 +176,14 @@ class _DiffTabState extends State<DiffTab> {
           ),
           child: Row(
             children: [
-              _ToolIcon(icon: Icons.arrow_upward, tooltip: '上一处改动', onTap: diffs == 0 ? null : () => _goto(-1)),
-              _ToolIcon(icon: Icons.arrow_downward, tooltip: '下一处改动', onTap: diffs == 0 ? null : () => _goto(1)),
-              _ToolIcon(
+              DiffToolIcon(icon: Icons.arrow_upward, tooltip: '上一处改动', onTap: diffs == 0 ? null : () => _goto(-1)),
+              DiffToolIcon(icon: Icons.arrow_downward, tooltip: '下一处改动', onTap: diffs == 0 ? null : () => _goto(1)),
+              DiffToolIcon(
                 icon: Icons.edit_outlined,
                 tooltip: '跳到源文件',
                 onTap: () => _openAtRow(_currentBlock < 0 || _blocks.isEmpty ? 0 : _blocks[_currentBlock]),
               ),
-              _ToolIcon(icon: Icons.refresh, tooltip: '刷新', onTap: _load),
+              DiffToolIcon(icon: Icons.refresh, tooltip: '刷新', onTap: _load),
               const Spacer(),
               Text(
                 diffs == 0 ? '没有差异' : '$diffs ${diffs == 1 ? 'difference' : 'differences'}',
@@ -318,29 +299,8 @@ class _DiffTabState extends State<DiffTab> {
     final rightText = r.right == null ? null : _right[r.right!];
     final span = r.kind == DiffRowKind.modify ? changedSpan(leftText!, rightText!) : null;
 
-    Color? leftBg, rightBg;
-    switch (r.kind) {
-      case DiffRowKind.equal:
-        break;
-      case DiffRowKind.modify:
-        leftBg = _modBg;
-        rightBg = _modBg;
-      case DiffRowKind.delete:
-        leftBg = _delBg;
-        rightBg = _gapBg;
-      case DiffRowKind.insert:
-        leftBg = _gapBg;
-        rightBg = _insBg;
-    }
-
-    Widget number(int? n) => SizedBox(
-          width: 36,
-          child: Text(
-            n == null ? '' : '${n + 1}',
-            textAlign: TextAlign.right,
-            style: const TextStyle(color: IntelliJTheme.textGutter, fontSize: 11, fontFamily: 'Menlo'),
-          ),
-        );
+    final (leftBg, rightBg) = diffRowColors(r.kind);
+    Widget number(int? n) => diffLineNumber(n);
 
     return Row(
       children: [
@@ -380,53 +340,6 @@ class _DiffTabState extends State<DiffTab> {
     );
   }
 
-  Widget _cell(String? text, Color? bg, (int, int)? highlight) {
-    InlineSpan content;
-    if (text == null) {
-      content = const TextSpan(text: '');
-    } else if (highlight == null || highlight.$1 >= highlight.$2) {
-      content = TextSpan(text: text.isEmpty ? ' ' : text);
-    } else {
-      content = TextSpan(children: [
-        TextSpan(text: text.substring(0, highlight.$1)),
-        TextSpan(text: text.substring(highlight.$1, highlight.$2), style: const TextStyle(backgroundColor: _modWord)),
-        TextSpan(text: text.substring(highlight.$2)),
-      ]);
-    }
-    return Container(
-      color: bg,
-      padding: const EdgeInsets.symmetric(horizontal: 10),
-      alignment: Alignment.centerLeft,
-      child: RichText(
-        text: TextSpan(style: _code, children: [content]),
-        maxLines: 1,
-        softWrap: false,
-        overflow: TextOverflow.clip,
-      ),
-    );
-  }
+  Widget _cell(String? text, Color? bg, (int, int)? highlight) => diffCell(text, bg, highlight);
 }
 
-class _ToolIcon extends StatelessWidget {
-  const _ToolIcon({required this.icon, required this.tooltip, required this.onTap});
-
-  final IconData icon;
-  final String tooltip;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: tooltip,
-      waitDuration: const Duration(milliseconds: 500),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(4),
-        child: Padding(
-          padding: const EdgeInsets.all(5),
-          child: Icon(icon, size: 15, color: onTap == null ? IntelliJTheme.textMuted : IntelliJTheme.textSecondary),
-        ),
-      ),
-    );
-  }
-}

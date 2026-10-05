@@ -2,6 +2,7 @@ import 'dart:async';
 
 import '../fs/workspace_fs.dart' as fs;
 import '../git/git.dart';
+import '../github/github_service.dart';
 import '../lsp/lsp.dart';
 // web 没有 dart:ffi —— 条件导入让 web 拿到桩(isAvailable 恒 false),
 // 原生拿到真实的 FFI 绑定。两者类名与签名一致。
@@ -16,6 +17,7 @@ class ApiClient {
   /// 当前工作区根目录,以及挂在它上面的 Git 与语言服务器;切换项目时随 [openWorkspace] 一起更新。
   String _root;
   GitService _git;
+  GitHubService _github;
   LspService _lsp;
   StreamSubscription<LspDiagnosticsEvent>? _lspSub;
   final StreamController<LspDiagnosticsEvent> _lspEvents = StreamController.broadcast();
@@ -23,6 +25,7 @@ class ApiClient {
   ApiClient({String initialRoot = '.'})
       : _root = initialRoot,
         _git = GitService(initialRoot),
+        _github = GitHubService(initialRoot),
         _lsp = LspService(initialRoot) {
     _ffi.initialize(initialRoot);
     _attachLsp();
@@ -30,10 +33,17 @@ class ApiClient {
 
   bool get isFfiAvailable => _ffi.isAvailable;
 
+  /// 当前工作区根目录。
+  String get rootPath => _root;
+
+  /// GitHub Pull Requests(经本机 gh 命令行);随工作区切换。
+  GitHubService get github => _github;
+
   /// 把 Rust Core 重新指向另一个工作区根目录(File → Open)。
   bool openWorkspace(String path) {
     _root = path;
     _git = GitService(path);
+    _github = GitHubService(path);
     // 旧项目的语言服务器在后台关掉,不阻塞切换。
     final oldLsp = _lsp;
     _lsp = LspService(path);

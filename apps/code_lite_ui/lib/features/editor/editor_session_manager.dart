@@ -5,7 +5,7 @@ import '../../core/client/api_client.dart';
 import '../../core/lsp/lsp.dart';
 import 'code_editor_controller.dart';
 import 'editor_appearance.dart';
-import 'editor_view_widget.dart' show diffTabPrefix;
+import 'editor_view_widget.dart' show diffTabPrefix, isSpecialTabId;
 import 'lsp_overlay.dart';
 
 /// Holds independent buffer, viewport, cursor, and diagnostic state for an open editor tab.
@@ -226,9 +226,19 @@ class EditorSessionManager extends ChangeNotifier {
 
   bool isDiffTab(String? id) => id != null && id.startsWith(diffTabPrefix);
 
+  /// 不对应文件的标签(Commit 差异、PR 差异、PR Timeline)。
+  bool isSpecialTab(String? id) => id != null && isSpecialTabId(id);
+
+  /// 打开(或切到)一个特殊标签,见 [isSpecialTab]。
+  void openSpecial(String id) {
+    if (!_tabOrder.contains(id)) _tabOrder.add(id);
+    _activePath = id;
+    notifyListeners();
+  }
+
   /// Selects an already open tab.
   void selectTab(String path) {
-    if (isDiffTab(path) && _tabOrder.contains(path) && _activePath != path) {
+    if (isSpecialTab(path) && _tabOrder.contains(path) && _activePath != path) {
       _activePath = path;
       notifyListeners();
       return;
@@ -242,7 +252,7 @@ class EditorSessionManager extends ChangeNotifier {
   /// Closes an open tab and activates a fallback if any remain.
   /// Returns false if the tab is dirty and force is false.
   bool closeTab(String path, {bool force = true}) {
-    if (isDiffTab(path)) {
+    if (isSpecialTab(path)) {
       _tabOrder.remove(path);
       if (_activePath == path) _activePath = _tabOrder.isNotEmpty ? _tabOrder.last : null;
       notifyListeners();

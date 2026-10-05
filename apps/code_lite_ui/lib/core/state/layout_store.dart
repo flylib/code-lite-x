@@ -3,7 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../../features/bottom_tools/bottom_tools_widget.dart';
 
 /// 左侧工具窗(活动条上半段选择的那一栏)。
-enum LeftTool { project, commit, structure }
+enum LeftTool { project, commit, pullRequests, structure }
 
 /// 右侧工具窗(右侧活动条选择的那一栏)。
 enum RightTool { none, cargo }

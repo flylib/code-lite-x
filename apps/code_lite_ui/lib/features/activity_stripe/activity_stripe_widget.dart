@@ -56,6 +56,13 @@ class ActivityStripeWidget extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           StripeButton(
+            iconBuilder: (color, size) => PullRequestIcon(color: color, size: size),
+            tooltip: 'Pull Requests',
+            isActive: isLeftOpen && leftTool == LeftTool.pullRequests,
+            onTap: () => onSelectLeftTool(LeftTool.pullRequests),
+          ),
+          const SizedBox(height: 6),
+          StripeButton(
             icon: Icons.account_tree_outlined,
             tooltip: '结构 (⌘7)',
             isActive: isLeftOpen && leftTool == LeftTool.structure,

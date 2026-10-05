@@ -8,6 +8,7 @@ import 'blame.dart';
 import 'context_menu_region.dart';
 import 'editor_appearance.dart';
 import '../../core/client/api_client.dart';
+import '../../core/theme/app_icons.dart';
 import '../../core/theme/intellij_theme.dart';
 import 'code_editor_controller.dart';
 import 'editor_session_manager.dart';
@@ -17,6 +18,14 @@ import 'syntax_highlighter.dart';
 
 /// 差异标签的 id 前缀:`diff:<相对仓库根的路径>`。
 const String diffTabPrefix = 'diff:';
+
+/// Pull Request 的差异标签(`prdiff:<号>`)与 Timeline 标签(`prtl:<号>`)。
+const String prDiffTabPrefix = 'prdiff:';
+const String prTimelineTabPrefix = 'prtl:';
+
+/// 不对应文件的特殊标签(内容由 [EditorViewWidget.specialTabBuilder] 提供)。
+bool isSpecialTabId(String id) =>
+    id.startsWith(diffTabPrefix) || id.startsWith(prDiffTabPrefix) || id.startsWith(prTimelineTabPrefix);
 
 class EditorViewWidget extends StatefulWidget {
   final List<String> openTabs;
@@ -57,12 +66,16 @@ class EditorViewWidget extends StatefulWidget {
   /// 非文件标签(比如 `diff:路径` 的「Commit: 文件名」差异视图)的内容。返回 null 表示按普通文件处理。
   final Widget? Function(String tabId)? specialTabBuilder;
 
+  /// 特殊标签的标题(如 PR Timeline 显示「PR 标题 #号」);返回 null 用默认标题。
+  final String? Function(String tabId)? specialTabTitle;
+
   const EditorViewWidget({
     super.key,
     this.projectName = '',
     this.appearance,
     this.onShowInHistory,
     this.specialTabBuilder,
+    this.specialTabTitle,
     required this.openTabs,
     required this.activeFile,
     required this.codeContent,
@@ -684,8 +697,16 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
               },
               itemBuilder: (context, index) {
                 final path = widget.openTabs[index];
-                final isDiffTab = path.startsWith(diffTabPrefix);
-                final fileName = isDiffTab ? 'Commit: ${path.split('/').last}' : path.split('/').last;
+                final isDiffTab = path.startsWith(diffTabPrefix) || path.startsWith(prDiffTabPrefix);
+                final isPrTimeline = path.startsWith(prTimelineTabPrefix);
+                final fileName = widget.specialTabTitle?.call(path) ??
+                    (path.startsWith(diffTabPrefix)
+                        ? 'Commit: ${path.split('/').last}'
+                        : path.startsWith(prDiffTabPrefix)
+                            ? 'Diff for Pull Request #${path.substring(prDiffTabPrefix.length)}'
+                            : isPrTimeline
+                                ? 'Pull Request #${path.substring(prTimelineTabPrefix.length)}'
+                                : path.split('/').last);
                 final isActive = path == widget.activeFile;
                 final isDirty = widget.isTabDirty?.call(path) ?? (isActive && _controller.isDirty);
 
@@ -711,6 +732,8 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
                         children: [
                           if (isDiffTab)
                             const Icon(Icons.compare_arrows, size: 14, color: IntelliJTheme.accentBlue)
+                          else if (isPrTimeline)
+                            const PullRequestIcon(color: Color(0xFF5FB865), size: 14)
                           else
                             _buildFileTypeIcon(path),
                           const SizedBox(width: 6),
