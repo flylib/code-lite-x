@@ -92,11 +92,11 @@ const Map<String, String> _routedExtensions = {
   'dart': 'dart',
   'py': 'python',
   'pyi': 'python',
+  'java': 'java',
 };
 
 /// 没有接服务端、但词法足够接近 C 系,值得做括号降级诊断的语言。
 const Map<String, String> _fallbackOnlyExtensions = {
-  'java': 'java',
   'kt': 'kotlin',
   'kts': 'kotlin',
   'swift': 'swift',
@@ -143,6 +143,8 @@ String? lspServerGroupFor(String languageId) {
       return 'dart';
     case 'python':
       return 'python';
+    case 'java':
+      return 'java';
   }
   return null;
 }
@@ -155,6 +157,7 @@ const Map<String, List<String>> lspServerGroupLanguages = {
   'typescript': ['typescript', 'typescriptreact', 'javascript', 'javascriptreact'],
   'dart': ['dart'],
   'python': ['python'],
+  'java': ['java'],
 };
 
 /// 每个分组的候选启动命令,按优先级排列;第一个能在搜索路径里找到的胜出。
@@ -180,6 +183,11 @@ const Map<String, List<List<String>>> lspServerCandidates = {
     ['pyright-langserver', '--stdio'],
     ['basedpyright-langserver', '--stdio'],
     ['pylsp'],
+  ],
+  // Eclipse JDT Language Server(brew install jdtls 提供 `jdtls` 启动脚本)。
+  // `-data <每个项目一份的缓存目录>` 由 LspService 启动时追加。
+  'java': [
+    ['jdtls'],
   ],
 };
 

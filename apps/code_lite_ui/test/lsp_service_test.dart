@@ -103,6 +103,11 @@ void handle(Map msg) {
       if (args.contains('--crash-on-open')) exit(3);
       final doc = params['textDocument'] as Map;
       docs[doc['uri'] as String] = (doc['text'] as String).split('\n');
+      if (args.contains('-data')) {
+        // 以 jdtls 方式启动:回报收到的 -data 目录与 JAVA_HOME
+        publish(doc['uri'] as String, 'data=${args[args.indexOf('-data') + 1]} java=${Platform.environment['JAVA_HOME'] ?? ''}');
+        return;
+      }
       publish(doc['uri'] as String, 'echo: ${(doc['text'] as String).split('\n').first}');
       publish(Uri.file('$rootPath/other dir/ü.rs').toString(), 'decoded');
       final resolved = Directory(rootPath).resolveSymbolicLinksSync();
@@ -709,8 +714,11 @@ int main(int argc, char **argv) {
       expect(LspService.languageIdFor('README.md'), isNull);
       expect(LspService.languageIdFor('Makefile'), isNull);
       expect(LspService.languageIdFor('dir.rs/file'), isNull);
-      expect(LspService.languageIdFor('A.java'), isNull);
-      expect(lspFallbackLanguageFor('A.java'), 'java');
+      expect(LspService.languageIdFor('A.java'), 'java');
+      expect(lspServerGroupFor('java'), 'java');
+      expect(lspServerCandidates['java']!.first.first, 'jdtls');
+      expect(LspService.languageIdFor('A.kt'), isNull);
+      expect(lspFallbackLanguageFor('A.kt'), 'kotlin');
       expect(lspServerGroupFor('c'), 'cpp');
       expect(lspServerGroupFor('javascriptreact'), 'typescript');
     });
@@ -842,6 +850,36 @@ int main(int argc, char **argv) {
       }
     }, skip: dart == null ? 'no dart binary found' : false, timeout: const Timeout(Duration(seconds: 60)));
 
+    test('java: jdtls gets a per-project -data dir and a Java 21+ JAVA_HOME', () async {
+      final dataRoot = Directory('${tmp.path}/jdtls-data')..createSync();
+      final lsp = LspService(root.path, serverOverrides: {'java': serverCmd}, jdtlsDataRoot: dataRoot.path);
+      final events = <LspDiagnosticsEvent>[];
+      final sub = lsp.diagnostics.listen(events.add);
+      await lsp.didOpen('src/main/java/A.java', 'class A {}\n');
+      await _waitFor(() async => events, (e) => e.any((x) => x.path == 'src/main/java/A.java'));
+      final msg = events.firstWhere((x) => x.path == 'src/main/java/A.java').diagnostics.single['message'] as String;
+      final data = RegExp(r'data=(\S+)').firstMatch(msg)!.group(1)!;
+      expect(data, startsWith(dataRoot.path), reason: '缓存放在指定目录,不写进项目');
+      expect(Directory(data).existsSync(), isTrue);
+      final javaHome = LspService.findJavaHome(minVersion: 21);
+      if (javaHome != null) expect(msg, endsWith('java=$javaHome'));
+      expect((await _serverStatus(lsp))['language'], 'java');
+      await lsp.dispose();
+      await sub.cancel();
+    }, skip: dart == null ? 'no dart binary found' : false, timeout: const Timeout(Duration(seconds: 60)));
+
+    test('javaMajorVersion reads the JDK release file', () {
+      final jdk = Directory('${tmp.path}/fake-jdk')..createSync();
+      File('${jdk.path}/bin/java')
+        ..createSync(recursive: true)
+        ..writeAsStringSync('');
+      File('${jdk.path}/release').writeAsStringSync('JAVA_VERSION="21.0.4"\n');
+      expect(LspService.javaMajorVersion(jdk.path), 21);
+      File('${jdk.path}/release').writeAsStringSync('JAVA_VERSION="1.8.0_402"\n');
+      expect(LspService.javaMajorVersion(jdk.path), 8);
+      expect(LspService.javaMajorVersion('${tmp.path}/nope'), isNull);
+    });
+
     test('crashing server restarts at most 3 times, then falls back', () async {
       final lsp = LspService(root.path, serverOverrides: {'rust': [...serverCmd, '--crash-on-open']});
       final events = <LspDiagnosticsEvent>[];
@@ -905,11 +943,11 @@ int main(int argc, char **argv) {
       final lsp = LspService(root.path);
       final events = <LspDiagnosticsEvent>[];
       final sub = lsp.diagnostics.listen(events.add);
-      await lsp.didOpen('src/A.java', 'class A { void f() { }\n');
+      await lsp.didOpen('src/A.kt', 'class A { fun f() { }\n');
       await lsp.didOpen('README.md', '# (unbalanced\n');
       await _waitFor(() async => events, (e) => e.isNotEmpty);
       await Future<void>.delayed(const Duration(milliseconds: 50));
-      expect(events.map((e) => e.path), ['src/A.java']);
+      expect(events.map((e) => e.path), ['src/A.kt']);
       expect(events.single.diagnostics.single['code'], 'unclosed_bracket');
       expect((await lsp.status())['servers'], isEmpty);
       expect(await lsp.documentSymbols('README.md', '# x'), isEmpty);

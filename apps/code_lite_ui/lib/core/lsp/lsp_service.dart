@@ -102,6 +102,7 @@ class LspService {
     Map<String, List<String>>? serverOverrides,
     this.requestTimeout = const Duration(seconds: 10),
     this.initializeTimeout = const Duration(seconds: 30),
+    this.jdtlsDataRoot,
   }) : _overrides = serverOverrides ?? const {} {
     _resolvedRoot = _tryResolve(root);
   }
@@ -114,6 +115,9 @@ class LspService {
 
   /// initialize 的超时;超时视为服务端不可用,该语言转入降级。
   final Duration initializeTimeout;
+
+  /// jdtls 工作区缓存的父目录;默认 ~/.codelitex/jdtls(测试里换成临时目录)。
+  final String? jdtlsDataRoot;
 
   /// 崩溃后最多重启次数,超过即停在降级模式。
   static const int maxRestarts = 3;
@@ -398,11 +402,22 @@ class LspService {
     server.state = _State.starting;
     final Process process;
     try {
+      final env = <String, String>{'PATH': _searchDirs().join(Platform.isWindows ? ';' : ':')};
+      var argv = server.argv;
+      if (server.group == 'java') {
+        // jdtls 需要 Java 21+ 运行;找不到时交给它自己报错(会进入降级)。
+        final javaHome = findJavaHome(minVersion: 21);
+        if (javaHome != null) {
+          env['JAVA_HOME'] = javaHome;
+          env['PATH'] = '$javaHome/bin${Platform.isWindows ? ';' : ':'}${env['PATH']}';
+        }
+        if (!argv.contains('-data')) argv = [...argv, '-data', _jdtlsDataDir()];
+      }
       process = await Process.start(
-        server.argv.first,
-        server.argv.sublist(1),
+        argv.first,
+        argv.sublist(1),
         workingDirectory: root,
-        environment: {'PATH': _searchDirs().join(Platform.isWindows ? ';' : ':')},
+        environment: env,
         runInShell: Platform.isWindows && RegExp(r'\.(cmd|bat)$', caseSensitive: false).hasMatch(server.argv.first),
       );
     } catch (e) {
@@ -441,7 +456,9 @@ class LspService {
     unawaited(process.stdin.done.catchError((_) {}));
     unawaited(process.exitCode.then((code) => _onExit(server, proc, code)));
 
-    final result = await proc.request('initialize', _initializeParams(), initializeTimeout);
+    // jdtls 首次打开大 Maven / Gradle 项目要先建索引,initialize 应答明显更慢。
+    final timeout = server.group == 'java' ? const Duration(minutes: 3) : initializeTimeout;
+    final result = await proc.request('initialize', _initializeParams(), timeout);
     if (_disposed || server.proc != proc || proc.exited) return; // 退出由 _onExit 处理
     if (result is! Map) {
       // 初始化超时或报错:服务端没救了,直接降级,不再重试。
@@ -743,6 +760,9 @@ class LspService {
       '/usr/local/bin',
       if (home.isNotEmpty) '$home/go/bin',
       if (env['GOPATH'] != null) '${env['GOPATH']}/bin',
+      // gopls 运行时要调用 go 命令:官方安装包放在 /usr/local/go,Homebrew 的在 /opt/homebrew/bin
+      if (env['GOROOT'] != null) '${env['GOROOT']}/bin',
+      '/usr/local/go/bin',
       if (home.isNotEmpty) '$home/.local/bin',
       if (home.isNotEmpty) '$home/.npm-global/bin',
       ..._nvmBins(home),
@@ -752,6 +772,68 @@ class LspService {
     ];
     final seen = <String>{};
     return dirs.where(seen.add).toList();
+  }
+
+  /// jdtls 的工作区缓存(索引、项目导入结果):每个项目一份,放在 ~/.codelitex/jdtls 下,不写进项目目录。
+  String _jdtlsDataDir() {
+    final home = Platform.environment['HOME'] ?? Platform.environment['USERPROFILE'] ?? Directory.systemTemp.path;
+    final parent = jdtlsDataRoot ?? '$home/.codelitex/jdtls';
+    final name = root.split(RegExp(r'[/\\]')).lastWhere((s) => s.isNotEmpty, orElse: () => 'workspace');
+    final safe = name.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
+    // 同名项目在不同位置时用路径哈希区分
+    final hash = root.codeUnits.fold<int>(17, (h, c) => (h * 31 + c) & 0x7fffffff).toRadixString(16);
+    final dir = Directory('$parent/$safe-$hash');
+    try {
+      dir.createSync(recursive: true);
+    } catch (_) {}
+    return dir.path;
+  }
+
+  /// 找一个版本 ≥ [minVersion] 的 JDK(JAVA_HOME → Homebrew → 系统安装位置),返回其 home 目录。
+  /// 依据 JDK 根目录下 `release` 文件里的 JAVA_VERSION。
+  static String? findJavaHome({int minVersion = 21}) {
+    final env = Platform.environment;
+    final candidates = <String>[
+      if (env['JAVA_HOME'] != null) env['JAVA_HOME']!,
+    ];
+    void addJdks(String parent, String suffix) {
+      try {
+        final d = Directory(parent);
+        if (!d.existsSync()) return;
+        for (final e in d.listSync().whereType<Directory>()) {
+          candidates.add('${e.path}$suffix');
+        }
+      } catch (_) {}
+    }
+
+    addJdks('/opt/homebrew/opt', '/libexec/openjdk.jdk/Contents/Home');
+    addJdks('/usr/local/opt', '/libexec/openjdk.jdk/Contents/Home');
+    addJdks('/Library/Java/JavaVirtualMachines', '/Contents/Home');
+    addJdks('/usr/lib/jvm', '');
+    String? best;
+    var bestVersion = 0;
+    for (final home in candidates) {
+      final v = javaMajorVersion(home);
+      if (v != null && v >= minVersion && v > bestVersion) {
+        best = home;
+        bestVersion = v;
+      }
+    }
+    return best;
+  }
+
+  /// JDK 主版本号(读 `<home>/release` 的 JAVA_VERSION;1.8 记作 8)。读不到返回 null。
+  static int? javaMajorVersion(String home) {
+    try {
+      final f = File('$home/release');
+      if (!f.existsSync() || !File('$home/bin/java').existsSync()) return null;
+      final m = RegExp(r'JAVA_VERSION="(\d+)(?:\.(\d+))?').firstMatch(f.readAsStringSync());
+      if (m == null) return null;
+      final major = int.parse(m.group(1)!);
+      return major == 1 ? int.tryParse(m.group(2) ?? '') : major;
+    } catch (_) {
+      return null;
+    }
   }
 
   /// nvm 安装的 node 及全局 npm 包(typescript-language-server / vtsls / pyright),新版本优先。
