@@ -72,11 +72,13 @@
 ## 当前状态
 
 - 当前分支：`rust`。
-- 计划文档已建立；阶段 0 正在进行。
+- 阶段 0 已完成：基线版本、依赖来源和离线编译条件已经确认。
+- 阶段 1 正在进行：Lapce 已集成到 `apps/rust_editor/` 独立 Cargo 工作区；GUI 启动及核心工作流验收尚未完成。
 - 已观察到当前 Rust 版本为 1.95.0，满足 Lapce `v0.4.6` 声明的 MSRV。
 - Lapce `v0.4.6` 已通过 SSH 浅克隆到临时目录 `/tmp/codelitex-lapce-v046-ssh`，上游提交为 `b012cef466741528f338879fa708355217fc40bd`；源码未并入产品工作区。
 - Lapce `Cargo.lock` 的 13 个 Git 源已按锁定 revision 获取到临时目录 `/tmp/codelitex-lapce-deps`，并逐一核对提交号。
 - Lapce 锁定了 723 个 registry 包版本。补充本机 registry 缓存时，下载的 crate 均来自 crates.io 官方端点，并逐个按 `Cargo.lock` 中的 SHA-256 校验。
-- 在临时克隆中将 24 个 Git 包临时改为指向这些精确提交的本地路径后，使用 Rust 1.95.0 执行 `cargo build --offline` 成功（Lapce `dev` profile）。该临时验证修改没有进入 `rust` 分支。
-- 原始 Lapce 清单直接执行 `cargo build --offline --locked` 仍会因 Cargo 原生 Git checkout 缓存中缺少 `winit`（`dpi` patch）而失败；因此阶段 0 的源码编译已验证，但可复现的 Cargo Git 源缓存/集成方案仍待确定，尚未进入阶段 1。
-- 临时构建目录只用于验证；接入时需使用稳定、可复现的本地依赖路径，并保留各上游许可证和版权声明。
+- 为绕开 Cargo 离线 Git checkout 缓存限制，13 个上游 Git 仓库的锁定源码快照已放入 `apps/rust_editor/vendor/lapce-git/`，24 个 Git 包改为项目内相对路径 patch；版本、提交号与许可证记录在 `apps/rust_editor/vendor/lapce-git/UPSTREAM_REVISIONS.md`。
+- 执行 `cargo build --offline` 和 `cargo build --offline --locked` 均成功（Rust 1.95.0，dev profile）。旧版上游依赖存在若干编译警告；没有运行测试，也尚未验证 GUI 启动。
+- `apps/rust_editor/README_CODELITEX.md` 记录独立工作区构建方式。原有 Flutter 应用和根 Cargo 工作区暂未改动。
+- 阶段 1 后续工作：启动桌面程序，检查窗口、工作区、编辑、LSP 与终端，并据此完成阶段验收；之后再开始阶段 2 品牌化。
