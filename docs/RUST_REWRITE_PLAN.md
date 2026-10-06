@@ -74,6 +74,7 @@
 - 当前分支：`rust`。
 - 计划文档已建立；阶段 0 正在进行。
 - 已观察到当前 Rust 版本为 1.95.0，满足 Lapce `v0.4.6` 声明的 MSRV。
-- 本地 Cargo Git checkout 缓存中未发现 Lapce 所用的 Floem checkout。
-- 当前执行环境访问 GitHub 的终端连接超时，Lapce 源码尚未取得，离线依赖完整性与构建状态尚未验证。
-- 后续需在可获得上游源码的环境继续阶段 0；不以未验证的源码或构建结果作为基线。
+- Lapce `v0.4.6` 已通过 SSH 浅克隆到临时目录 `/tmp/codelitex-lapce-v046-ssh`，上游提交为 `b012cef466741528f338879fa708355217fc40bd`；源码未并入产品工作区。
+- 在临时克隆中使用已安装的 Rust 1.95.0 执行 `cargo build --offline --locked`，失败于缺少锁定的 Git 依赖 `rust-windowing/winit`（`dpi` patch，revision `ee245c569d65fdeacf705ee5eedb564508d10ebe`）。
+- Lapce `Cargo.lock` 锁定了 13 个 Git 源；当前本机 Cargo Git checkout 缓存未包含这些上游依赖。因此离线构建验收未通过，尚未进入阶段 1。
+- 需先按离线依赖规则准备经核验的依赖缓存；不以未验证的源码或构建结果作为基线。
