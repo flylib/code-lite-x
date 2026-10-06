@@ -75,6 +75,8 @@
 - 计划文档已建立；阶段 0 正在进行。
 - 已观察到当前 Rust 版本为 1.95.0，满足 Lapce `v0.4.6` 声明的 MSRV。
 - Lapce `v0.4.6` 已通过 SSH 浅克隆到临时目录 `/tmp/codelitex-lapce-v046-ssh`，上游提交为 `b012cef466741528f338879fa708355217fc40bd`；源码未并入产品工作区。
-- 在临时克隆中使用已安装的 Rust 1.95.0 执行 `cargo build --offline --locked`，失败于缺少锁定的 Git 依赖 `rust-windowing/winit`（`dpi` patch，revision `ee245c569d65fdeacf705ee5eedb564508d10ebe`）。
-- Lapce `Cargo.lock` 锁定了 13 个 Git 源；当前本机 Cargo Git checkout 缓存未包含这些上游依赖。因此离线构建验收未通过，尚未进入阶段 1。
-- 需先按离线依赖规则准备经核验的依赖缓存；不以未验证的源码或构建结果作为基线。
+- Lapce `Cargo.lock` 的 13 个 Git 源已按锁定 revision 获取到临时目录 `/tmp/codelitex-lapce-deps`，并逐一核对提交号。
+- Lapce 锁定了 723 个 registry 包版本。补充本机 registry 缓存时，下载的 crate 均来自 crates.io 官方端点，并逐个按 `Cargo.lock` 中的 SHA-256 校验。
+- 在临时克隆中将 24 个 Git 包临时改为指向这些精确提交的本地路径后，使用 Rust 1.95.0 执行 `cargo build --offline` 成功（Lapce `dev` profile）。该临时验证修改没有进入 `rust` 分支。
+- 原始 Lapce 清单直接执行 `cargo build --offline --locked` 仍会因 Cargo 原生 Git checkout 缓存中缺少 `winit`（`dpi` patch）而失败；因此阶段 0 的源码编译已验证，但可复现的 Cargo Git 源缓存/集成方案仍待确定，尚未进入阶段 1。
+- 临时构建目录只用于验证；接入时需使用稳定、可复现的本地依赖路径，并保留各上游许可证和版权声明。
