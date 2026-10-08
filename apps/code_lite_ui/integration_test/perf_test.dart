@@ -9,7 +9,6 @@
 import 'dart:async';
 import 'dart:developer' as developer;
 import 'dart:io';
-import 'dart:isolate';
 
 import 'package:code_lite_ui/app.dart';
 import 'package:code_lite_ui/core/platform/process_stats.dart';
@@ -106,7 +105,9 @@ void main() {
       return;
     }
     service ??= await vmServiceConnectUri(uri.toString());
-    final isolateId = developer.Service.getIsolateId(Isolate.current)!;
+    // 主 isolate(界面所在的那个);不用 Service.getIsolateId:它要 Dart 3.2,而 pubspec 写的下限是 3.0
+    final vm = await service!.getVM();
+    final isolateId = (vm.isolates ?? const []).firstWhere((i) => i.name == 'main', orElse: () => vm.isolates!.first).id!;
     final profile = await service!.getAllocationProfile(isolateId, gc: true);
     final usage = await service!.getMemoryUsage(isolateId);
     final members = [...?profile.members]..sort((a, b) => (b.bytesCurrent ?? 0).compareTo(a.bytesCurrent ?? 0));
