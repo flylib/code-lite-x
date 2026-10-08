@@ -77,9 +77,10 @@ portable       = ["lapce-core/portable"]
 updater        = []
 vendored-fonts = []
 
-[dev-dependencies]
-criterion = "0.5"
+# [dev-dependencies]
+# criterion = "0.5"
 
-[[bench]]
-name    = "visual_line"
-harness = false
+# [[bench]]
+# name    = "visual_line"
+# harness = false
+

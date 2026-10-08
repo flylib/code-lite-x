@@ -75,7 +75,8 @@
 - **阶段 0 已完成**：基线版本、依赖来源和离线编译条件已经确认。
 - **阶段 1 已完成**（2026-10-08）：Lapce 桌面编辑器 GUI 可视验收与核心工作流检查通过。
 - **阶段 2 已完成**（2026-10-08）：CodeLiteX 产品基础完成（名称、图标、主题、配置目录与扩展模块边界）。
-- 阶段 3（工作区与编辑器功能）待开始。
+- **阶段 3 已完成**（2026-10-08）：工作区与编辑器功能完成（Java包压平、快捷键对齐、测试全绿、可视验收通过）。
+- 阶段 4（Git 工作流）待开始。
 
 ### 阶段 0 详情
 
@@ -127,3 +128,24 @@
   - 进程启动与 macOS 窗口渲染确认（截图已归档），IPC Socket 通信打开文件正常。
   - Rust 根工作区、lapce-core、lapce-rpc 测试 100% 通过（0 failed）。
   - Flutter 端全套自动化测试 100% 通过（0 failed）。
+
+### 阶段 3 详情
+
+- **文件树与包链压平（Package Compaction）**：
+  - 在 `apps/rust_editor/lapce-app/src/codelitex/project_tree.rs` 中实现 IntelliJ 风格的 Java/Kotlin 单子链压平算法 (`compact_package_name` / `file_node_display_name`)。
+  - 源码根目录（`src/main/java` 等）下的连续单子目录折叠为 `com.bcpoker.game` 形式展示。
+  - 接入 `lapce-app/src/file_explorer/view.rs` 树节点标签渲染。
+- **macOS 常用快捷键补充**：
+  - `defaults/keymaps-macos.toml` 中配置 `Cmd+1` 快速聚焦文件树 (`toggle_file_explorer_focus`)。
+  - 补充 `Cmd+Shift+S` 与 `Cmd+Alt+S` 保存全部 (`save_all`)。
+- **测试与离线环境适配**：
+  - 修正 `lapce-app/src/config/color_theme.rs` 中的主题测试断言，匹配 Darcula 警告色 `#E5A84B`。
+  - 排除未引用的 benchmark `criterion` 外部依赖以满足全套测试离线零网络执行。
+  - `codelitex::project_tree` 单测覆盖源码目录判断与非目录降级。
+  - 全套测试通过：Rust 根工作区 20 项、`lapce-app` 20 项、`lapce-core` 7 项、`lapce-rpc` 3 项测试 100% 通过（0 failed）。
+  - Flutter 测试 205 项全绿（0 failed）。
+- **GUI 可视验收（截图归档）**：
+  - ✅ 工作区目录树正常打开并显示目录结构（`codelitex_phase3_workspace.png`）。
+  - ✅ Java 文件打开、语法高亮、路径面包屑、状态栏语言指示正常（`codelitex_phase3_verified.png`）。
+  - ✅ 内置终端 zsh 保持工作区上下文。
+

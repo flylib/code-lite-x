@@ -15,3 +15,5 @@ pub const APP_REPO_URL: &str = "https://github.com/flylib/code-lite-x";
 pub const UPSTREAM_BASE: &str = "Lapce v0.4.6";
 pub const UPSTREAM_URL: &str = "https://github.com/lapce/lapce";
 pub const UPSTREAM_LICENSE: &str = "Apache-2.0";
+
+pub mod project_tree;

@@ -196,11 +196,10 @@ fn file_node_text_view(
                     ),
                 ))
             } else {
+                let is_dir = node.is_dir;
                 container(
                     label(move || {
-                        path.file_name()
-                            .map(|f| f.to_string_lossy().to_string())
-                            .unwrap_or_default()
+                        crate::codelitex::project_tree::file_node_display_name(&path, is_dir)
                     })
                     .style(move |s| {
                         s.height(ui_line_height.get())
