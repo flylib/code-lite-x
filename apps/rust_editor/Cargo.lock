@@ -2912,6 +2912,7 @@ dependencies = [
  "flate2",
  "floem",
  "fs_extra",
+ "git2",
  "globset",
  "im",
  "include_dir",

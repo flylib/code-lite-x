@@ -270,6 +270,18 @@ key = "meta+shift+f"
 command = "toggle_search_focus"
 
 [[keymaps]]
+key = "meta+shift+g"
+command = "toggle_source_control_focus"
+
+[[keymaps]]
+key = "meta+9"
+command = "toggle_source_control_focus"
+
+[[keymaps]]
+key = "meta+j"
+command = "toggle_terminal_focus"
+
+[[keymaps]]
 key = "meta+shift+x"
 command = "toggle_plugin_focus"
 

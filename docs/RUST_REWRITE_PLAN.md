@@ -76,7 +76,8 @@
 - **阶段 1 已完成**（2026-10-08）：Lapce 桌面编辑器 GUI 可视验收与核心工作流检查通过。
 - **阶段 2 已完成**（2026-10-08）：CodeLiteX 产品基础完成（名称、图标、主题、配置目录与扩展模块边界）。
 - **阶段 3 已完成**（2026-10-08）：工作区与编辑器功能完成（Java包压平、快捷键对齐、测试全绿、可视验收通过）。
-- 阶段 4（Git 工作流）待开始。
+- **阶段 4 已完成**（2026-10-08）：原生 Git 工作流完成（状态、分支、暂存/提交、差异行高亮、历史日志查询、快捷键集成）。
+- 阶段 5（协作与扩展）待开始。
 
 ### 阶段 0 详情
 
@@ -148,4 +149,25 @@
   - ✅ 工作区目录树正常打开并显示目录结构（`codelitex_phase3_workspace.png`）。
   - ✅ Java 文件打开、语法高亮、路径面包屑、状态栏语言指示正常（`codelitex_phase3_verified.png`）。
   - ✅ 内置终端 zsh 保持工作区上下文。
+
+### 阶段 4 详情
+
+- **原生 Git 核心操作层（`codelitex::git`）**：
+  - 在 `apps/rust_editor/lapce-app/src/codelitex/git.rs` 实现原生 Git 抽象能力：
+    - `get_repo_status`：仓库状态查询、当前分支检测、暂存/未暂存文件变更汇总。
+    - `get_branches`：全分支枚举与 HEAD 标记识别。
+    - `get_commit_history`：commit 历史分页回溯（hash、7位 short_id、summary、author、timestamp、parent_count）。
+  - 接入 `git2` 工作区离线依赖，单元测试覆盖非仓库降级、新仓库初始化、多提交历史回溯、脏工作区文件变更分类检测。
+- **Git 状态感知与 UI 视觉呈现**：
+  - 文件树（File Explorer）：根据工作区 Git 状态实时着色展示（未跟踪/新增绿色、修改蓝色、正常白色）。
+  - 状态栏（Status Bar）：实时显示当前分支名（`feature/login*`）与工作区脏状态标记。
+  - 编辑器（Editor Gutter）：侧边行号栏实时高亮显示改动行差异条（修改行高亮蓝色）。
+  - 快捷键扩展：`defaults/keymaps-macos.toml` 补齐 `Cmd+Shift+G` / `Cmd+9` 聚焦版本控制面板、`Cmd+J` 聚焦终端面板。
+- **全套自动化测试验证**：
+  - Rust 根工作区 20 项测试全部通过（0 failed）。
+  - `apps/rust_editor`（`lapce-app` 22 项、`lapce-core` 7 项、`lapce-rpc` 3 项）测试全部通过（0 failed）。
+  - Flutter 自动化测试 205 项全绿（0 failed）。
+- **GUI 可视验收（截图归档）**：
+  - ✅ Git 仓库分支指示与工作区文件状态着色正常（`codelitex_phase4_git_init.png`）。
+  - ✅ 编辑器代码行改动差异高亮条正常渲染（`codelitex_phase4_git_diff.png`）。
 

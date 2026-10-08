@@ -17,3 +17,4 @@ pub const UPSTREAM_URL: &str = "https://github.com/lapce/lapce";
 pub const UPSTREAM_LICENSE: &str = "Apache-2.0";
 
 pub mod project_tree;
+pub mod git;
