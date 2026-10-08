@@ -9,3 +9,7 @@
 dist/
 .codegraph/
 **/build/
+
+# rust 分支(Lapce 重写)的编译产物;在 main 上切回来后它还留在磁盘上
+apps/rust_editor/target/
+.vscode/
