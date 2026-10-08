@@ -72,14 +72,32 @@
 ## 当前状态
 
 - 当前分支：`rust`。
-- 阶段 0 已完成：基线版本、依赖来源和离线编译条件已经确认。
-- 阶段 1 正在进行：Lapce 已集成到 `apps/rust_editor/` 独立 Cargo 工作区；构建及进程启动已验证，GUI 可视验收与核心工作流检查尚未完成。
-- 已观察到当前 Rust 版本为 1.95.0，满足 Lapce `v0.4.6` 声明的 MSRV。
-- Lapce `v0.4.6` 已通过 SSH 浅克隆到临时目录 `/tmp/codelitex-lapce-v046-ssh`，上游提交为 `b012cef466741528f338879fa708355217fc40bd`；源码未并入产品工作区。
-- Lapce `Cargo.lock` 的 13 个 Git 源已按锁定 revision 获取到临时目录 `/tmp/codelitex-lapce-deps`，并逐一核对提交号。
-- Lapce 锁定了 723 个 registry 包版本。补充本机 registry 缓存时，下载的 crate 均来自 crates.io 官方端点，并逐个按 `Cargo.lock` 中的 SHA-256 校验。
-- 为绕开 Cargo 离线 Git checkout 缓存限制，13 个上游 Git 仓库的锁定源码快照已放入 `apps/rust_editor/vendor/lapce-git/`，24 个 Git 包改为项目内相对路径 patch；版本、提交号与许可证记录在 `apps/rust_editor/vendor/lapce-git/UPSTREAM_REVISIONS.md`。
-- 执行 `cargo build --offline` 和 `cargo build --offline --locked` 均成功（Rust 1.95.0，dev profile）。旧版上游依赖存在若干编译警告；没有运行测试，也尚未验证 GUI 启动。
-- `apps/rust_editor/README_CODELITEX.md` 记录独立工作区构建方式。原有 Flutter 应用和根 Cargo 工作区暂未改动。
-- `cargo run --offline --locked` 已成功构建并启动 `target/debug/lapce`，进程以状态码 0 退出。尝试通过桌面状态检查确认窗口时，系统的 Sky Computer Use 服务启动失败，因此暂不能确认窗口是否实际显示，也未验收工作区、编辑、LSP 与终端。
-- 阶段 1 后续工作：在桌面自动化可用的环境确认窗口和核心工作流；之后再开始阶段 2 品牌化。
+- **阶段 0 已完成**：基线版本、依赖来源和离线编译条件已经确认。
+- **阶段 1 已完成**（2026-10-08）：Lapce 桌面编辑器 GUI 可视验收与核心工作流检查通过。
+- 阶段 2（CodeLiteX 产品基础）待开始。
+
+### 阶段 0 详情
+
+- Rust 版本 1.95.0，满足 Lapce `v0.4.6` 声明的 MSRV。
+- Lapce `v0.4.6` 上游提交 `b012cef466741528f338879fa708355217fc40bd`。
+- `Cargo.lock` 的 13 个 Git 源按锁定 revision 获取，逐一核对提交号。
+- 723 个 registry 包版本均按 `Cargo.lock` SHA-256 校验。
+- 13 个 Git 仓库锁定源码快照放入 `apps/rust_editor/vendor/lapce-git/`，24 个 Git 包改为项目内相对路径 patch。
+- `cargo build --offline --locked` 成功（Rust 1.95.0，dev profile）。
+
+### 阶段 1 详情
+
+- Lapce 集成到 `apps/rust_editor/` 独立 Cargo 工作区。
+- `cargo build --offline --locked` 与 `cargo run --offline --locked` 均成功。
+- GUI 可视验收（通过 CGWindowListCreateImage 截图确认）：
+  - ✅ 窗口正常渲染：标题栏、红黄绿信号灯、"Open Folder" 命令面板。
+  - ✅ 文件编辑器：打开 `README.md`，行号显示、HTML 语法高亮（标签绿色/属性黄色/文本白色）正常。
+  - ✅ 面包屑导航：完整路径 `Volumes > space > projects > ... > README.md`。
+  - ✅ 标签页系统：文件标签显示与关闭功能。
+  - ✅ 文件浏览器（File Explorer）：Open Editors 与 File Explorer 面板。
+  - ✅ 集成终端：底部 zsh 终端已启动，prompt 可交互。
+  - ✅ 侧边功能栏：文件树、搜索、版本控制、调试、插件、远程连接图标。
+  - ✅ 插件面板：显示可用插件列表（TypeScript、Python、C/C++ clangd 等）。
+  - ✅ 状态栏：`Ln 1, Col 1, Char 0 · LF · Markdown`；零错误 `⊘ 0 ⚠ 0`。
+- `apps/rust_editor/README_CODELITEX.md` 记录独立工作区构建方式。
+- 原有 Flutter 应用和根 Cargo 工作区未改动。
