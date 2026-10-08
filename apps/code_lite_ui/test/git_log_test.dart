@@ -1,7 +1,9 @@
 import 'dart:io';
 
 import 'package:code_lite_ui/core/client/api_client.dart';
+import 'package:code_lite_ui/core/theme/intellij_theme.dart';
 import 'package:code_lite_ui/features/git/git_log_store.dart';
+import 'package:code_lite_ui/features/git/git_log_window.dart' show gitChangeColor;
 import 'package:flutter_test/flutter_test.dart';
 
 /// 端到端:真实 git 仓库 → Dart GitService → GitLogStore。
@@ -121,5 +123,12 @@ void main() {
     expect(store.commits.map((c) => c.subject), contains('merge feat/x'));
     expect(store.commits.map((c) => c.subject), isNot(contains('feat: 初始提交')));
     store.dispose();
+  });
+
+  test('changed files in the log details are green, deleted ones grey', () {
+    for (final status in ['A', 'M', 'R', 'C', 'T']) {
+      expect(gitChangeColor(status), IntelliJTheme.gitGreen, reason: status);
+    }
+    expect(gitChangeColor('D'), IntelliJTheme.textMuted);
   });
 }

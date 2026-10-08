@@ -12,6 +12,9 @@ const double _kRowHeight = 24;
 const TextStyle _kText = TextStyle(color: IntelliJTheme.textPrimary, fontSize: 12);
 const TextStyle _kMuted = TextStyle(color: IntelliJTheme.textMuted, fontSize: 12);
 
+/// 日志详情栏里变更文件的颜色:删除的灰着,其余(新增 / 修改 / 重命名 / 复制)都是绿色。
+Color gitChangeColor(String status) => status == 'D' ? IntelliJTheme.textMuted : IntelliJTheme.gitGreen;
+
 String formatGitDate(DateTime t) {
   String two(int v) => v.toString().padLeft(2, '0');
   return '${t.year}/${t.month}/${t.day}, ${two(t.hour)}:${two(t.minute)}';
@@ -971,13 +974,6 @@ class _DetailsPaneState extends State<_DetailsPane> {
   final Set<String> _collapsed = {};
   String? _selectedFile;
 
-  static Color statusColor(String s) => switch (s) {
-        'A' => IntelliJTheme.gitGreen,
-        'D' => IntelliJTheme.textMuted,
-        'R' || 'C' => const Color(0xFF6897BB),
-        _ => const Color(0xFF6897BB),
-      };
-
   static IconData fileIcon(String name) {
     final ext = name.contains('.') ? name.split('.').last.toLowerCase() : '';
     return switch (ext) {
@@ -1036,9 +1032,9 @@ class _DetailsPaneState extends State<_DetailsPane> {
           expandable: false,
           expanded: false,
           icon: fileIcon(f.name),
-          iconColor: statusColor(change.status),
+          iconColor: gitChangeColor(change.status),
           label: f.name,
-          labelColor: statusColor(change.status),
+          labelColor: gitChangeColor(change.status),
           trailing: change.oldPath != null && change.status == 'R' ? '← ${change.oldPath!.split('/').last}' : null,
           selected: _selectedFile == change.path,
           onTap: () => setState(() => _selectedFile = change.path),
