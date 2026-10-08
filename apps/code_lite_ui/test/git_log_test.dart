@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:code_lite_ui/core/client/api_client.dart';
 import 'package:code_lite_ui/core/theme/intellij_theme.dart';
 import 'package:code_lite_ui/features/git/git_log_store.dart';
-import 'package:code_lite_ui/features/git/git_log_window.dart' show gitChangeColor;
+import 'package:code_lite_ui/features/git/git_log_window.dart' show gitChangeColor, gitFileIconColor;
 import 'package:flutter/painting.dart' show Color;
 import 'package:flutter_test/flutter_test.dart';
 
@@ -124,6 +124,18 @@ void main() {
     expect(store.commits.map((c) => c.subject), contains('merge feat/x'));
     expect(store.commits.map((c) => c.subject), isNot(contains('feat: 初始提交')));
     store.dispose();
+  });
+
+  test('the {} icon of data files is purple whatever the change, other icons follow the status colour', () {
+    const purple = Color(0xFFB589EC);
+    for (final status in ['A', 'M', 'D', 'R']) {
+      expect(gitFileIconColor('CDC任务存活巡检.json', status), purple, reason: status);
+    }
+    expect(gitFileIconColor('config.YAML', 'M'), purple);
+    expect(gitFileIconColor('Cargo.toml', 'A'), purple);
+    expect(gitFileIconColor('main.dart', 'M'), gitChangeColor('M'));
+    expect(gitFileIconColor('README', 'A'), gitChangeColor('A'));
+    expect(gitFileIconColor('old.rs', 'D'), gitChangeColor('D'));
   });
 
   test('changed files in the log details: added green, deleted grey, the rest the IntelliJ blue', () {

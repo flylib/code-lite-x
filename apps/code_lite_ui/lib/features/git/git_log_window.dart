@@ -20,6 +20,16 @@ Color gitChangeColor(String status) => switch (status) {
       _ => IntelliJTheme.gitModified,
     };
 
+/// 变更文件前面的图标颜色。文件类型图标有自己的颜色(`{}` 是紫色),不随变更状态变;
+/// 没有专属颜色的类型,图标跟着文件名的状态色走。
+Color gitFileIconColor(String fileName, String status) {
+  final ext = fileName.contains('.') ? fileName.split('.').last.toLowerCase() : '';
+  return switch (ext) {
+    'json' || 'yaml' || 'yml' || 'toml' => IntelliJTheme.dataFileIcon,
+    _ => gitChangeColor(status),
+  };
+}
+
 String formatGitDate(DateTime t) {
   String two(int v) => v.toString().padLeft(2, '0');
   return '${t.year}/${t.month}/${t.day}, ${two(t.hour)}:${two(t.minute)}';
@@ -1037,7 +1047,7 @@ class _DetailsPaneState extends State<_DetailsPane> {
           expandable: false,
           expanded: false,
           icon: fileIcon(f.name),
-          iconColor: gitChangeColor(change.status),
+          iconColor: gitFileIconColor(f.name, change.status),
           label: f.name,
           labelColor: gitChangeColor(change.status),
           trailing: change.oldPath != null && change.status == 'R' ? '← ${change.oldPath!.split('/').last}' : null,
