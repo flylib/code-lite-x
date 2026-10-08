@@ -22,6 +22,7 @@ class ActivityStripeWidget extends StatelessWidget {
     required this.onSelectLeftTool,
     required this.onSelectBottomTab,
     this.hasNotification = false,
+    this.buildToolTitle,
   });
 
   final LeftTool leftTool;
@@ -33,6 +34,9 @@ class ActivityStripeWidget extends StatelessWidget {
 
   /// 通知按钮上的小黄点。
   final bool hasNotification;
+
+  /// 项目里检测到了构建工具(Maven……)时为它的名字,活动条多出构建工具窗的按钮;null 时不显示。
+  final String? buildToolTitle;
 
   @override
   Widget build(BuildContext context) {
@@ -72,6 +76,15 @@ class ActivityStripeWidget extends StatelessWidget {
             isActive: isLeftOpen && leftTool == LeftTool.structure,
             onTap: () => onSelectLeftTool(LeftTool.structure),
           ),
+          if (buildToolTitle != null) ...[
+            const SizedBox(height: 6),
+            StripeButton(
+              iconBuilder: (color, size) => BuildToolIcon(color: color, size: size),
+              tooltip: buildToolTitle!,
+              isActive: isLeftOpen && leftTool == LeftTool.build,
+              onTap: () => onSelectLeftTool(LeftTool.build),
+            ),
+          ],
 
 
           const Spacer(),
@@ -108,6 +121,31 @@ class ActivityStripeWidget extends StatelessWidget {
           ),
           // 设置在菜单里:CodeLiteX ▸ Settings…(⌘,)。
         ],
+      ),
+    );
+  }
+}
+
+/// 构建工具窗的图标:圆角框里一个斜体 m(IntelliJ 的 Maven 工具窗图标是这个样子)。
+class BuildToolIcon extends StatelessWidget {
+  const BuildToolIcon({super.key, required this.color, required this.size});
+
+  final Color color;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(size * 0.2),
+        border: Border.all(color: color, width: 1.4),
+      ),
+      child: Text(
+        'm',
+        style: TextStyle(color: color, fontSize: size * 0.7, fontWeight: FontWeight.w700, fontStyle: FontStyle.italic, height: 1),
       ),
     );
   }

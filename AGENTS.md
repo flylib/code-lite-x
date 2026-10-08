@@ -94,8 +94,9 @@ cargo build --release --offline -p code-lite-app
 * `lib/core/fs/`：纯 Dart 工作区文件树扫描与全局搜索/替换（`workspace_fs.dart`），在后台 Isolate 中执行；
 * `lib/core/git/`：纯 Dart Git 引擎（`git_service.dart`），通过 `Process.run` 调用系统 `git` 命令行；Git 不再经过 Rust FFI；
 * `lib/core/github/`：GitHub Pull Request 服务（`github_service.dart`），经本机 `gh` 命令行（`gh pr` / `gh api`）读写 PR、评审与评论，应用不保存 token；
-* `lib/core/plugins/`：插件框架（声明式 `plugin.json` + 独立进程）。`plugin_manifest.dart` 定义清单格式（语言、着色规则、语言服务器、安装步骤），`builtin_catalog.dart` 是随 IDE 打包的插件目录（以后由插件市场提供同格式索引），`plugin_host_io.dart` 负责下载解压 / 运行安装命令 / 展开变量（装到 `~/.codelitex/plugins/<id>`，走系统代理），`plugin_manager.dart` 管理安装状态、新语言提示，并把语言服务器启动方式交给 LSP；
+* `lib/core/plugins/`：插件框架（声明式 `plugin.json` + 独立进程）。`plugin_manifest.dart` 定义清单格式（语言、着色规则、语言服务器、构建工具 `buildTools`、安装步骤；`bundled: true` 为随 IDE 自带、默认启用、只能停用不能卸载），`builtin_catalog.dart` 是随 IDE 打包的插件目录（以后由插件市场提供同格式索引），`plugin_host_io.dart` 负责下载解压 / 运行安装命令 / 展开变量（装到 `~/.codelitex/plugins/<id>`，走系统代理），`plugin_manager.dart` 管理安装状态、新语言提示，并把语言服务器启动方式交给 LSP；
 * `lib/core/lsp/`：Dart 实现的 LSP 客户端与文件大纲（outline）；Rust 侧不再有 LSP / 代码图谱；
+* `lib/core/build_tools/`：构建工具的模块树与命令拼装（`build_model.dart`）。插件清单的 `buildTools.model` 按名字选 IDE 内置读取器（目前 `maven`：`maven_reader.dart` 读 pom.xml 的 `<modules>`，`xml_lite.dart` 是不依赖外部包的极简 XML 解析）；
 * `lib/core/client/`：高层业务客户端（`api_client.dart`），封装异步 Future/Stream，并在 FFI 动态库未加载时无缝回退至离线 Mock 逻辑；
 * `lib/core/theme/`：全局主题与样式（`intellij_theme.dart`），锁定 JetBrains Darcula 经典配比；
 * `lib/features/editor/`：代码编辑器区域（纯 Dart：文本、撤销/重做历史、语法高亮、文件读写）；
@@ -103,6 +104,7 @@ cargo build --release --offline -p code-lite-app
 * `lib/features/tree/`：左侧工作区文件树（`project_explorer.dart`）；
 * `lib/features/bottom_tools/`：底部工具箱（`bottom_tools_widget.dart`），整合真实 Git 分支控制台与交互终端；
 * `lib/features/pull_requests/`：左侧 Pull Requests 工具窗（列表/筛选/详情）、PR 并排差异标签（行内评审评论、右键菜单）与 Timeline 标签；
+* `lib/features/build_tools/`：左侧构建工具窗（Maven 等）。项目根有插件声明的标记文件（pom.xml）时活动条才出现按钮；模块树 → Lifecycle → 任务，双击在新终端标签里运行（有 mvnw 用 `./mvnw`，子模块带 `-f`）；
 * `lib/features/search/`：全局搜索模态框（`global_search_modal.dart`，支持 `Cmd+Shift+F` 快速唤起）。
 
 ### 状态流转与交互规范

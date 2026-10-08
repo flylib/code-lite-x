@@ -55,6 +55,7 @@ class PluginManager extends ChangeNotifier {
         registry = registry ?? syntax.languages,
         catalog = _parseCatalog(catalogJson) {
     client.lspLaunchResolver = launchFor;
+    _seedBundled();
   }
 
   final ApiClient client;
@@ -72,6 +73,9 @@ class PluginManager extends ChangeNotifier {
 
   /// 「以后再说」:本次运行内不再提示。
   final Set<String> _snoozed = {};
+
+  /// 被用户停用的自带插件(持久化;自带插件没有安装目录,状态记在偏好里)。
+  final Set<String> _disabledBundled = {};
 
   static List<PluginManifest> _parseCatalog(String json) {
     try {
@@ -91,15 +95,41 @@ class PluginManager extends ChangeNotifier {
     _dismissed
       ..clear()
       ..addAll([for (final d in (prefs['dismissed'] as List? ?? const [])) '$d']);
+    _disabledBundled
+      ..clear()
+      ..addAll([for (final d in (prefs['disabledBundled'] as List? ?? const [])) '$d']);
+    _seedBundled();
     for (final p in _installed.values) {
       if (p.enabled) _activate(p.manifest);
     }
     notifyListeners();
   }
 
+  /// 自带插件视同已安装(没有目录);用户装过同 id 的插件时以装的为准。
+  void _seedBundled() {
+    for (final m in catalog) {
+      if (!m.bundled) continue;
+      final existing = _installed[m.id];
+      if (existing != null && existing.dir.isNotEmpty) continue;
+      _installed[m.id] = InstalledPlugin(manifest: m, enabled: !_disabledBundled.contains(m.id), dir: '');
+    }
+  }
+
   // -------------------------------------------------------------------------
   // 查询
   // -------------------------------------------------------------------------
+
+  /// 自带插件:只能启用 / 停用,不能卸载。
+  bool isBundled(String id) {
+    final p = _installed[id];
+    return p != null && p.dir.isEmpty && p.manifest.bundled;
+  }
+
+  /// 已启用插件贡献的构建工具。
+  List<BuildToolContribution> get buildTools => [
+        for (final p in _installed.values)
+          if (p.enabled) ...p.manifest.buildTools,
+      ];
 
   PluginManifest? manifestOf(String id) {
     final installed = _installed[id];
@@ -184,7 +214,10 @@ class PluginManager extends ChangeNotifier {
     notifyListeners();
   }
 
-  void _savePrefs() => host.savePrefs({'dismissed': _dismissed.toList()..sort()});
+  void _savePrefs() => host.savePrefs({
+        'dismissed': _dismissed.toList()..sort(),
+        if (_disabledBundled.isNotEmpty) 'disabledBundled': _disabledBundled.toList()..sort(),
+      });
 
   Future<bool> install(String id) async {
     final m = manifestOf(id);
@@ -232,6 +265,7 @@ class PluginManager extends ChangeNotifier {
   }
 
   Future<void> uninstall(String id) async {
+    if (isBundled(id)) return;
     final p = _installed.remove(id);
     if (p == null) return;
     _deactivate(p.manifest);
@@ -243,7 +277,12 @@ class PluginManager extends ChangeNotifier {
   Future<void> setEnabled(String id, bool enabled) async {
     final p = _installed[id];
     if (p == null || p.enabled == enabled) return;
-    host.setEnabled(id, enabled);
+    if (isBundled(id)) {
+      enabled ? _disabledBundled.remove(id) : _disabledBundled.add(id);
+      _savePrefs();
+    } else {
+      host.setEnabled(id, enabled);
+    }
     _installed[id] = InstalledPlugin(manifest: p.manifest, enabled: enabled, dir: p.dir);
     enabled ? _activate(p.manifest) : _deactivate(p.manifest);
     notifyListeners();

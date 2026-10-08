@@ -16,8 +16,15 @@
 //       "command": ["${javaHome:21}/bin/java", "-jar", "${glob:server/plugins/org.eclipse.equinox.launcher_*.jar}", ...],
 //       "env": {"JAVA_HOME": "${javaHome:21}"}, "initializeTimeoutSeconds": 180,
 //       "detect": ["jdtls"]
+//     }],
+//     "buildTools": [{
+//       "id": "maven", "name": "Maven", "markers": ["pom.xml"], "model": "maven",
+//       "command": "mvn", "wrapper": "mvnw", "fileArgs": ["-f", "${buildFile}"],
+//       "taskGroups": [{"name": "Lifecycle", "tasks": ["clean", "compile", "test", "package", "install"]}],
+//       "options": [{"id": "offline", "label": "Offline 模式", "args": ["-o"], "icon": "cloud_off"}]
 //     }]
 //   },
+//   "bundled": true,   // 随 IDE 自带:不用安装,默认启用(可在设置里停用,不能卸载)
 //   "install": [
 //     {"download": {"darwin-arm64": "https://...", "*": "https://..."}, "extract": "tar.gz", "to": "server"},
 //     {"run": ["${tool:go}", "install", "golang.org/x/tools/gopls@latest"], "env": {"GOBIN": "${pluginDir}/bin"}},
@@ -115,6 +122,81 @@ class LanguageServerContribution {
   final List<String> detect;
 }
 
+/// 构建工具(Maven、Gradle……):项目根目录有 [markers] 之一时,左侧活动条出现它的工具窗,
+/// 按 [model] 读出模块树,每个模块下列出 [taskGroups],双击任务在终端里运行。
+class BuildToolContribution {
+  const BuildToolContribution({
+    required this.id,
+    required this.name,
+    required this.markers,
+    required this.command,
+    this.model,
+    this.wrapper,
+    this.fileArgs = const [],
+    this.taskGroups = const [],
+    this.options = const [],
+  });
+
+  factory BuildToolContribution.fromJson(Map<String, dynamic> j) => BuildToolContribution(
+        id: j['id'] as String,
+        name: j['name'] as String? ?? j['id'] as String,
+        markers: _strings(j['markers']),
+        command: j['command'] as String? ?? j['id'] as String,
+        model: j['model'] as String?,
+        wrapper: j['wrapper'] as String?,
+        fileArgs: _strings(j['fileArgs']),
+        taskGroups: [
+          for (final g in (j['taskGroups'] as List? ?? const []))
+            if (g is Map) BuildTaskGroup(name: '${g['name'] ?? ''}', tasks: _strings(g['tasks'])),
+        ],
+        options: [
+          for (final o in (j['options'] as List? ?? const []))
+            if (o is Map)
+              BuildToolOption(id: '${o['id']}', label: '${o['label'] ?? o['id']}', args: _strings(o['args']), icon: o['icon'] as String?),
+        ],
+      );
+
+  final String id;
+  final String name;
+
+  /// 项目根目录里的这些文件之一存在,就认为是这种项目;第一个也是根模块的构建文件。
+  final List<String> markers;
+
+  /// 命令名(在用户的登录 shell 里运行,走 shell 的 PATH)。
+  final String command;
+
+  /// 读模块树的方式(IDE 内置的读取器,如 `maven`);没有或不认识时只显示根模块。
+  final String? model;
+
+  /// 项目自带的包装脚本(`mvnw`):根目录有它就用 `./mvnw`(Windows 为 `mvnw.cmd`)代替 [command]。
+  final String? wrapper;
+
+  /// 对子模块运行时追加的参数,`${buildFile}` 换成该模块构建文件相对项目根的路径。
+  final List<String> fileArgs;
+  final List<BuildTaskGroup> taskGroups;
+
+  /// 工具栏上的开关(离线、跳过测试……),打开时给命令追加 [BuildToolOption.args]。
+  final List<BuildToolOption> options;
+}
+
+class BuildTaskGroup {
+  const BuildTaskGroup({required this.name, required this.tasks});
+
+  final String name;
+  final List<String> tasks;
+}
+
+class BuildToolOption {
+  const BuildToolOption({required this.id, required this.label, required this.args, this.icon});
+
+  final String id;
+  final String label;
+  final List<String> args;
+
+  /// 图标名(界面认识的几个:`cloud_off`、`skip`;不认识时用通用图标)。
+  final String? icon;
+}
+
 /// 一个安装步骤:下载并解压 / 运行命令 / 给用户的说明。
 class InstallStep {
   const InstallStep({this.downloads, this.extract, this.to, this.run, this.env = const {}, this.guide, this.executable = false});
@@ -167,7 +249,9 @@ class PluginManifest {
     this.requires = const [],
     this.languages = const [],
     this.languageServers = const [],
+    this.buildTools = const [],
     this.install = const [],
+    this.bundled = false,
     this.raw = const {},
   });
 
@@ -189,7 +273,11 @@ class PluginManifest {
         for (final s in (contributes['languageServers'] as List? ?? const []))
           LanguageServerContribution.fromJson(Map<String, dynamic>.from(s as Map)),
       ],
+      buildTools: [
+        for (final b in (contributes['buildTools'] as List? ?? const [])) BuildToolContribution.fromJson(Map<String, dynamic>.from(b as Map)),
+      ],
       install: [for (final s in (j['install'] as List? ?? const [])) InstallStep.fromJson(Map<String, dynamic>.from(s as Map))],
+      bundled: j['bundled'] == true,
       raw: j,
     );
   }
@@ -204,7 +292,11 @@ class PluginManifest {
   final List<PluginRequirement> requires;
   final List<LanguageContribution> languages;
   final List<LanguageServerContribution> languageServers;
+  final List<BuildToolContribution> buildTools;
   final List<InstallStep> install;
+
+  /// 随 IDE 自带:不用安装,默认启用,不能卸载(只能停用)。
+  final bool bundled;
 
   /// 原始 JSON(安装时原样写进插件目录的 plugin.json)。
   final Map<String, dynamic> raw;

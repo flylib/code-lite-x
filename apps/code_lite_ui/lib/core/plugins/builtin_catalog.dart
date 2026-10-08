@@ -80,6 +80,69 @@ const String builtinPluginCatalog = r'''
       ]
     },
     {
+      "id": "codelitex.maven",
+      "name": "Maven",
+      "version": "1.0.0",
+      "publisher": "CodeLiteX",
+      "description": "Maven 项目管理:检测 pom.xml,左侧工具窗显示模块树与生命周期(clean、compile、test、package、install……),双击在终端里运行;项目带 mvnw 时用它,否则用 shell 里的 mvn。",
+      "categories": [
+        "Build Tools"
+      ],
+      "bundled": true,
+      "contributes": {
+        "buildTools": [
+          {
+            "id": "maven",
+            "name": "Maven",
+            "markers": [
+              "pom.xml"
+            ],
+            "model": "maven",
+            "command": "mvn",
+            "wrapper": "mvnw",
+            "fileArgs": [
+              "-f",
+              "${buildFile}"
+            ],
+            "taskGroups": [
+              {
+                "name": "Lifecycle",
+                "tasks": [
+                  "clean",
+                  "validate",
+                  "compile",
+                  "test",
+                  "package",
+                  "verify",
+                  "install",
+                  "site",
+                  "deploy"
+                ]
+              }
+            ],
+            "options": [
+              {
+                "id": "offline",
+                "label": "Offline 模式(-o)",
+                "args": [
+                  "-o"
+                ],
+                "icon": "cloud_off"
+              },
+              {
+                "id": "skipTests",
+                "label": "跳过测试(-DskipTests)",
+                "args": [
+                  "-DskipTests"
+                ],
+                "icon": "skip"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
       "id": "codelitex.go",
       "name": "Go",
       "version": "0.23.0",

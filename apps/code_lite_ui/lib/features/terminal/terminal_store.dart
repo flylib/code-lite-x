@@ -33,7 +33,8 @@ class TerminalStore extends ChangeNotifier {
   bool get isAvailable => _client.isFfiAvailable;
 
   /// 以给定尺寸新开一个 shell 并切到它。失败时返回 null,原因见 [error]。
-  TerminalSession? open(int rows, int cols) {
+  /// [title] 缺省为 Local / Local (2) ……
+  TerminalSession? open(int rows, int cols, {String? title}) {
     final res = _client.ptyOpen(rows, cols);
     final id = res['id'] as String?;
     if (res['status'] != 'ok' || id == null) {
@@ -41,12 +42,20 @@ class TerminalStore extends ChangeNotifier {
       notifyListeners();
       return null;
     }
-    _opened++;
-    final session = TerminalSession(id, _opened == 1 ? 'Local' : 'Local ($_opened)');
+    if (title == null) _opened++;
+    final session = TerminalSession(id, title ?? (_opened == 1 ? 'Local' : 'Local ($_opened)'));
     _sessions.add(session);
     _active = _sessions.length - 1;
     _error = null;
     notifyListeners();
+    return session;
+  }
+
+  /// 新开一个标签运行 [command](构建任务)。shell 在项目根目录启动,命令写进它的输入:
+  /// 跑完回到提示符,可以接着在这个标签里敲命令。尺寸先按常见值开,视图显示时会同步成实际大小。
+  TerminalSession? run(String title, String command) {
+    final session = open(24, 120, title: title);
+    if (session != null) _client.ptyWrite(session.id, '$command\r');
     return session;
   }
 

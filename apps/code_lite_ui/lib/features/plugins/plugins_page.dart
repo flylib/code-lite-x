@@ -95,14 +95,15 @@ class _PluginTile extends StatelessWidget {
     final status = plugins.statusOf(m.id);
     final task = plugins.taskOf(m.id);
     final unmet = plugins.unmetRequirements(m.id);
+    final bundled = plugins.isBundled(m.id);
     final (chip, chipColor) = switch (status) {
-      PluginStatus.enabled => ('已安装', const Color(0xFF5FB865)),
+      PluginStatus.enabled => (bundled ? '内置' : '已安装', const Color(0xFF5FB865)),
       PluginStatus.disabled => ('已停用', IntelliJTheme.textMuted),
       PluginStatus.system => ('系统已提供', const Color(0xFF6897BB)),
       PluginStatus.installing => ('安装中', IntelliJTheme.accentBlue),
       PluginStatus.available => ('', IntelliJTheme.textMuted),
     };
-    final kind = m.languageServers.isNotEmpty ? '语言服务器' : '语法高亮';
+    final kind = m.buildTools.isNotEmpty ? '构建工具' : (m.languageServers.isNotEmpty ? '语言服务器' : '语法高亮');
     return Container(
       key: ValueKey('plugin-${m.id}'),
       margin: const EdgeInsets.only(bottom: 8),
@@ -142,6 +143,7 @@ class _PluginTile extends StatelessWidget {
               children: [
                 Text(m.description, style: _text),
                 if (m.extensions.isNotEmpty) Text('文件类型:${m.extensions.map((e) => '.$e').join(' ')}', style: _muted),
+                if (m.buildTools.isNotEmpty) Text('检测文件:${m.buildTools.expand((t) => t.markers).join(' ')}', style: _muted),
                 if (status == PluginStatus.system) Text('已在用系统里的 ${plugins.systemPathOf(m.id)}', style: _muted),
                 if (unmet.isNotEmpty && status == PluginStatus.available)
                   Text('需要 ${unmet.map((r) => r.label).join('、')}:${unmet.map((r) => r.hint ?? '').join(' ')}', style: const TextStyle(color: Color(0xFFE5C07B), fontSize: 12)),
@@ -163,6 +165,12 @@ class _PluginTile extends StatelessWidget {
 
   List<Widget> _actions(BuildContext context, PluginStatus status, PluginTask? task) {
     final id = manifest.id;
+    if (plugins.isBundled(id)) {
+      // 随 IDE 自带:不能卸载,只能停用
+      return status == PluginStatus.enabled
+          ? [_Btn('停用', () => plugins.setEnabled(id, false))]
+          : [_Btn('启用', () => plugins.setEnabled(id, true), primary: true)];
+    }
     return switch (status) {
       PluginStatus.installing => [_Btn('取消', () => plugins.cancelInstall(id))],
       PluginStatus.enabled => [_Btn('停用', () => plugins.setEnabled(id, false)), _Btn('卸载', () => _confirmUninstall(context))],

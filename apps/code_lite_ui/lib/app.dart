@@ -12,6 +12,8 @@ import 'core/state/workspace_store.dart';
 import 'core/theme/intellij_theme.dart';
 import 'features/activity_stripe/activity_stripe_widget.dart';
 import 'features/bottom_tools/bottom_tools_widget.dart';
+import 'features/build_tools/build_tools_panel.dart';
+import 'features/build_tools/build_tools_store.dart';
 import 'features/commit/commit_panel.dart';
 import 'features/commit/diff_tab.dart';
 import 'features/editor/code_editor_controller.dart' show EditorPosition;
@@ -60,6 +62,20 @@ class _CodeLiteAppState extends State<CodeLiteApp> {
   late final PullRequestsStore _prs = PullRequestsStore(_client);
   late final SettingsStore _settings = SettingsStore(sessions: _sessions);
   late final PluginManager _plugins = PluginManager(client: _client);
+  late final BuildToolsStore _build = BuildToolsStore(
+    plugins: _plugins,
+    projectRoot: () => _workspace.rootPath,
+    read: (path) async {
+      final res = await _client.fetchFile(path);
+      return res['status'] == 'ok' ? res['content'] as String? : null;
+    },
+    runner: (title, command) {
+      _terminals.run(title, command);
+      _layout.showBottomTab(BottomToolTab.terminal);
+    },
+    fileSaved: _client.onFileSaved,
+    windows: defaultTargetPlatform == TargetPlatform.windows,
+  );
   String? _lastRoot;
 
   @override
@@ -69,6 +85,7 @@ class _CodeLiteAppState extends State<CodeLiteApp> {
     _workspace = WorkspaceStore(client: _client, sessions: _sessions);
     _workspace.addListener(_onWorkspaceChanged);
     _branches.onChanged = _onRepoChanged;
+    _build.addListener(_onBuildToolsChanged);
     // 自动保存:应用失去焦点(切到终端 / 浏览器)时立刻把改动写盘,外部工具看到的就是最新内容。
     _lifecycle = AppLifecycleListener(onInactive: _sessions.saveAll, onHide: _sessions.saveAll);
     _bootstrap();
@@ -92,11 +109,18 @@ class _CodeLiteAppState extends State<CodeLiteApp> {
     _prs.invalidate();
     // 只在有项目时关注分支;没有项目(启动时、关闭项目后)不起任何 git 进程和定时器
     _branches.reset();
+    _build.reload();
     if (root != null) {
       _branches.start();
     } else {
       _branches.stop();
     }
+  }
+
+  /// 新项目里没有构建工具了:构建工具窗的按钮会消失,开着的窗口换回项目视图。
+  void _onBuildToolsChanged() {
+    if (_build.hasProjects || _build.loading) return;
+    if (_layout.isLeftOpen && _layout.leftTool == LeftTool.build) _layout.showLeftTool(LeftTool.project);
   }
 
   /// git 动了仓库(切分支 / 更新 / 合并 / 变基 ……,或者别处在终端里切了分支):
@@ -124,6 +148,8 @@ class _CodeLiteAppState extends State<CodeLiteApp> {
     _gitLog.dispose();
     _prs.dispose();
     _settings.dispose(); // 先于 _sessions:它监听 sessions.appearance
+    _build.removeListener(_onBuildToolsChanged);
+    _build.dispose(); // 先于 _plugins:它监听插件的启用 / 停用
     _plugins.dispose();
     _terminals.dispose();
     _client.dispose(); // 关掉语言服务器进程
@@ -145,7 +171,7 @@ class _CodeLiteAppState extends State<CodeLiteApp> {
           notifier: _workspace,
           child: SessionScope(
             notifier: _sessions,
-            child: _Workbench(client: _client, terminals: _terminals, gitLog: _gitLog, branches: _branches, branchActions: _branchActions, prs: _prs, settings: _settings, plugins: _plugins),
+            child: _Workbench(client: _client, terminals: _terminals, gitLog: _gitLog, branches: _branches, branchActions: _branchActions, prs: _prs, settings: _settings, plugins: _plugins, buildTools: _build),
           ),
         ),
       ),
@@ -163,6 +189,7 @@ class _Workbench extends StatelessWidget {
     required this.prs,
     required this.settings,
     required this.plugins,
+    required this.buildTools,
   });
 
   final ApiClient client;
@@ -173,6 +200,7 @@ class _Workbench extends StatelessWidget {
   final PullRequestsStore prs;
   final SettingsStore settings;
   final PluginManager plugins;
+  final BuildToolsStore buildTools;
 
   @override
   Widget build(BuildContext context) {
@@ -225,10 +253,11 @@ class _Workbench extends StatelessWidget {
               Expanded(
                 child: Row(
                   children: [
-                    // 左活动条:只订阅 layout。
+                    // 左活动条:订阅 layout,以及构建工具(检测到 Maven 等才出现它的按钮)。
                     ListenableBuilder(
-                      listenable: layout,
+                      listenable: Listenable.merge([layout, buildTools]),
                       builder: (context, _) => ActivityStripeWidget(
+                        buildToolTitle: buildTools.hasProjects ? buildTools.title : null,
                         leftTool: layout.leftTool,
                         isLeftOpen: layout.isLeftOpen,
                         bottomTab: layout.bottomTab,
@@ -273,6 +302,7 @@ class _Workbench extends StatelessWidget {
                                 outline: workspace.outline,
                                 onSelectSymbol: (sym) => workspace.selectSymbol(sym['name'] as String?),
                               ),
+                            LeftTool.build => BuildToolsPanel(store: buildTools, onOpenFile: workspace.openFile),
                           },
                         );
                         return Row(

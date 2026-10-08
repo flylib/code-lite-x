@@ -3,7 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../../features/bottom_tools/bottom_tools_widget.dart';
 
 /// 左侧工具窗(活动条上半段选择的那一栏)。
-enum LeftTool { project, commit, pullRequests, structure }
+enum LeftTool { project, commit, pullRequests, structure, build }
 
 /// 面板显隐与选中项。只放"哪个面板开着、选中了什么",
 /// 不放文件内容 —— 那些在 [WorkspaceStore] 与 EditorSessionManager 里。
@@ -67,6 +67,14 @@ class LayoutStore extends ChangeNotifier {
       _bottomTab = tab;
       _isBottomOpen = true;
     }
+    notifyListeners();
+  }
+
+  /// 打开底部工具窗并切到 [tab];已经开着就保持开着(构建任务运行时切到终端用)。
+  void showBottomTab(BottomToolTab tab) {
+    if (_bottomTab == tab && _isBottomOpen) return;
+    _bottomTab = tab;
+    _isBottomOpen = true;
     notifyListeners();
   }
 
