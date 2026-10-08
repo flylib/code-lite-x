@@ -158,7 +158,6 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
       p.dispose();
     }
     _linePainters.clear();
-    _widthCache.clear();
   }
 
   /// 行文本 → 排好版的 TextPainter(LRU)。光标、选区、点击定位都按真实字形宽度测量,
@@ -296,32 +295,23 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
 
   /// 代码区宽度(横向滚动长度):按最长一行估算 —— 全角字符算两格、Tab 算四格。
   /// 不逐行排版(那正是要避免的整文件开销);同一版文本只算一次。
-  final Map<CodeEditorController, (int, double)> _widthCache = {};
+  /// 内容宽度:最宽一行的列数由文本模型增量维护,这里只做换算(O(1))。
+  double _contentWidth(CodeEditorController controller) => controller.maxColumns * _charWidth + 2 * _padH + 48;
 
-  double _contentWidth(CodeEditorController controller, List<String> lines) {
-    final cached = _widthCache[controller];
-    if (cached != null && cached.$1 == controller.version) return cached.$2;
-    var widest = 0;
-    for (final line in lines) {
-      if (line.length * 4 <= widest) continue; // 全是 Tab 也超不过当前最宽:跳过
-      var cols = 0;
-      for (var k = 0; k < line.length; k++) {
-        final c = line.codeUnitAt(k);
-        if (c == 9) {
-          cols += 4;
-        } else if (c >= 0x1100 && (c < 0xDC00 || c > 0xDFFF)) {
-          cols += 2; // CJK / 全角 / emoji(代理对只记一次)
-        } else if (c < 0xDC00 || c > 0xDFFF) {
-          cols += 1;
-        }
-      }
-      if (cols > widest) widest = cols;
-    }
-    final width = widest * _charWidth + 2 * _padH + 48;
-    if (_widthCache.length > 4) _widthCache.clear();
-    _widthCache[controller] = (controller.version, width);
-    return width;
+  /// 关掉的文档(controller 已释放)不能再被缓存攥着:高亮缓存一个 2 万行的文件就有约 30 MB。
+  /// 以前只有缓存里超过两个文档时才清理,关掉标签、甚至换了项目之后旧文档还一直留着。
+  void _dropClosedDocuments() {
+    _highlighters.removeWhere((controller, _) => controller.isDisposed);
+    _blame.removeWhere((controller, session) {
+      if (!controller.isDisposed) return false;
+      session.dispose(controller);
+      return true;
+    });
   }
+
+  /// 测试用:缓存里还挂着的文档。
+  @visibleForTesting
+  Set<CodeEditorController> get debugCachedDocuments => {..._highlighters.keys, ..._blame.keys};
 
   /// 每个文档(controller)一份高亮缓存;分屏两侧各自一份。
   final Map<CodeEditorController, DocumentHighlighter> _highlighters = {};
@@ -329,6 +319,8 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
   /// 按文件名(无扩展名时看首行 #!)识别语言,并刷新该文档的高亮缓存。
   DocumentHighlighter _highlightFor(CodeEditorController controller, String filePath, List<String> lines) {
     final lang = languageOf(filePath, lines);
+    // 按键只重建窗格、不走整个 build,所以这里也清一次(缓存里最多两三个文档,不费事)
+    _dropClosedDocuments();
     // 只保留当前两侧在用的文档:关掉的标签不再占着缓存。
     if (_highlighters.length > 2 && !_highlighters.containsKey(controller)) {
       _highlighters.removeWhere((c, _) => c != _controller && c != widget.secondaryTab?.controller);
@@ -696,6 +688,7 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
 
   @override
   Widget build(BuildContext context) {
+    _dropClosedDocuments();
     final isSplit = widget.splitDirection != SplitDirection.none && widget.secondaryTab != null;
     Widget primary() => _paneFor(
           controller: _controller,
@@ -1039,7 +1032,7 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
                                 child: ConstrainedBox(
                                 constraints: BoxConstraints(minWidth: viewport.maxWidth),
                                 child: SizedBox(
-                                  width: _contentWidth(controller, lines),
+                                  width: _contentWidth(controller),
                                   height: lines.length * _lineHeight + 2 * _padV,
                                   child: VisibleLines(
                                     lineCount: lines.length,

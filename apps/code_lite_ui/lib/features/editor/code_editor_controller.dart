@@ -180,6 +180,81 @@ class CodeEditorController extends ChangeNotifier {
   /// 每次文本改动加一。
   int get version => _version;
 
+  // ---- 最宽行(编辑区的横向滚动宽度用) -------------------------------------------------
+  //
+  // 每行的显示列数,和「列数 → 有几行」的分布。编辑只更新改动的那几行:以前每敲一个字
+  // 都把全文每个字符扫一遍,2 万行的文件每次按键要十几毫秒。第一次用到时才建,整体载入时作废。
+  List<int>? _cols;
+  final Map<int, int> _colCounts = {};
+  int _maxCols = 0;
+
+  /// 一行占几列:Tab 4 列,CJK / 全角 / emoji 2 列(代理对只记一次),其余 1 列。
+  static int displayColumns(String line) {
+    var cols = 0;
+    for (var k = 0; k < line.length; k++) {
+      final c = line.codeUnitAt(k);
+      if (c == 9) {
+        cols += 4;
+      } else if (c >= 0x1100 && (c < 0xDC00 || c > 0xDFFF)) {
+        cols += 2;
+      } else if (c < 0xDC00 || c > 0xDFFF) {
+        cols += 1;
+      }
+    }
+    return cols;
+  }
+
+  /// 最宽一行的显示列数。
+  int get maxColumns {
+    if (_cols == null) {
+      _colCounts.clear();
+      _maxCols = 0;
+      final cols = List<int>.filled(_lines.length, 0, growable: true); // 编辑时要随行数伸缩
+      for (var i = 0; i < _lines.length; i++) {
+        final c = cols[i] = displayColumns(_lines[i]);
+        _colCounts[c] = (_colCounts[c] ?? 0) + 1;
+        if (c > _maxCols) _maxCols = c;
+      }
+      _cols = cols;
+    }
+    return _maxCols;
+  }
+
+  /// [_edit] 把第 [first]..[last] 行换成 [replacement] 之前调用。
+  void _updateColumns(int first, int last, List<String> replacement) {
+    final cols = _cols;
+    if (cols == null) return; // 还没人问过最宽行,不用维护
+    var lostWidest = false;
+    for (var i = first; i <= last; i++) {
+      final c = cols[i];
+      final n = _colCounts[c]! - 1;
+      if (n == 0) {
+        _colCounts.remove(c);
+        if (c == _maxCols) lostWidest = true;
+      } else {
+        _colCounts[c] = n;
+      }
+    }
+    final added = [for (final line in replacement) displayColumns(line)];
+    for (final c in added) {
+      _colCounts[c] = (_colCounts[c] ?? 0) + 1;
+      if (c > _maxCols) {
+        _maxCols = c;
+        lostWidest = false;
+      }
+    }
+    cols.replaceRange(first, last + 1, added);
+    if (lostWidest) {
+      // 最宽的那行没了(被改短 / 删掉):从分布里找下一个;不同的列数通常只有几十个
+      _maxCols = _colCounts.keys.fold(0, (a, b) => a > b ? a : b);
+    }
+  }
+
+  bool _disposed = false;
+
+  /// 已经 [dispose](标签关了):持有它的缓存可以丢了。
+  bool get isDisposed => _disposed;
+
   EditorPosition get cursorPosition => _selection.head;
   EditorSelection get selection => _selection;
   bool get hasSelection => !_selection.isCollapsed;
@@ -283,6 +358,7 @@ class CodeEditorController extends ChangeNotifier {
       ];
     }
     _shiftBookmarks(start, removed, insertion);
+    _updateColumns(start.line, end.line, replacement);
     _lines.replaceRange(start.line, end.line + 1, replacement);
     _length += insertion.length - removed.length;
     _textCache = null;
@@ -531,6 +607,7 @@ class CodeEditorController extends ChangeNotifier {
   /// [markDirty] 为 false 时这份文本就是"已保存"的基准。要作为一次可撤销的编辑,用 [replaceAllText]。
   void setText(String newText, {bool markDirty = false}) {
     _lines = newText.isEmpty ? [''] : newText.split('\n');
+    _cols = null; // 最宽行下次用到时重建
     _textCache = newText;
     _linesSnapshot = null;
     _length = newText.length;
@@ -929,6 +1006,7 @@ class CodeEditorController extends ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
     _blinkTimer?.cancel();
     caretBlink.dispose();
     super.dispose();
