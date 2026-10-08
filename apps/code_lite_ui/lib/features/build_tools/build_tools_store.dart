@@ -59,6 +59,9 @@ class BuildToolsStore extends ChangeNotifier {
   String? _selectedModule;
   final List<String> _selectedTasks = [];
 
+  /// 选中的不可运行节点(组、插件、依赖……);选中模块行或任务时为 null。
+  String? _selectedNode;
+
   List<BuildProject> get projects => _projects;
   bool get loading => _loading;
 
@@ -156,6 +159,7 @@ class BuildToolsStore extends ChangeNotifier {
 
   static String moduleKey(BuildProject p, BuildModule m) => '${p.tool.id}:${m.buildFile}';
   static String groupKey(BuildProject p, BuildModule m, String group) => '${moduleKey(p, m)}#$group';
+  static String itemKey(String groupKey, BuildItem item) => '$groupKey/${item.label}';
 
   bool isExpanded(String key) => _expanded.contains(key);
 
@@ -170,20 +174,51 @@ class BuildToolsStore extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// 展开所有模块和它们的任务组 / 节点组(插件不展开:每个插件十来个目标,全展开没法看)。
+  void expandAll() {
+    for (final p in _projects) {
+      for (final m in p.root.all) {
+        _expanded.add(moduleKey(p, m));
+        for (final g in p.tool.taskGroups) {
+          _expanded.add(groupKey(p, m, g.name));
+        }
+        for (final g in m.groups) {
+          _expanded.add(groupKey(p, m, g.name));
+        }
+      }
+    }
+    notifyListeners();
+  }
+
   /// 选中的模块(模块行或它下面的任务行被点中)。
   String? get selectedModule => _selectedModule;
   List<String> get selectedTasks => List.unmodifiable(_selectedTasks);
 
+  String? get selectedNode => _selectedNode;
+
   bool isTaskSelected(String moduleKey, String task) => _selectedModule == moduleKey && _selectedTasks.contains(task);
+
+  /// 模块行本身被选中(不是它下面的某个节点)。
+  bool isModuleSelected(String moduleKey) => _selectedModule == moduleKey && _selectedTasks.isEmpty && _selectedNode == null;
 
   void selectModule(String moduleKey) {
     _selectedModule = moduleKey;
     _selectedTasks.clear();
+    _selectedNode = null;
+    notifyListeners();
+  }
+
+  /// 选中模块下一个不可运行的节点(组、插件、依赖、仓库)。
+  void selectNode(String moduleKey, String nodeKey) {
+    _selectedModule = moduleKey;
+    _selectedTasks.clear();
+    _selectedNode = nodeKey;
     notifyListeners();
   }
 
   /// 点任务;[toggle](⌘ / Ctrl 点击)时在同一模块里多选,运行时按生命周期顺序一起执行。
   void selectTask(String moduleKey, String task, {bool toggle = false}) {
+    _selectedNode = null;
     if (!toggle || _selectedModule != moduleKey) {
       _selectedModule = moduleKey;
       _selectedTasks
@@ -198,6 +233,7 @@ class BuildToolsStore extends ChangeNotifier {
   void _clearSelection() {
     _selectedModule = null;
     _selectedTasks.clear();
+    _selectedNode = null;
   }
 
   // ---------------------------------------------------------------------------
@@ -228,16 +264,42 @@ class BuildToolsStore extends ChangeNotifier {
     runner('${module.name} [${tasks.join(',')}]', commandFor(project, module, tasks));
   }
 
-  /// 运行选中的任务(工具栏 ▶);多选时按清单里的顺序。返回是否有可运行的选中项。
+  /// 「执行 Maven 目标」:用户敲的参数原样跟在命令后面,在 [module] 上运行。
+  void runRaw(BuildProject project, BuildModule module, String args) {
+    final trimmed = args.trim();
+    if (trimmed.isEmpty) return;
+    final command = buildCommandLine(
+      project.tool,
+      module,
+      const [],
+      rootBuildFile: project.buildFile,
+      wrapper: project.wrapper,
+      options: _options[project.tool.id] ?? const {},
+      windows: windows,
+      raw: trimmed,
+    );
+    runner('${module.name} [$trimmed]', command);
+  }
+
+  /// 运行选中的任务(工具栏 ▶)。多选时生命周期阶段按清单里的顺序排在前面,
+  /// 插件目标按点选的顺序跟在后面。返回是否有可运行的选中项。
   bool runSelected() {
     final sel = _selection();
     if (sel == null) return false;
     final (project, module) = sel;
     final order = [for (final g in project.tool.taskGroups) ...g.tasks];
-    final tasks = [..._selectedTasks]..sort((a, b) => order.indexOf(a).compareTo(order.indexOf(b)));
+    int rank(String t) => order.contains(t) ? order.indexOf(t) : order.length + _selectedTasks.indexOf(t);
+    final tasks = [..._selectedTasks]..sort((a, b) => rank(a).compareTo(rank(b)));
     if (tasks.isEmpty) return false;
     run(project, module, tasks);
     return true;
+  }
+
+  /// 选中的模块(没有选中时为第一个项目的根模块):「执行 Maven 目标」在它上面运行。
+  (BuildProject, BuildModule)? get targetModule {
+    final sel = _selection();
+    if (sel != null) return sel;
+    return _projects.isEmpty ? null : (_projects.first, _projects.first.root);
   }
 
   bool get canRunSelected => _selection() != null && _selectedTasks.isNotEmpty;

@@ -7,20 +7,26 @@ import '../../core/theme/intellij_theme.dart';
 import '../editor/context_menu_region.dart';
 import 'build_tools_store.dart';
 
-const TextStyle _label = TextStyle(color: IntelliJTheme.textPrimary, fontSize: 12);
-const TextStyle _muted = TextStyle(color: IntelliJTheme.textMuted, fontSize: 11);
+const TextStyle _label = TextStyle(color: IntelliJTheme.textPrimary, fontSize: 13);
+const TextStyle _muted = TextStyle(color: IntelliJTheme.textMuted, fontSize: 12);
+const TextStyle _error = TextStyle(color: Color(0xFFE5534B), fontSize: 12);
+const Color _mavenBlue = Color(0xFF548AF7);
 const double _rowHeight = 24;
-const double _indent = 16;
+const double _indent = 20;
 
-/// 左侧的构建工具窗(IntelliJ 的 Maven 窗口):模块树 → 任务组(Lifecycle)→ 任务。
-/// 双击任务在终端里运行;⌘ / Ctrl 点击可在同一模块里多选,工具栏 ▶ 一起运行。
+/// 左侧的构建工具窗,照 IntelliJ 的 Maven 窗口:标题行、工具栏,
+/// 所有模块平铺在顶层(聚合根标 (root)),每个模块下是 Lifecycle、Plugins、Repositories、Dependencies。
+/// 双击阶段 / 插件目标在终端里运行;⌘ / Ctrl 点击可在同一模块里多选,工具栏 ▶ 一起运行。
 class BuildToolsPanel extends StatelessWidget {
-  const BuildToolsPanel({super.key, required this.store, this.onOpenFile});
+  const BuildToolsPanel({super.key, required this.store, this.onOpenFile, this.onHide});
 
   final BuildToolsStore store;
 
-  /// 右键模块「打开构建文件」(相对项目根的路径)。
+  /// 右键模块「打开 pom.xml」(相对项目根的路径)。
   final ValueChanged<String>? onOpenFile;
+
+  /// 标题行的「—」:收起工具窗。
+  final VoidCallback? onHide;
 
   @override
   Widget build(BuildContext context) {
@@ -29,14 +35,17 @@ class BuildToolsPanel extends StatelessWidget {
       builder: (context, _) {
         final rows = <Widget>[];
         for (final p in store.projects) {
-          _addModule(rows, p, p.root, 0);
+          for (final m in p.root.all) {
+            _addModule(rows, p, m, isRoot: identical(m, p.root) && m.modules.isNotEmpty);
+          }
         }
         return Container(
           color: IntelliJTheme.sidebarBg,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _Header(store: store),
+              _TitleRow(title: store.title, onHide: onHide),
+              _Toolbar(store: store),
               if (store.loading) const LinearProgressIndicator(minHeight: 2),
               Expanded(
                 child: store.projects.isEmpty
@@ -55,19 +64,19 @@ class BuildToolsPanel extends StatelessWidget {
     );
   }
 
-  void _addModule(List<Widget> rows, BuildProject p, BuildModule m, int depth) {
+  void _addModule(List<Widget> rows, BuildProject p, BuildModule m, {required bool isRoot}) {
     final key = BuildToolsStore.moduleKey(p, m);
     final open = store.isExpanded(key);
     rows.add(_TreeRow(
       key: ValueKey('build-module-$key'),
-      depth: depth,
+      depth: 0,
       expandable: true,
       expanded: open,
-      selected: store.selectedModule == key && store.selectedTasks.isEmpty,
+      selected: store.isModuleSelected(key),
       icon: _ModuleIcon(error: m.error != null),
       label: m.name,
-      trailing: m.error ?? (depth == 0 ? '(root)' : null),
-      trailingIsError: m.error != null,
+      trailing: m.error ?? (isRoot ? '(root)' : null),
+      trailingStyle: m.error != null ? _error : _muted,
       tooltip: m.error ?? m.buildFile,
       onTap: (_) => store.selectModule(key),
       onDoubleTap: () => store.toggleExpanded(key),
@@ -81,101 +90,206 @@ class BuildToolsPanel extends StatelessWidget {
       ],
     ));
     if (!open) return;
+
+    // 清单声明的任务组(Lifecycle)
     for (final g in p.tool.taskGroups) {
       final gk = BuildToolsStore.groupKey(p, m, g.name);
-      final gOpen = store.isExpanded(gk);
-      rows.add(_TreeRow(
-        key: ValueKey('build-group-$gk'),
-        depth: depth + 1,
-        expandable: true,
-        expanded: gOpen,
-        selected: false,
-        icon: const Icon(Icons.folder_outlined, size: 14, color: IntelliJTheme.textSecondary),
-        label: g.name,
-        onTap: (_) => store.toggleExpanded(gk),
-        onToggle: () => store.toggleExpanded(gk),
-      ));
+      final gOpen = _addGroup(rows, key, gk, g.name, 'lifecycle');
       if (!gOpen) continue;
       for (final task in g.tasks) {
-        final command = store.commandFor(p, m, [task]);
-        rows.add(_TreeRow(
-          key: ValueKey('build-task-$key/$task'),
-          depth: depth + 2,
-          expandable: false,
-          expanded: false,
-          selected: store.isTaskSelected(key, task),
-          icon: const Icon(Icons.settings_outlined, size: 14, color: Color(0xFF6E9FD8)),
-          label: task,
-          tooltip: command,
-          onTap: (multi) => store.selectTask(key, task, toggle: multi),
-          onDoubleTap: () => store.run(p, m, [task]),
-          menu: () => [
-            MenuItemButton(
-              leadingIcon: const Icon(Icons.play_arrow, size: 16, color: Color(0xFF5FB865)),
-              onPressed: () => store.run(p, m, [task]),
-              child: Text("运行 '$task'"),
-            ),
-            if (store.selectedModule == key && store.selectedTasks.length > 1)
-              MenuItemButton(onPressed: store.runSelected, child: Text('运行选中的 ${store.selectedTasks.length} 个任务')),
-            MenuItemButton(
-              onPressed: () => Clipboard.setData(ClipboardData(text: command)),
-              child: const Text('复制命令行'),
-            ),
-          ],
-        ));
+        _addTask(rows, p, m, key, task, task, depth: 2);
       }
     }
-    for (final c in m.modules) {
-      _addModule(rows, p, c, depth + 1);
+
+    // 读取器读出的节点组(Plugins / Repositories / Dependencies)
+    for (final g in m.groups) {
+      final gk = BuildToolsStore.groupKey(p, m, g.name);
+      final gOpen = _addGroup(rows, key, gk, g.name, g.kind);
+      if (!gOpen) continue;
+      for (final item in g.items) {
+        final ik = BuildToolsStore.itemKey(gk, item);
+        if (item.task != null) {
+          _addTask(rows, p, m, key, item.task!, item.label, depth: 2);
+          continue;
+        }
+        final iOpen = store.isExpanded(ik);
+        rows.add(_TreeRow(
+          key: ValueKey('build-item-$ik'),
+          depth: 2,
+          expandable: item.children.isNotEmpty,
+          expanded: iOpen,
+          selected: store.selectedNode == ik,
+          icon: _itemIcon(g.kind),
+          label: item.label,
+          trailing: item.detail,
+          tooltip: item.detail,
+          onTap: (_) => store.selectNode(key, ik),
+          onDoubleTap: item.children.isEmpty ? null : () => store.toggleExpanded(ik),
+          onToggle: () => store.toggleExpanded(ik),
+          menu: item.detail == null
+              ? null
+              : () => [
+                    MenuItemButton(
+                      onPressed: () => Clipboard.setData(ClipboardData(text: g.kind == 'dependencies' ? item.label : item.detail!)),
+                      child: Text(g.kind == 'repositories' ? '复制 URL' : '复制坐标'),
+                    ),
+                  ],
+        ));
+        if (!iOpen) continue;
+        for (final c in item.children) {
+          if (c.task != null) _addTask(rows, p, m, key, c.task!, c.label, depth: 3);
+        }
+      }
     }
+  }
+
+  bool _addGroup(List<Widget> rows, String moduleKey, String gk, String name, String kind) {
+    final open = store.isExpanded(gk);
+    rows.add(_TreeRow(
+      key: ValueKey('build-group-$gk'),
+      depth: 1,
+      expandable: true,
+      expanded: open,
+      selected: store.selectedNode == gk,
+      icon: _FolderIcon(kind: kind),
+      label: name,
+      onTap: (_) => store.selectNode(moduleKey, gk),
+      onDoubleTap: () => store.toggleExpanded(gk),
+      onToggle: () => store.toggleExpanded(gk),
+    ));
+    return open;
+  }
+
+  void _addTask(List<Widget> rows, BuildProject p, BuildModule m, String key, String task, String label, {required int depth}) {
+    final command = store.commandFor(p, m, [task]);
+    rows.add(_TreeRow(
+      key: ValueKey('build-task-$key/$task'),
+      depth: depth,
+      expandable: false,
+      expanded: false,
+      selected: store.isTaskSelected(key, task),
+      icon: const Icon(Icons.settings_outlined, size: 15, color: IntelliJTheme.textSecondary),
+      label: label,
+      tooltip: command,
+      onTap: (multi) => store.selectTask(key, task, toggle: multi),
+      onDoubleTap: () => store.run(p, m, [task]),
+      menu: () => [
+        MenuItemButton(
+          leadingIcon: const Icon(Icons.play_arrow, size: 16, color: Color(0xFF5FB865)),
+          onPressed: () => store.run(p, m, [task]),
+          child: Text("运行 '$task'"),
+        ),
+        if (store.selectedModule == key && store.selectedTasks.length > 1)
+          MenuItemButton(onPressed: store.runSelected, child: Text('运行选中的 ${store.selectedTasks.length} 个任务')),
+        MenuItemButton(
+          onPressed: () => Clipboard.setData(ClipboardData(text: command)),
+          child: const Text('复制命令行'),
+        ),
+      ],
+    ));
+  }
+
+  static Widget _itemIcon(String kind) => switch (kind) {
+        'plugins' => const Icon(Icons.extension_outlined, size: 14, color: IntelliJTheme.textSecondary),
+        'repositories' => const Icon(Icons.storage_outlined, size: 14, color: IntelliJTheme.textSecondary),
+        _ => const Icon(Icons.inventory_2_outlined, size: 14, color: IntelliJTheme.textSecondary),
+      };
+}
+
+/// 「Maven」标题 + 收起按钮(IntelliJ 工具窗的标题行)。
+class _TitleRow extends StatelessWidget {
+  const _TitleRow({required this.title, this.onHide});
+
+  final String title;
+  final VoidCallback? onHide;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 32,
+      padding: const EdgeInsets.only(left: 12, right: 6),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              title,
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
+              style: const TextStyle(color: IntelliJTheme.textHigh, fontSize: 13, fontWeight: FontWeight.w600),
+            ),
+          ),
+          if (onHide != null) _ToolButton(icon: Icons.remove, tooltip: '隐藏', onTap: onHide),
+        ],
+      ),
+    );
   }
 }
 
-class _Header extends StatelessWidget {
-  const _Header({required this.store});
+class _Toolbar extends StatelessWidget {
+  const _Toolbar({required this.store});
 
   final BuildToolsStore store;
 
   @override
   Widget build(BuildContext context) {
     final project = store.toolbarProject;
+    final hasProjects = store.projects.isNotEmpty;
     return Container(
-      height: 28,
-      padding: const EdgeInsets.only(left: 12, right: 4),
+      height: 30,
+      padding: const EdgeInsets.symmetric(horizontal: 8),
       decoration: const BoxDecoration(
-        color: IntelliJTheme.subHeaderBg,
-        border: Border(bottom: BorderSide(color: IntelliJTheme.borderSubtle)),
+        border: Border(top: BorderSide(color: IntelliJTheme.borderSubtle), bottom: BorderSide(color: IntelliJTheme.borderSubtle)),
       ),
-      // 侧栏可拖窄到 160px:标题要能省略,按钮不换行。
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              store.title.toUpperCase(),
-              overflow: TextOverflow.ellipsis,
-              maxLines: 1,
-              style: const TextStyle(color: IntelliJTheme.textMuted, fontSize: 10, fontWeight: FontWeight.bold),
+      // 侧栏可拖窄到 160px:按钮放不下时横向滚动,不溢出。
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            _ToolButton(icon: Icons.sync, tooltip: '重新加载所有 ${store.title} 项目', onTap: store.loading ? null : store.reload),
+            const _Separator(),
+            _ToolButton(
+              icon: Icons.play_arrow,
+              color: const Color(0xFF5FB865),
+              tooltip: '运行选中的任务',
+              onTap: store.canRunSelected ? store.runSelected : null,
             ),
-          ),
-          _ToolButton(icon: Icons.refresh, tooltip: '重新加载项目', onTap: store.loading ? null : store.reload),
-          _ToolButton(
-            icon: Icons.play_arrow,
-            color: const Color(0xFF5FB865),
-            tooltip: '运行选中的任务',
-            onTap: store.canRunSelected ? store.runSelected : null,
-          ),
-          if (project != null)
-            for (final o in project.tool.options)
-              _ToolButton(
-                icon: _optionIcon(o),
-                tooltip: o.label,
-                active: store.isOptionOn(project.tool, o.id),
-                onTap: () => store.toggleOption(project.tool, o.id),
-              ),
-          _ToolButton(icon: Icons.unfold_less, tooltip: '全部折叠', onTap: store.collapseAll),
-        ],
+            _ToolButton(
+              icon: Icons.smart_display_outlined,
+              tooltip: '执行 ${store.title} 目标',
+              onTap: hasProjects ? () => _executeGoal(context) : null,
+            ),
+            if (project != null && project.tool.options.isNotEmpty) ...[
+              const _Separator(),
+              for (final o in project.tool.options)
+                _ToolButton(
+                  icon: _optionIcon(o),
+                  tooltip: o.label,
+                  active: store.isOptionOn(project.tool, o.id),
+                  onTap: () => store.toggleOption(project.tool, o.id),
+                ),
+            ],
+            const _Separator(),
+            _ToolButton(icon: Icons.unfold_more, tooltip: '全部展开', onTap: hasProjects ? store.expandAll : null),
+            _ToolButton(icon: Icons.unfold_less, tooltip: '全部折叠', onTap: hasProjects ? store.collapseAll : null),
+          ],
+        ),
       ),
     );
+  }
+
+  Future<void> _executeGoal(BuildContext context) async {
+    final target = store.targetModule;
+    if (target == null) return;
+    final (project, module) = target;
+    final args = await showDialog<String>(
+      context: context,
+      builder: (_) => _GoalDialog(
+        title: '执行 ${project.tool.name} 目标',
+        module: module.name,
+        prefix: store.commandFor(project, module, const []),
+      ),
+    );
+    if (args != null) store.runRaw(project, module, args);
   }
 
   static IconData _optionIcon(BuildToolOption o) => switch (o.icon) {
@@ -183,6 +297,82 @@ class _Header extends StatelessWidget {
         'skip' => Icons.block,
         _ => Icons.tune,
       };
+}
+
+/// 「执行 Maven 目标」:输入参数(`dependency:tree -Dverbose`),在选中的模块上运行。
+class _GoalDialog extends StatefulWidget {
+  const _GoalDialog({required this.title, required this.module, required this.prefix});
+
+  final String title;
+  final String module;
+
+  /// 不带任务的命令(`mvn -f core/pom.xml`),显示在输入框前面。
+  final String prefix;
+
+  @override
+  State<_GoalDialog> createState() => _GoalDialogState();
+}
+
+class _GoalDialogState extends State<_GoalDialog> {
+  final TextEditingController _text = TextEditingController();
+
+  @override
+  void dispose() {
+    _text.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    if (_text.text.trim().isEmpty) return;
+    Navigator.pop(context, _text.text);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final exe = widget.prefix.split(' ').first;
+    return AlertDialog(
+      backgroundColor: IntelliJTheme.panelBg,
+      title: Text(widget.title, style: const TextStyle(color: IntelliJTheme.textHigh, fontSize: 15)),
+      content: SizedBox(
+        width: 460,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('在 ${widget.module} 上运行', style: _muted),
+            const SizedBox(height: 10),
+            TextField(
+              controller: _text,
+              autofocus: true,
+              style: const TextStyle(color: IntelliJTheme.textHigh, fontSize: 13, fontFamily: 'monospace'),
+              onSubmitted: (_) => _submit(),
+              decoration: InputDecoration(
+                isDense: true,
+                prefixText: '$exe ',
+                prefixStyle: const TextStyle(color: IntelliJTheme.textMuted, fontSize: 13, fontFamily: 'monospace'),
+                hintText: 'dependency:tree -Dverbose',
+                hintStyle: const TextStyle(color: IntelliJTheme.textMuted, fontSize: 13),
+                border: const OutlineInputBorder(borderSide: BorderSide(color: IntelliJTheme.border)),
+                enabledBorder: const OutlineInputBorder(borderSide: BorderSide(color: IntelliJTheme.border)),
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('取消')),
+        FilledButton(onPressed: _submit, child: const Text('执行')),
+      ],
+    );
+  }
+}
+
+class _Separator extends StatelessWidget {
+  const _Separator();
+
+  @override
+  Widget build(BuildContext context) =>
+      Container(width: 1, height: 16, margin: const EdgeInsets.symmetric(horizontal: 5), color: IntelliJTheme.border);
 }
 
 class _ToolButton extends StatelessWidget {
@@ -206,18 +396,18 @@ class _ToolButton extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(4),
         child: Container(
-          width: 22,
-          height: 22,
+          width: 24,
+          height: 24,
           alignment: Alignment.center,
           decoration: active ? BoxDecoration(color: IntelliJTheme.accentBlue.withValues(alpha: 0.25), borderRadius: BorderRadius.circular(4)) : null,
-          child: Icon(icon, size: 15, color: enabled ? (color ?? IntelliJTheme.textSecondary) : IntelliJTheme.textMuted.withValues(alpha: 0.5)),
+          child: Icon(icon, size: 16, color: enabled ? (color ?? IntelliJTheme.textSecondary) : IntelliJTheme.textMuted.withValues(alpha: 0.5)),
         ),
       ),
     );
   }
 }
 
-/// Maven 模块图标:蓝底小写 m(IntelliJ 的模块徽标);读取出错时红色。
+/// Maven 模块图标:蓝色斜体 m(IntelliJ 的模块图标);读取出错时红色。
 class _ModuleIcon extends StatelessWidget {
   const _ModuleIcon({required this.error});
 
@@ -225,17 +415,53 @@ class _ModuleIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = error ? const Color(0xFFE5534B) : const Color(0xFF6E9FD8);
-    return Container(
-      width: 14,
-      height: 14,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.2),
-        borderRadius: BorderRadius.circular(2),
-        border: Border.all(color: color, width: 0.8),
+    return SizedBox(
+      width: 16,
+      child: Text(
+        'm',
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          color: error ? const Color(0xFFE5534B) : _mavenBlue,
+          fontSize: 17,
+          fontStyle: FontStyle.italic,
+          fontWeight: FontWeight.w500,
+          height: 1,
+        ),
       ),
-      child: Text('m', style: TextStyle(color: color, fontSize: 9, fontWeight: FontWeight.bold, height: 1)),
+    );
+  }
+}
+
+/// 文件夹 + 右下角小徽标:Lifecycle / Plugins 是齿轮,Repositories 是勾,Dependencies 是链接。
+class _FolderIcon extends StatelessWidget {
+  const _FolderIcon({required this.kind});
+
+  final String kind;
+
+  @override
+  Widget build(BuildContext context) {
+    final badge = switch (kind) {
+      'repositories' => Icons.check,
+      'dependencies' => Icons.link,
+      _ => Icons.settings,
+    };
+    return SizedBox(
+      width: 17,
+      height: 16,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          const Icon(Icons.folder_outlined, size: 15, color: IntelliJTheme.textSecondary),
+          Positioned(
+            right: -1,
+            bottom: -1,
+            child: Container(
+              decoration: const BoxDecoration(color: IntelliJTheme.sidebarBg, shape: BoxShape.circle),
+              child: Icon(badge, size: 9, color: _mavenBlue),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -254,7 +480,7 @@ class _TreeRow extends StatefulWidget {
     this.onToggle,
     this.onDoubleTap,
     this.trailing,
-    this.trailingIsError = false,
+    this.trailingStyle = _muted,
     this.tooltip,
     this.menu,
   });
@@ -271,7 +497,7 @@ class _TreeRow extends StatefulWidget {
   final VoidCallback? onToggle;
   final VoidCallback? onDoubleTap;
   final String? trailing;
-  final bool trailingIsError;
+  final TextStyle trailingStyle;
   final String? tooltip;
   final List<Widget> Function()? menu;
 
@@ -303,11 +529,11 @@ class _TreeRowState extends State<_TreeRow> {
         child: Row(
           children: [
             SizedBox(
-              width: 16,
+              width: 18,
               child: w.expandable
                   ? GestureDetector(
                       onTap: w.onToggle,
-                      child: Icon(w.expanded ? Icons.expand_more : Icons.chevron_right, size: 14, color: IntelliJTheme.textMuted),
+                      child: Icon(w.expanded ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_right, size: 16, color: IntelliJTheme.textSecondary),
                     )
                   : null,
             ),
@@ -316,14 +542,7 @@ class _TreeRowState extends State<_TreeRow> {
             Flexible(child: Text(w.label, style: _label, overflow: TextOverflow.ellipsis, maxLines: 1)),
             if (w.trailing != null) ...[
               const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  w.trailing!,
-                  overflow: TextOverflow.ellipsis,
-                  maxLines: 1,
-                  style: w.trailingIsError ? const TextStyle(color: Color(0xFFE5534B), fontSize: 11) : _muted,
-                ),
-              ),
+              Expanded(child: Text(w.trailing!, overflow: TextOverflow.ellipsis, maxLines: 1, style: w.trailingStyle)),
             ],
           ],
         ),

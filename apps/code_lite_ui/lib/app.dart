@@ -302,7 +302,11 @@ class _Workbench extends StatelessWidget {
                                 outline: workspace.outline,
                                 onSelectSymbol: (sym) => workspace.selectSymbol(sym['name'] as String?),
                               ),
-                            LeftTool.build => BuildToolsPanel(store: buildTools, onOpenFile: workspace.openFile),
+                            LeftTool.build => BuildToolsPanel(
+                                store: buildTools,
+                                onOpenFile: workspace.openFile,
+                                onHide: () => layout.selectLeftTool(LeftTool.build),
+                              ),
                           },
                         );
                         return Row(

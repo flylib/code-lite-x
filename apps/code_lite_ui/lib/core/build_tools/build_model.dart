@@ -16,6 +16,7 @@ class BuildModule {
     this.groupId,
     this.packaging,
     this.modules = const [],
+    this.groups = const [],
     this.error,
   });
 
@@ -28,6 +29,10 @@ class BuildModule {
   final String? groupId;
   final String? packaging;
   final List<BuildModule> modules;
+
+  /// 读取器从构建文件里读出的其它节点组(Maven:Plugins / Repositories / Dependencies),
+  /// 排在清单声明的任务组(Lifecycle)后面。
+  final List<BuildGroup> groups;
 
   /// 读不出来时的原因(文件不存在、XML 写坏了……);模块仍然显示,可以运行任务。
   final String? error;
@@ -45,6 +50,29 @@ class BuildModule {
       yield* m.all;
     }
   }
+}
+
+/// 模块下的一组节点(IntelliJ Maven 窗口里的 Plugins、Dependencies……)。
+class BuildGroup {
+  const BuildGroup({required this.name, required this.kind, required this.items});
+
+  final String name;
+
+  /// 界面据此选图标:`plugins` / `dependencies` / `repositories`。
+  final String kind;
+  final List<BuildItem> items;
+}
+
+/// 组里的一个节点。有 [task] 的可以运行(插件目标 `spring-boot:run`),有 [children] 的可以展开。
+class BuildItem {
+  const BuildItem({required this.label, this.detail, this.task, this.children = const []});
+
+  final String label;
+
+  /// 灰色的补充说明(坐标、scope、URL)。
+  final String? detail;
+  final String? task;
+  final List<BuildItem> children;
 }
 
 /// 读项目里的文件:相对项目根的路径 → 内容;不存在或读不了时 null。
@@ -68,7 +96,7 @@ Future<BuildModule> readBuildModel(BuildToolContribution tool, String buildFile,
 /// 在 [module] 上运行 [tasks] 的命令行(在项目根目录的 shell 里执行)。
 ///
 /// [wrapper] 为真时用项目自带的包装脚本(`./mvnw`);子模块按清单的 fileArgs 指定构建文件;
-/// [options] 是工具栏上打开的开关 id。
+/// [options] 是工具栏上打开的开关 id;[raw] 是用户在「执行 Maven 目标」里敲的参数,原样放在命令后面。
 String buildCommandLine(
   BuildToolContribution tool,
   BuildModule module,
@@ -77,6 +105,7 @@ String buildCommandLine(
   bool wrapper = false,
   Set<String> options = const {},
   bool windows = false,
+  String? raw,
 }) {
   final w = tool.wrapper;
   final exe = wrapper && w != null ? (windows ? '$w.cmd' : './$w') : tool.command;
@@ -87,7 +116,8 @@ String buildCommandLine(
     for (final o in tool.options)
       if (options.contains(o.id)) ...o.args,
   ];
-  return [exe, ...args.map((a) => shellQuote(a, windows: windows))].join(' ');
+  final trimmed = raw?.trim() ?? '';
+  return [exe, if (trimmed.isNotEmpty) trimmed, ...args.map((a) => shellQuote(a, windows: windows))].join(' ');
 }
 
 final RegExp _plainArg = RegExp(r'^[A-Za-z0-9_./:=@%+,-]+$');

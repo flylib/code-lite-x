@@ -126,7 +126,7 @@ class ActivityStripeWidget extends StatelessWidget {
   }
 }
 
-/// 构建工具窗的图标:圆角框里一个斜体 m(IntelliJ 的 Maven 工具窗图标是这个样子)。
+/// 构建工具窗的图标:斜体 m(IntelliJ 的 Maven 工具窗图标)。
 class BuildToolIcon extends StatelessWidget {
   const BuildToolIcon({super.key, required this.color, required this.size});
 
@@ -135,17 +135,14 @@ class BuildToolIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return SizedBox(
       width: size,
       height: size,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(size * 0.2),
-        border: Border.all(color: color, width: 1.4),
-      ),
-      child: Text(
-        'm',
-        style: TextStyle(color: color, fontSize: size * 0.7, fontWeight: FontWeight.w700, fontStyle: FontStyle.italic, height: 1),
+      child: Center(
+        child: Text(
+          'm',
+          style: TextStyle(color: color, fontSize: size * 1.15, fontWeight: FontWeight.w500, fontStyle: FontStyle.italic, height: 1),
+        ),
       ),
     );
   }

@@ -53,7 +53,27 @@ const _corePom = '''<project>
 </project>''';
 
 const _apiPom = '<project><artifactId>shop-core-api</artifactId></project>';
-const _webPom = '<project><artifactId>shop-web</artifactId><name>Web Front</name><packaging>war</packaging></project>';
+const _webPom = '''<project><parent><groupId>com.acme</groupId><version>2.0</version></parent><artifactId>shop-web</artifactId>
+  <properties><junit.version>4.13</junit.version></properties><name>Web Front</name><packaging>war</packaging>
+  <dependencies>
+    <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-web</artifactId></dependency>
+    <dependency><groupId>junit</groupId><artifactId>junit</artifactId><version>\${junit.version}</version><scope>test</scope></dependency>
+    <dependency><groupId>\${project.groupId}</groupId><artifactId>shop-core</artifactId><version>\${project.version}</version></dependency>
+  </dependencies>
+  <dependencyManagement><dependencies><dependency><groupId>x</groupId><artifactId>managed-only</artifactId></dependency></dependencies></dependencyManagement>
+  <repositories><repository><id>nexus</id><url>https://nexus.example/repo</url></repository></repositories>
+  <build>
+    <pluginManagement><plugins><plugin><artifactId>maven-only-managed-plugin</artifactId></plugin></plugins></pluginManagement>
+    <plugins>
+      <plugin>
+        <groupId>org.springframework.boot</groupId><artifactId>spring-boot-maven-plugin</artifactId><version>2.5.9</version>
+        <executions><execution><goals><goal>repackage</goal><goal>custom-goal</goal></goals></execution></executions>
+      </plugin>
+      <plugin><artifactId>maven-compiler-plugin</artifactId><version>3.11.0</version></plugin>
+      <plugin><groupId>com.acme</groupId><artifactId>weird</artifactId><executions><execution><goals><goal>go</goal></goals></execution></executions></plugin>
+    </plugins>
+  </build>
+</project>''';
 const _toolsPom = '<project><artifactId>shop-tools</artifactId></project>';
 
 Map<String, String> _files() => {
@@ -129,6 +149,33 @@ void main() {
       expect(root.all.length, 6);
     });
 
+    test('plugins (defaults by packaging + declared), repositories, direct dependencies', () async {
+      final root = await readMavenProject('pom.xml', _reader(_files()));
+      List<String> labels(BuildModule m, String group) => m.groups.firstWhere((g) => g.name == group).items.map((i) => i.label).toList();
+
+      expect(root.groups.map((g) => g.name), ['Plugins', 'Repositories'], reason: '根 pom 没有直接依赖,不显示 Dependencies');
+      expect(labels(root, 'Plugins'), ['clean', 'compiler', 'deploy', 'install', 'site'], reason: 'pom 打包默认绑定的插件 + <build> 里声明的');
+      expect(labels(root, 'Repositories'), ['central']);
+
+      final web = root.modules[1];
+      expect(web.groups.map((g) => g.name), ['Plugins', 'Repositories', 'Dependencies']);
+      expect(labels(web, 'Plugins'), ['clean', 'compiler', 'deploy', 'install', 'resources', 'site', 'spring-boot', 'surefire', 'war', 'weird']);
+      final plugins = web.groups.first.items;
+      final boot = plugins.firstWhere((i) => i.label == 'spring-boot');
+      expect(boot.detail, '(org.springframework.boot:spring-boot-maven-plugin:2.5.9)');
+      expect(boot.children.map((c) => c.task), containsAll(['spring-boot:run', 'spring-boot:repackage', 'spring-boot:custom-goal']));
+      expect(plugins.firstWhere((i) => i.label == 'compiler').detail, '(org.apache.maven.plugins:maven-compiler-plugin:3.11.0)');
+      expect(plugins.firstWhere((i) => i.label == 'weird').children.map((c) => c.task), ['weird:go'], reason: '不认识的插件只列声明的执行目标');
+      expect(labels(web, 'Repositories'), ['nexus', 'central']);
+      expect(labels(web, 'Dependencies'), ['org.springframework.boot:spring-boot-starter-web', 'junit:junit:4.13', 'com.acme:shop-core:2.0'],
+          reason: '本模块属性与 project.* 展开(没写的取 parent)');
+      expect(web.groups.last.items.map((i) => i.detail), [null, 'test', null]);
+
+      expect(mavenPluginPrefix('maven-surefire-plugin'), 'surefire');
+      expect(mavenPluginPrefix('spring-boot-maven-plugin'), 'spring-boot');
+      expect(mavenPluginPrefix('weird'), 'weird');
+    });
+
     test('broken or non-maven pom is reported on the module, not thrown', () async {
       final bad = await readMavenProject('pom.xml', _reader({'pom.xml': 'garbage'}));
       expect(bad.error, contains('解析失败'));
@@ -163,6 +210,8 @@ void main() {
           './mvnw package -f core/pom.xml -o -DskipTests');
       expect(buildCommandLine(tool, spaced, ['test'], rootBuildFile: 'pom.xml'), "mvn test -f 'my mod/it'\\''s/pom.xml'");
       expect(buildCommandLine(tool, core, ['test'], rootBuildFile: 'pom.xml', wrapper: true, windows: true), 'mvnw.cmd test -f core/pom.xml');
+      expect(buildCommandLine(tool, core, const [], rootBuildFile: 'pom.xml', options: {'offline'}, raw: ' dependency:tree -Dverbose '),
+          'mvn dependency:tree -Dverbose -f core/pom.xml -o');
     });
   });
 
@@ -228,10 +277,21 @@ void main() {
       final coreKey = BuildToolsStore.moduleKey(p, p.root.modules.first);
       expect(store.canRunSelected, isFalse);
       store.selectTask(coreKey, 'install');
+      store.selectTask(coreKey, 'dependency:tree', toggle: true);
       store.selectTask(coreKey, 'clean', toggle: true);
       store.toggleOption(p.tool, 'skipTests');
       expect(store.runSelected(), isTrue);
-      expect(runs.single, ('shop-core [clean,install]', './mvnw clean install -f core/pom.xml -DskipTests'));
+      expect(runs.single, ('shop-core [clean,install,dependency:tree]', './mvnw clean install dependency:tree -f core/pom.xml -DskipTests'),
+          reason: '生命周期阶段按顺序在前,插件目标跟在后面');
+      store.runRaw(p, p.root, 'help:effective-pom');
+      expect(runs.last, ('Shop & Co [help:effective-pom]', './mvnw help:effective-pom -DskipTests'));
+      expect(store.targetModule!.$2.name, 'shop-core');
+      store.selectNode(coreKey, 'x');
+      expect(store.isModuleSelected(coreKey), isFalse);
+      expect(store.canRunSelected, isFalse);
+      store.collapseAll();
+      store.expandAll();
+      expect(store.isExpanded(BuildToolsStore.groupKey(p, p.root.modules[1], 'Dependencies')), isTrue);
 
       // 保存了模块的 pom:重新读,新加的模块出现
       files['core/pom.xml'] = _corePom.replaceFirst('<module>api</module>', '<module>api</module><module>impl</module>');
@@ -266,7 +326,7 @@ void main() {
     });
 
     testWidgets('panel: module tree with Lifecycle; double-click runs; toggles show on the toolbar', (tester) async {
-      await tester.binding.setSurfaceSize(const Size(400, 800));
+      await tester.binding.setSurfaceSize(const Size(400, 1600));
       addTearDown(() => tester.binding.setSurfaceSize(null));
       final runs = <String>[];
       final opened = <String>[];
@@ -279,9 +339,13 @@ void main() {
       await store.reload();
       await tester.pumpWidget(MaterialApp(home: Scaffold(body: SizedBox(width: 260, child: BuildToolsPanel(store: store, onOpenFile: opened.add)))));
 
-      expect(find.text('MAVEN'), findsOneWidget);
+      expect(find.text('Maven'), findsOneWidget);
       expect(find.text('Shop & Co'), findsOneWidget);
+      expect(find.text('(root)'), findsOneWidget);
       expect(find.text('Lifecycle'), findsOneWidget, reason: '只展开了根模块的 Lifecycle');
+      expect(find.text('Plugins'), findsOneWidget);
+      expect(find.text('Repositories'), findsOneWidget);
+      expect(find.text('shop-core-api'), findsOneWidget, reason: '所有模块平铺在顶层');
       expect(find.text('shop-core'), findsOneWidget);
       expect(find.text('missing'), findsOneWidget);
       expect(find.textContaining('找不到 missing/pom.xml'), findsOneWidget);
@@ -302,6 +366,8 @@ void main() {
       await tester.pump();
       expect(find.text('Lifecycle'), findsNWidgets(2));
       await tester.tap(find.text('Lifecycle').last);
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.tap(find.text('Lifecycle').last);
       await tester.pump();
       await tester.tap(find.text('verify').last);
       await tester.pump(const Duration(milliseconds: 50));
@@ -311,11 +377,36 @@ void main() {
       await tester.pump();
       expect(runs.last, 'mvn verify -f web/pom.xml -o');
 
-      // 全部折叠
+      // 插件目标:展开 Plugins → spring-boot,双击 spring-boot:run
+      final webPlugins = find.byKey(const ValueKey('build-group-maven:web/pom.xml#Plugins'));
+      await tester.tap(webPlugins);
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.tap(webPlugins);
+      await tester.pump();
+      await tester.tap(find.text('spring-boot'));
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.tap(find.text('spring-boot'));
+      await tester.pump();
+      await tester.tap(find.text('spring-boot:run'));
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.tap(find.text('spring-boot:run'));
+      await tester.pump();
+      expect(runs.last, 'mvn spring-boot:run -f web/pom.xml -o');
+
+      // 执行 Maven 目标:在选中的模块(Web Front)上运行输入的参数
+      await tester.tap(find.byTooltip('执行 Maven 目标'));
+      await tester.pumpAndSettle();
+      expect(find.text('在 Web Front 上运行'), findsOneWidget);
+      await tester.enterText(find.byType(TextField), 'dependency:tree');
+      await tester.tap(find.text('执行'));
+      await tester.pumpAndSettle();
+      expect(runs.last, 'mvn dependency:tree -f web/pom.xml -o');
+
+      // 全部折叠:模块还在(平铺),组都收起
       await tester.tap(find.byTooltip('全部折叠'));
       await tester.pump();
       expect(find.text('Lifecycle'), findsNothing);
-      expect(find.text('shop-core'), findsNothing);
+      expect(find.text('shop-core'), findsOneWidget);
       await tester.pumpWidget(const SizedBox());
       store.dispose();
     });
