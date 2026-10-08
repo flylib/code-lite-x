@@ -65,6 +65,7 @@ void main() {
 
   /// 场景期间每 200 ms 采一次 IDE 自己的内存(和状态栏同一口径:phys_footprint)。
   Future<void> measure(String key, Future<void> Function() action) async {
+    debugPrint('PERF scenario $key');
     final samples = <int>[];
     void sample() => samples.add(sampler.sample().processes.first.memoryBytes);
     sample();
@@ -97,7 +98,7 @@ void main() {
   /// 强制 GC 后按类统计还活着的对象:看是谁占着 Dart 堆。
   final census = <String, Object>{};
   vms.VmService? service;
-  Future<void> heapCensus(String label) async {
+  Future<void> takeCensus(String label) async {
     final info = await developer.Service.getInfo();
     final uri = info.serverWebSocketUri;
     if (uri == null) {
@@ -123,6 +124,15 @@ void main() {
           }
       ],
     };
+  }
+
+  Future<void> heapCensus(String label) async {
+    debugPrint('PERF census $label');
+    try {
+      await takeCensus(label).timeout(const Duration(seconds: 30));
+    } on TimeoutException {
+      census[label] = 'timed out'; // 不能让整轮测量挂死在这里
+    }
   }
 
   Future<void> settle(WidgetTester tester, [Duration d = const Duration(seconds: 2)]) async {

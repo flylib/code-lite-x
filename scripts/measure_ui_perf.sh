@@ -12,6 +12,10 @@
 #     时 entitlements 变过)。
 #   * 测量会打开项目,写进 ~/.codelitex/recent_projects.json;先备份,结束时还原。
 #   * 请先退出正在运行的 CodeLiteX,免得两个实例互相干扰。
+#   * 测量期间测试窗口必须可见:被全屏应用盖住、或开在别的桌面空间时,macOS 会暂停它的绘制,
+#     测试就停在第一帧之前一直等(终端里看不到 "PERF scenario" 的进度输出)。
+#   * 机器负载会让帧耗时成倍变化:做前后对比时请紧挨着跑,或者看 CPU 占比、GC 后的堆这些
+#     不受负载影响的数字。
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
