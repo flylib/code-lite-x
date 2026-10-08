@@ -37,6 +37,7 @@ pub fn default_panel_order() -> PanelOrder {
             PanelKind::Terminal,
             PanelKind::Search,
             PanelKind::Problem,
+            PanelKind::GitLog,
             PanelKind::CallHierarchy,
             PanelKind::References,
             PanelKind::Implementation
@@ -461,4 +462,24 @@ pub fn panel_position(
         }
     }
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use strum::IntoEnumIterator;
+
+    use super::*;
+
+    #[test]
+    fn a_fresh_layout_has_every_panel_exactly_once_at_its_default_position() {
+        let order = default_panel_order();
+        for kind in PanelKind::iter() {
+            let places: Vec<_> = order
+                .iter()
+                .filter(|(_, panels)| panels.contains(&kind))
+                .map(|(position, _)| *position)
+                .collect();
+            assert_eq!(places, [kind.default_position()], "{kind:?}");
+        }
+    }
 }

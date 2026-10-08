@@ -179,6 +179,8 @@ pub struct WindowTabData {
     pub code_action: RwSignal<CodeActionData>,
     pub code_lens: RwSignal<Option<ViewId>>,
     pub source_control: SourceControlData,
+    /// CodeLiteX: Git history panel.
+    pub git_log: crate::codelitex::git_log::GitLogData,
     pub rename: RenameData,
     pub global_search: GlobalSearchData,
     pub call_hierarchy_data: CallHierarchyData,
@@ -396,6 +398,11 @@ impl WindowTabData {
             cx.create_rw_signal(CodeActionData::new(cx, common.clone()));
         let source_control =
             SourceControlData::new(cx, main_split.editors, common.clone());
+        let git_log = crate::codelitex::git_log::GitLogData::new(
+            cx,
+            main_split.editors,
+            common.clone(),
+        );
         let file_explorer =
             FileExplorerData::new(cx, main_split.editors, common.clone());
 
@@ -555,6 +562,7 @@ impl WindowTabData {
             code_action,
             code_lens: cx.create_rw_signal(None),
             source_control,
+            git_log,
             plugin,
             rename,
             global_search,
@@ -1255,6 +1263,9 @@ impl WindowTabData {
             ToggleSourceControlFocus => {
                 self.toggle_panel_focus(PanelKind::SourceControl);
             }
+            ToggleGitLogFocus => {
+                self.toggle_panel_focus(PanelKind::GitLog);
+            }
             TogglePluginFocus => {
                 self.toggle_panel_focus(PanelKind::Plugin);
             }
@@ -1272,6 +1283,9 @@ impl WindowTabData {
             }
             ToggleSourceControlVisual => {
                 self.toggle_panel_visual(PanelKind::SourceControl);
+            }
+            ToggleGitLogVisual => {
+                self.toggle_panel_visual(PanelKind::GitLog);
             }
             TogglePluginVisual => {
                 self.toggle_panel_visual(PanelKind::Plugin);
@@ -2355,6 +2369,9 @@ impl WindowTabData {
             Focus::Panel(PanelKind::SourceControl) => {
                 Some(keypress.key_down(event, &self.source_control))
             }
+            Focus::Panel(PanelKind::GitLog) => {
+                Some(keypress.key_down(event, &self.git_log))
+            }
             _ => None,
         };
 
@@ -2641,7 +2658,10 @@ impl WindowTabData {
                 // in those cases.
                 self.panel.is_panel_visible(&kind)
             }
-            PanelKind::Terminal | PanelKind::SourceControl | PanelKind::Search => {
+            PanelKind::Terminal
+            | PanelKind::SourceControl
+            | PanelKind::GitLog
+            | PanelKind::Search => {
                 self.is_panel_focused(kind)
             }
         };
@@ -2717,6 +2737,10 @@ impl WindowTabData {
             );
         }
         self.panel.show_panel(&kind);
+        if kind == PanelKind::GitLog {
+            // CodeLiteX: what is on disk may have moved on since the panel was last open
+            self.git_log.refresh();
+        }
         if kind == PanelKind::Search
             && self.common.focus.get_untracked() == Focus::Workbench
         {

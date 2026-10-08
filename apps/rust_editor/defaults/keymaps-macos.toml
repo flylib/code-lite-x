@@ -278,6 +278,10 @@ key = "meta+9"
 command = "toggle_source_control_focus"
 
 [[keymaps]]
+key = "meta+0"
+command = "toggle_git_log_focus"
+
+[[keymaps]]
 key = "meta+j"
 command = "toggle_terminal_focus"
 

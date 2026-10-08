@@ -51,6 +51,7 @@ name = "Lapce Codicons"
 "image_error" = "error.svg"
 
 "scm.icon" = "source-control.svg"
+"git.log" = "git-commit.svg"
 "scm.diff.modified" = "diff-modified.svg"
 "scm.diff.added" = "diff-added.svg"
 "scm.diff.removed" = "diff-removed.svg"

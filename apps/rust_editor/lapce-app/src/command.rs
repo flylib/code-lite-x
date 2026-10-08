@@ -450,6 +450,10 @@ pub enum LapceWorkbenchCommand {
     #[strum(serialize = "toggle_source_control_focus")]
     ToggleSourceControlFocus,
 
+    #[strum(message = "Toggle Git History Focus")]
+    #[strum(serialize = "toggle_git_log_focus")]
+    ToggleGitLogFocus,
+
     #[strum(message = "Toggle Plugin Focus")]
     #[strum(serialize = "toggle_plugin_focus")]
     TogglePluginFocus,
@@ -472,6 +476,10 @@ pub enum LapceWorkbenchCommand {
 
     #[strum(serialize = "toggle_source_control_visual")]
     ToggleSourceControlVisual,
+
+    #[strum(message = "Toggle Git History")]
+    #[strum(serialize = "toggle_git_log_visual")]
+    ToggleGitLogVisual,
 
     #[strum(serialize = "toggle_plugin_visual")]
     TogglePluginVisual,
