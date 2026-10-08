@@ -162,10 +162,20 @@ fn get_branches_from_repo(repo: &Repository) -> Result<Vec<GitBranchInfo>, git2:
 /// Which commits the history window asks for.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct GitLogQuery {
-    /// Short name of a local or remote branch, or a tag. `None` shows every branch and tag.
+    /// A branch, tag or `HEAD`. `None` shows every branch and tag.
     pub branch: Option<String>,
-    /// Case-insensitive match on the subject, author name / email or the start of the hash.
+    /// Match on the subject, author name / email or (plain text only) the start of the hash.
     pub text: String,
+    /// `text` is a regular expression.
+    pub regex: bool,
+    /// Upper and lower case differ in `text`.
+    pub match_case: bool,
+    /// Only commits by this author (name).
+    pub author: Option<String>,
+    /// Only commits made at or after this Unix time.
+    pub since: Option<i64>,
+    /// Only commits that change one of these paths (relative to the repository root).
+    pub paths: Vec<String>,
     pub skip: usize,
     pub limit: usize,
 }
@@ -175,6 +185,8 @@ pub struct GitLogPage {
     pub commits: Vec<GitCommitInfo>,
     /// More commits follow the ones returned.
     pub has_more: bool,
+    /// The commit `HEAD` is on, for marking it in the graph.
+    pub head: Option<String>,
 }
 
 /// Retrieves the Git commit history from HEAD up to `max_count` commits.
@@ -227,15 +239,28 @@ pub fn get_commit_page_until(
         }
     }
     let refs = collect_refs(&repo)?;
-    let needle = query.text.trim().to_lowercase();
+    let matcher = TextMatcher::new(&query.text, query.regex, query.match_case)?;
+    let paths: Vec<&str> = query
+        .paths
+        .iter()
+        .map(|p| p.trim().trim_matches('/'))
+        .filter(|p| !p.is_empty())
+        .collect();
     let mut matched = 0;
-    let mut page = GitLogPage::default();
+    let mut page = GitLogPage {
+        head: repo.head().ok().and_then(|h| h.target()).map(|o| o.to_string()),
+        ..Default::default()
+    };
     for oid in revwalk {
         if cancelled() {
             return Err(git2::Error::from_str("cancelled"));
         }
         let commit = repo.find_commit(oid?)?;
-        if !needle.is_empty() && !commit_matches(&commit, &needle) {
+        if query.since.is_some_and(|since| commit.time().seconds() < since)
+            || query.author.as_deref().is_some_and(|a| commit.author().name() != Some(a))
+            || !matcher.matches(&commit)
+            || (!paths.is_empty() && !touches_paths(&commit, &paths))
+        {
             continue;
         }
         matched += 1;
@@ -251,12 +276,92 @@ pub fn get_commit_page_until(
     Ok(page)
 }
 
-fn commit_matches(commit: &git2::Commit, needle: &str) -> bool {
-    let author = commit.author();
-    commit.id().to_string().starts_with(needle)
-        || commit.summary().unwrap_or("").to_lowercase().contains(needle)
-        || author.name().unwrap_or("").to_lowercase().contains(needle)
-        || author.email().unwrap_or("").to_lowercase().contains(needle)
+/// The search box: plain text or a regular expression, with or without case.
+enum TextMatcher {
+    Any,
+    Plain { needle: String, match_case: bool },
+    Regex(regex::Regex),
+}
+
+impl TextMatcher {
+    fn new(text: &str, is_regex: bool, match_case: bool) -> Result<Self, git2::Error> {
+        let text = text.trim();
+        if text.is_empty() {
+            return Ok(Self::Any);
+        }
+        if is_regex {
+            return regex::RegexBuilder::new(text)
+                .case_insensitive(!match_case)
+                .build()
+                .map(Self::Regex)
+                .map_err(|e| git2::Error::from_str(&format!("Invalid regular expression: {e}")));
+        }
+        let needle = if match_case { text.to_string() } else { text.to_lowercase() };
+        Ok(Self::Plain { needle, match_case })
+    }
+
+    fn matches(&self, commit: &git2::Commit) -> bool {
+        let author = commit.author();
+        let fields = [
+            commit.summary().unwrap_or(""),
+            author.name().unwrap_or(""),
+            author.email().unwrap_or(""),
+        ];
+        match self {
+            Self::Any => true,
+            Self::Regex(re) => {
+                re.is_match(&commit.id().to_string()) || fields.iter().any(|f| re.is_match(f))
+            }
+            Self::Plain { needle, match_case } => {
+                let hash = commit.id().to_string();
+                // a hash is lower case; typing it in capitals must still find it
+                hash.starts_with(&needle.to_lowercase())
+                    || fields.iter().any(|f| {
+                        if *match_case {
+                            f.contains(needle.as_str())
+                        } else {
+                            f.to_lowercase().contains(needle.as_str())
+                        }
+                    })
+            }
+        }
+    }
+}
+
+/// Like `git log -- <paths>`: the commit changes one of the paths. A merge counts only when
+/// it differs from every parent (the history simplification git applies by default).
+fn touches_paths(commit: &git2::Commit, paths: &[&str]) -> bool {
+    let Ok(tree) = commit.tree() else { return false };
+    let entry_id = |tree: &git2::Tree, path: &str| tree.get_path(Path::new(path)).ok().map(|e| e.id());
+    let parent_trees: Vec<git2::Tree> = commit.parents().filter_map(|p| p.tree().ok()).collect();
+    paths.iter().any(|path| {
+        let now = entry_id(&tree, path);
+        if parent_trees.is_empty() {
+            now.is_some()
+        } else {
+            parent_trees.iter().all(|parent| entry_id(parent, path) != now)
+        }
+    })
+}
+
+/// Names of everyone who authored a commit on any branch, for the User filter.
+pub fn get_authors(workspace_path: &Path) -> Result<Vec<String>, git2::Error> {
+    let repo = Repository::discover(workspace_path)?;
+    let mut revwalk = repo.revwalk()?;
+    for glob in ["refs/heads/*", "refs/remotes/*", "refs/tags/*"] {
+        revwalk.push_glob(glob)?;
+    }
+    let mut names = std::collections::BTreeSet::new();
+    for oid in revwalk.take(100_000) {
+        if let Ok(commit) = repo.find_commit(oid?) {
+            if let Some(name) = commit.author().name() {
+                names.insert(name.to_string());
+            }
+        }
+    }
+    let mut names: Vec<String> = names.into_iter().collect();
+    names.sort_by_key(|n| n.to_lowercase());
+    Ok(names)
 }
 
 fn commit_info(
@@ -546,7 +651,13 @@ mod tests {
     }
 
     fn query(branch: Option<&str>, text: &str, skip: usize, limit: usize) -> GitLogQuery {
-        GitLogQuery { branch: branch.map(str::to_string), text: text.to_string(), skip, limit }
+        GitLogQuery {
+            branch: branch.map(str::to_string),
+            text: text.to_string(),
+            skip,
+            limit,
+            ..Default::default()
+        }
     }
 
     fn summaries(page: &GitLogPage) -> Vec<&str> {
@@ -689,5 +800,90 @@ mod tests {
         merged_repo(dir.path());
         let err = get_commit_page_until(dir.path(), &query(None, "", 0, 50), &|| true).unwrap_err();
         assert_eq!(err.message(), "cancelled");
+    }
+
+    // ----- filters of the filter bar ------------------------------------------------------
+
+    fn subjects(dir: &Path, q: GitLogQuery) -> Vec<String> {
+        get_commit_page(dir, &q).unwrap().commits.into_iter().map(|c| c.summary).collect()
+    }
+
+    fn with(q: GitLogQuery, f: impl FnOnce(&mut GitLogQuery)) -> GitLogQuery {
+        let mut q = q;
+        f(&mut q);
+        q
+    }
+
+    #[test]
+    fn match_case_makes_plain_text_case_sensitive() {
+        let dir = tempfile::tempdir().unwrap();
+        merged_repo(dir.path());
+        let base = query(None, "merge", 0, 50);
+        assert_eq!(subjects(dir.path(), base.clone()), ["Merge feature"]);
+        assert!(subjects(dir.path(), with(base.clone(), |q| q.match_case = true)).is_empty());
+        assert_eq!(subjects(dir.path(), with(base, |q| { q.text = "Merge".into(); q.match_case = true })), ["Merge feature"]);
+    }
+
+    #[test]
+    fn a_regular_expression_matches_subject_author_and_hash() {
+        let dir = tempfile::tempdir().unwrap();
+        let (_repo, [c1, ..]) = merged_repo(dir.path());
+        let re = |t: &str, case: bool| with(query(None, t, 0, 50), |q| { q.regex = true; q.match_case = case; });
+        assert_eq!(subjects(dir.path(), re("^(first|second)", false)), ["second on main", "first"]);
+        assert_eq!(subjects(dir.path(), re("work.*FEATURE", false)), ["work on feature"]);
+        assert!(subjects(dir.path(), re("work.*FEATURE", true)).is_empty());
+        assert_eq!(subjects(dir.path(), re("^Bob$", false)), ["work on feature"], "the author name");
+        assert_eq!(subjects(dir.path(), re(&format!("^{}", &c1.to_string()[..10]), false)), ["first"], "the hash");
+    }
+
+    #[test]
+    fn an_invalid_regular_expression_is_reported() {
+        let dir = tempfile::tempdir().unwrap();
+        merged_repo(dir.path());
+        let err = get_commit_page(dir.path(), &with(query(None, "(unclosed", 0, 10), |q| q.regex = true)).unwrap_err();
+        assert!(err.message().starts_with("Invalid regular expression"), "{}", err.message());
+    }
+
+    #[test]
+    fn the_user_filter_keeps_one_authors_commits() {
+        let dir = tempfile::tempdir().unwrap();
+        merged_repo(dir.path());
+        let by = |name: &str| subjects(dir.path(), with(query(None, "", 0, 50), |q| q.author = Some(name.into())));
+        assert_eq!(by("Bob"), ["work on feature"]);
+        assert_eq!(by("Ann"), ["Merge feature", "second on main", "first"]);
+        assert!(by("Nobody").is_empty());
+        assert_eq!(get_authors(dir.path()).unwrap(), ["Ann", "Bob"]);
+    }
+
+    #[test]
+    fn the_date_filter_drops_older_commits() {
+        let dir = tempfile::tempdir().unwrap();
+        merged_repo(dir.path()); // commits at 100, 200, 300, 400
+        let since = |t: i64| subjects(dir.path(), with(query(None, "", 0, 50), |q| q.since = Some(t)));
+        assert_eq!(since(300), ["Merge feature", "work on feature"], "at or after");
+        assert_eq!(since(401), Vec::<String>::new());
+        assert_eq!(since(0).len(), 4);
+    }
+
+    #[test]
+    fn the_paths_filter_works_like_git_log_dash_dash_path() {
+        let dir = tempfile::tempdir().unwrap();
+        let (_repo, _) = merged_repo(dir.path()); // a.txt: c1; b.txt: c2; c.txt: c3 (+ the merge brings it in)
+        let touching = |p: &[&str]| subjects(dir.path(), with(query(None, "", 0, 50), |q| q.paths = p.iter().map(|s| s.to_string()).collect()));
+        assert_eq!(touching(&["a.txt"]), ["first"]);
+        assert_eq!(touching(&["b.txt"]), ["second on main"]);
+        // c.txt came in with the feature branch; the merge is identical to that parent for it
+        assert_eq!(touching(&["c.txt"]), ["work on feature"]);
+        assert_eq!(touching(&["a.txt", "b.txt"]), ["second on main", "first"], "either path");
+        assert!(touching(&["missing.txt"]).is_empty());
+        assert_eq!(touching(&[" ", ""]).len(), 4, "blank paths filter nothing");
+    }
+
+    #[test]
+    fn the_page_says_where_head_is() {
+        let dir = tempfile::tempdir().unwrap();
+        let (_repo, [.., c4]) = merged_repo(dir.path());
+        let page = get_commit_page(dir.path(), &query(None, "", 0, 50)).unwrap();
+        assert_eq!(page.head, Some(c4.to_string()));
     }
 }
