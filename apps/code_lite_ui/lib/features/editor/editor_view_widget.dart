@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/gestures.dart' show kPrimaryButton;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -1004,13 +1005,6 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
                               scrollDirection: Axis.horizontal,
                               child: GestureDetector(
                                 behavior: HitTestBehavior.opaque,
-                                onTapDown: (details) {
-                                  focusNode.requestFocus();
-                                  imeBridge?.attach();
-                                  final pos = _positionAt(details.localPosition, lines, highlighter);
-                                  controller.setCursor(pos);
-                                  imeBridge?.syncState();
-                                },
                                 onDoubleTapDown: (details) {
                                   final pos = _positionAt(details.localPosition, lines, highlighter);
                                   controller.selectWord(pos);
@@ -1025,6 +1019,20 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
                                 onPanUpdate: (details) {
                                   final pos = _positionAt(details.localPosition, lines, highlighter);
                                   controller.setCursor(pos, extendSelection: true);
+                                  imeBridge?.syncState();
+                                },
+                                // 光标在鼠标按下的那一刻就放过去(IntelliJ 如此)。用 Listener 而不是 onTapDown:
+                                // 这里同时有双击(选词)和拖动(选区),单击要等手势竞争判定(约 100 ms)才触发,
+                                // 点完光标「慢半拍」跟过来。Listener 放在手势识别的里层,先收到按下:
+                                // 双击的第二下由双击识别随后选词,不会被这里放回光标。右键不动光标。
+                                child: Listener(
+                                behavior: HitTestBehavior.opaque,
+                                onPointerDown: (event) {
+                                  if (event.buttons != kPrimaryButton) return;
+                                  focusNode.requestFocus();
+                                  imeBridge?.attach();
+                                  final pos = _positionAt(event.localPosition, lines, highlighter);
+                                  controller.setCursor(pos);
                                   imeBridge?.syncState();
                                 },
                                 // 代码区至少铺满视口:点击最长行右侧的空白也能把光标放到该行末尾。
@@ -1065,6 +1073,7 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
                                 ),
                                 ),
                               ),
+                              ), // Listener
                             ),
                             ),
                           ),
