@@ -50,7 +50,7 @@ class TitleBarWidget extends StatelessWidget {
 
           const SizedBox(width: 8),
 
-          // Right: Controls & Run/Debug
+          // Right: Controls & Run
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -62,7 +62,6 @@ class TitleBarWidget extends StatelessWidget {
               _buildRunTarget(),
               const SizedBox(width: 4),
               _buildActionBtn(Icons.play_arrow, IntelliJTheme.gitGreen, 'Run (Shift+F10)'),
-              _buildActionBtn(Icons.bug_report, IntelliJTheme.syntaxFunction, 'Debug (Shift+F9)'),
             ],
           ),
         ],

@@ -8,7 +8,7 @@ import 'stripe_button.dart';
 
 export '../../core/state/layout_store.dart' show LeftTool;
 
-/// 左侧活动条。上半段切左侧工具窗,下半段切底部工具窗(IntelliJ 布局)。设置在菜单里(⌘,)。
+/// 左侧活动条。上半段切左侧工具窗,下半段切底部工具窗(IntelliJ 布局),最下面是调试和通知。设置在菜单里(⌘,)。
 ///
 /// 之前左侧工具窗和底部工具窗的按钮混在一个 enum 里,选中态语义也混着;
 /// 现在两组各自独立 —— 与 IntelliJ 一致,也和 design/Main.dc.html 对得上。
@@ -21,6 +21,7 @@ class ActivityStripeWidget extends StatelessWidget {
     required this.isBottomOpen,
     required this.onSelectLeftTool,
     required this.onSelectBottomTab,
+    this.hasNotification = false,
   });
 
   final LeftTool leftTool;
@@ -29,6 +30,9 @@ class ActivityStripeWidget extends StatelessWidget {
   final bool isBottomOpen;
   final ValueChanged<LeftTool> onSelectLeftTool;
   final ValueChanged<BottomToolTab> onSelectBottomTab;
+
+  /// 通知按钮上的小黄点。
+  final bool hasNotification;
 
   @override
   Widget build(BuildContext context) {
@@ -85,6 +89,22 @@ class ActivityStripeWidget extends StatelessWidget {
             tooltip: 'Git 提交与日志',
             isActive: isBottomOpen && bottomTab == BottomToolTab.git,
             onTap: () => onSelectBottomTab(BottomToolTab.git),
+          ),
+          const SizedBox(height: 6),
+          // 调试和通知放在最下面(原先在标题栏右上角和右侧活动条)。
+          StripeButton(
+            icon: Icons.bug_report_outlined,
+            tooltip: 'Debug (Shift+F9)',
+            isActive: false,
+            onTap: () {},
+          ),
+          const SizedBox(height: 6),
+          StripeButton(
+            icon: Icons.notifications_none_outlined,
+            tooltip: '通知',
+            isActive: false,
+            badgeColor: hasNotification ? IntelliJTheme.accentYellow : null,
+            onTap: () {},
           ),
           // 设置在菜单里:CodeLiteX ▸ Settings…(⌘,)。
         ],

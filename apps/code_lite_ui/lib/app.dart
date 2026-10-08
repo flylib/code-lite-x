@@ -11,7 +11,6 @@ import 'core/platform/workspace_io.dart' as io;
 import 'core/state/workspace_store.dart';
 import 'core/theme/intellij_theme.dart';
 import 'features/activity_stripe/activity_stripe_widget.dart';
-import 'features/activity_stripe/right_activity_stripe.dart';
 import 'features/bottom_tools/bottom_tools_widget.dart';
 import 'features/commit/commit_panel.dart';
 import 'features/commit/diff_tab.dart';
@@ -265,9 +264,6 @@ class _Workbench extends StatelessWidget {
                         ],
                       ),
                     ),
-
-                    // 右活动条(通知)。
-                    const RightActivityStripe(),
                   ],
                 ),
               ),
@@ -752,8 +748,8 @@ class _SideResizeHandleState extends State<_SideResizeHandle> {
         onHorizontalDragEnd: (_) => setState(() => _dragging = false),
         onHorizontalDragCancel: () => setState(() => _dragging = false),
         onHorizontalDragUpdate: (d) {
-          // 编辑区至少留 300px(再扣掉左右两条活动条)。
-          final max = MediaQuery.sizeOf(context).width - 300 - IntelliJMetrics.activityStripe * 2;
+          // 编辑区至少留 300px(再扣掉左活动条)。
+          final max = MediaQuery.sizeOf(context).width - 300 - IntelliJMetrics.activityStripe;
           widget.layout.resizeLeft(widget.layout.leftWidth + d.delta.dx, maxWidth: max);
         },
         child: Container(
