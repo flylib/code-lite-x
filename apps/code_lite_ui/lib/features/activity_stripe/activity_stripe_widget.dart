@@ -6,7 +6,7 @@ import '../../core/theme/intellij_theme.dart';
 import '../bottom_tools/bottom_tools_widget.dart';
 import 'stripe_button.dart';
 
-export '../../core/state/layout_store.dart' show LeftTool;
+export '../../core/state/layout_store.dart' show LeftTool, ToolSlot;
 
 /// 左侧活动条。上半段切左侧工具窗,下半段切底部工具窗(IntelliJ 布局),最下面是调试和通知。设置在菜单里(⌘,)。
 ///
@@ -23,6 +23,8 @@ class ActivityStripeWidget extends StatelessWidget {
     required this.onSelectBottomTab,
     this.hasNotification = false,
     this.buildToolTitle,
+    this.visibleLeftTools,
+    this.slotOf,
   });
 
   final LeftTool leftTool;
@@ -38,8 +40,53 @@ class ActivityStripeWidget extends StatelessWidget {
   /// 项目里检测到了构建工具(Maven……)时为它的名字,活动条多出构建工具窗的按钮;null 时不显示。
   final String? buildToolTitle;
 
+  /// 正在显示的左侧工具窗(上下拆分时可能有两个);null 时按 [leftTool] / [isLeftOpen] 判断。
+  final Set<LeftTool>? visibleLeftTools;
+
+  /// 工具窗放在左上方还是左下方;放在左下方的按钮排在分隔线下面(IntelliJ 的做法)。null 时都在上方。
+  final ToolSlot Function(LeftTool tool)? slotOf;
+
+  bool _isVisible(LeftTool tool) => visibleLeftTools?.contains(tool) ?? (isLeftOpen && leftTool == tool);
+
+  /// 某一块([slot])的左侧工具窗按钮,按钮之间留 6px。
+  List<Widget> _leftButtons(ToolSlot slot) {
+    final buttons = <Widget>[
+      for (final tool in LeftTool.values)
+        if ((slotOf?.call(tool) ?? ToolSlot.top) == slot)
+          if (_button(tool) case final b?) b,
+    ];
+    return [
+      for (var i = 0; i < buttons.length; i++) ...[if (i > 0) const SizedBox(height: 6), buttons[i]],
+    ];
+  }
+
+  Widget? _button(LeftTool tool) {
+    final active = _isVisible(tool);
+    void tap() => onSelectLeftTool(tool);
+    return switch (tool) {
+      LeftTool.project => StripeButton(icon: Icons.folder_outlined, tooltip: '项目 (⌘1)', isActive: active, onTap: tap),
+      LeftTool.commit => StripeButton(icon: Icons.task_alt, tooltip: 'Commit (⌘0)', isActive: active, onTap: tap),
+      LeftTool.pullRequests => StripeButton(
+          iconBuilder: (color, size) => PullRequestIcon(color: color, size: size),
+          tooltip: 'Pull Requests',
+          isActive: active,
+          onTap: tap,
+        ),
+      LeftTool.structure => StripeButton(icon: Icons.account_tree_outlined, tooltip: '结构 (⌘7)', isActive: active, onTap: tap),
+      LeftTool.build => buildToolTitle == null
+          ? null
+          : StripeButton(
+              iconBuilder: (color, size) => BuildToolIcon(color: color, size: size),
+              tooltip: buildToolTitle!,
+              isActive: active,
+              onTap: tap,
+            ),
+    };
+  }
+
   @override
   Widget build(BuildContext context) {
+    final lower = _leftButtons(ToolSlot.bottom);
     return Container(
       width: IntelliJMetrics.activityStripe,
       decoration: const BoxDecoration(
@@ -49,43 +96,17 @@ class ActivityStripeWidget extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Column(
         children: [
-          StripeButton(
-            icon: Icons.folder_outlined,
-            tooltip: '项目 (⌘1)',
-            isActive: isLeftOpen && leftTool == LeftTool.project,
-            onTap: () => onSelectLeftTool(LeftTool.project),
-          ),
-          const SizedBox(height: 6),
-          StripeButton(
-            icon: Icons.task_alt,
-            tooltip: 'Commit (⌘0)',
-            isActive: isLeftOpen && leftTool == LeftTool.commit,
-            onTap: () => onSelectLeftTool(LeftTool.commit),
-          ),
-          const SizedBox(height: 6),
-          StripeButton(
-            iconBuilder: (color, size) => PullRequestIcon(color: color, size: size),
-            tooltip: 'Pull Requests',
-            isActive: isLeftOpen && leftTool == LeftTool.pullRequests,
-            onTap: () => onSelectLeftTool(LeftTool.pullRequests),
-          ),
-          const SizedBox(height: 6),
-          StripeButton(
-            icon: Icons.account_tree_outlined,
-            tooltip: '结构 (⌘7)',
-            isActive: isLeftOpen && leftTool == LeftTool.structure,
-            onTap: () => onSelectLeftTool(LeftTool.structure),
-          ),
-          if (buildToolTitle != null) ...[
-            const SizedBox(height: 6),
-            StripeButton(
-              iconBuilder: (color, size) => BuildToolIcon(color: color, size: size),
-              tooltip: buildToolTitle!,
-              isActive: isLeftOpen && leftTool == LeftTool.build,
-              onTap: () => onSelectLeftTool(LeftTool.build),
+          ..._leftButtons(ToolSlot.top),
+          // 放到左下方的工具窗:分隔线下面
+          if (lower.isNotEmpty) ...[
+            Container(
+              width: 20,
+              height: 1,
+              margin: const EdgeInsets.symmetric(vertical: 8),
+              color: IntelliJTheme.border,
             ),
+            ...lower,
           ],
-
 
           const Spacer(),
 

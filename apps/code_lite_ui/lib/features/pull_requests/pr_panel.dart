@@ -5,6 +5,7 @@ import '../../core/theme/intellij_theme.dart';
 import 'pr_diff_tab.dart' show prFileColor;
 import 'pr_store.dart';
 import 'pr_widgets.dart';
+import '../tool_window/tool_window_actions.dart';
 
 /// 左侧「Pull Requests」工具窗:上方是仓库 / 已打开 PR 的标签;
 /// 仓库标签下是带搜索与筛选的 PR 列表,PR 标签下是该 PR 的详情(改动文件、检查、评审)。
@@ -103,6 +104,7 @@ class _PullRequestsPanelState extends State<PullRequestsPanel> {
               s == null ? _store.refresh() : _store.session(s).reload();
             },
           ),
+          const ToolWindowActions(),
           const SizedBox(width: 4),
         ],
       ),

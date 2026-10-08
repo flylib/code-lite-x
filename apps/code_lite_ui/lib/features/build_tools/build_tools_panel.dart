@@ -6,6 +6,7 @@ import '../../core/plugins/plugin_manifest.dart';
 import '../../core/theme/intellij_theme.dart';
 import '../editor/context_menu_region.dart';
 import 'build_tools_store.dart';
+import '../tool_window/tool_window_actions.dart';
 
 const TextStyle _label = TextStyle(color: IntelliJTheme.textPrimary, fontSize: 13);
 const TextStyle _muted = TextStyle(color: IntelliJTheme.textMuted, fontSize: 12);
@@ -18,15 +19,12 @@ const double _indent = 20;
 /// 所有模块平铺在顶层(聚合根标 (root)),每个模块下是 Lifecycle、Plugins、Repositories、Dependencies。
 /// 双击阶段 / 插件目标在终端里运行;⌘ / Ctrl 点击可在同一模块里多选,工具栏 ▶ 一起运行。
 class BuildToolsPanel extends StatelessWidget {
-  const BuildToolsPanel({super.key, required this.store, this.onOpenFile, this.onHide});
+  const BuildToolsPanel({super.key, required this.store, this.onOpenFile});
 
   final BuildToolsStore store;
 
   /// 右键模块「打开 pom.xml」(相对项目根的路径)。
   final ValueChanged<String>? onOpenFile;
-
-  /// 标题行的「—」:收起工具窗。
-  final VoidCallback? onHide;
 
   @override
   Widget build(BuildContext context) {
@@ -44,7 +42,7 @@ class BuildToolsPanel extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _TitleRow(title: store.title, onHide: onHide),
+              _TitleRow(title: store.title),
               _Toolbar(store: store),
               if (store.loading) const LinearProgressIndicator(minHeight: 2),
               Expanded(
@@ -196,12 +194,11 @@ class BuildToolsPanel extends StatelessWidget {
       };
 }
 
-/// 「Maven」标题 + 收起按钮(IntelliJ 工具窗的标题行)。
+/// 「Maven」标题 + 拆分 / 选项 / 收起按钮(IntelliJ 工具窗的标题行)。
 class _TitleRow extends StatelessWidget {
-  const _TitleRow({required this.title, this.onHide});
+  const _TitleRow({required this.title});
 
   final String title;
-  final VoidCallback? onHide;
 
   @override
   Widget build(BuildContext context) {
@@ -218,7 +215,7 @@ class _TitleRow extends StatelessWidget {
               style: const TextStyle(color: IntelliJTheme.textHigh, fontSize: 13, fontWeight: FontWeight.w600),
             ),
           ),
-          if (onHide != null) _ToolButton(icon: Icons.remove, tooltip: '隐藏', onTap: onHide),
+          const ToolWindowActions(),
         ],
       ),
     );

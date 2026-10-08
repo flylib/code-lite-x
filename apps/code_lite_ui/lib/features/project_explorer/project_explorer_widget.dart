@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/intellij_theme.dart';
 import '../editor/syntax/languages.dart';
+import '../tool_window/tool_window_actions.dart';
 
 /// 左侧 Project 文件树。
 ///
@@ -133,6 +134,7 @@ class _ProjectExplorerWidgetState extends State<ProjectExplorerWidget> {
                     ),
                   ),
                 ),
+                const ToolWindowActions(),
               ],
             ),
           ),

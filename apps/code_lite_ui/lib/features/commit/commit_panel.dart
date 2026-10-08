@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../../core/client/api_client.dart';
 import '../../core/theme/intellij_theme.dart';
 import 'stash_panel.dart';
+import '../tool_window/tool_window_actions.dart';
 
 const TextStyle _kText =
     TextStyle(color: IntelliJTheme.textPrimary, fontSize: 12.5);
@@ -279,17 +280,28 @@ class _CommitPanelState extends State<CommitPanel> {
           Container(
             height: IntelliJMetrics.toolWindowHeader,
             padding: const EdgeInsets.symmetric(horizontal: 8),
+            // 侧栏拖窄时标签横向滚动,右侧的工具窗按钮始终放得下。
             child: Row(
               children: [
-                _HeaderTab(
-                    label: 'Commit',
-                    active: _tab == 0,
-                    onTap: () => setState(() => _tab = 0)),
-                const SizedBox(width: 4),
-                _HeaderTab(
-                    label: 'Stash',
-                    active: _tab == 1,
-                    onTap: () => setState(() => _tab = 1)),
+                Expanded(
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        _HeaderTab(
+                            label: 'Commit',
+                            active: _tab == 0,
+                            onTap: () => setState(() => _tab = 0)),
+                        const SizedBox(width: 4),
+                        _HeaderTab(
+                            label: 'Stash',
+                            active: _tab == 1,
+                            onTap: () => setState(() => _tab = 1)),
+                      ],
+                    ),
+                  ),
+                ),
+                const ToolWindowActions(),
               ],
             ),
           ),

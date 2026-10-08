@@ -37,6 +37,8 @@ import 'features/title_bar/branch_menu.dart';
 import 'features/title_bar/project_dialogs.dart';
 import 'features/title_bar/project_menu.dart';
 import 'features/title_bar/title_bar_widget.dart';
+import 'features/tool_window/left_split_view.dart';
+import 'features/tool_window/tool_window_actions.dart';
 
 /// 应用根:建 store,挂 scope,之后不再持有可变 UI 状态。
 ///
@@ -60,7 +62,7 @@ class _CodeLiteAppState extends State<CodeLiteApp> {
   late final BranchStore _branches = BranchStore(_client);
   late final BranchActions _branchActions = BranchActions(_branches, showCommitWindow: () => _layout.showLeftTool(LeftTool.commit));
   late final PullRequestsStore _prs = PullRequestsStore(_client);
-  late final SettingsStore _settings = SettingsStore(sessions: _sessions);
+  late final SettingsStore _settings = SettingsStore(sessions: _sessions, layout: _layout);
   late final PluginManager _plugins = PluginManager(client: _client);
   late final BuildToolsStore _build = BuildToolsStore(
     plugins: _plugins,
@@ -117,10 +119,13 @@ class _CodeLiteAppState extends State<CodeLiteApp> {
     }
   }
 
-  /// 新项目里没有构建工具了:构建工具窗的按钮会消失,开着的窗口换回项目视图。
+  /// 新项目里没有构建工具了:构建工具窗的按钮会消失,开着的窗口收起;它占着左上方的话换回项目视图。
   void _onBuildToolsChanged() {
     if (_build.hasProjects || _build.loading) return;
-    if (_layout.isLeftOpen && _layout.leftTool == LeftTool.build) _layout.showLeftTool(LeftTool.project);
+    if (!_layout.isLeftToolVisible(LeftTool.build)) return;
+    final wasTop = _layout.visibleTopTool == LeftTool.build;
+    _layout.hideLeftTool(LeftTool.build);
+    if (wasTop) _layout.showLeftTool(LeftTool.project);
   }
 
   /// git 动了仓库(切分支 / 更新 / 合并 / 变基 ……,或者别处在终端里切了分支):
@@ -260,6 +265,8 @@ class _Workbench extends StatelessWidget {
                         buildToolTitle: buildTools.hasProjects ? buildTools.title : null,
                         leftTool: layout.leftTool,
                         isLeftOpen: layout.isLeftOpen,
+                        visibleLeftTools: layout.visibleLeftTools,
+                        slotOf: layout.slotOf,
                         bottomTab: layout.bottomTab,
                         isBottomOpen: layout.isBottomOpen,
                         onSelectLeftTool: layout.selectLeftTool,
@@ -267,48 +274,54 @@ class _Workbench extends StatelessWidget {
                       ),
                     ),
 
-                    // 左工具窗:layout 决定显示哪个,workspace 提供数据。
+                    // 左工具窗:layout 决定显示哪个(上下两块各一个时拆分显示),workspace 提供数据。
                     ListenableBuilder(
                       listenable: layout,
                       builder: (context, _) {
-                        if (!layout.isLeftOpen) return const SizedBox.shrink();
-                        final panel = ListenableBuilder(
-                          listenable: workspace,
-                          builder: (context, _) => switch (layout.leftTool) {
-                            LeftTool.project => ProjectExplorerWidget(
-                                treeData: workspace.tree,
-                                activeFilePath: workspace.activeFile,
-                                onSelectFile: workspace.openFile,
-                                onLoadChildren: client.listDirectory,
-                              ),
-                            LeftTool.commit => CommitPanel(
-                                key: ValueKey(workspace.rootPath),
-                                client: client,
-                                onOpenDiff: workspace.openDiff,
-                                onOpenFile: workspace.openFile,
-                                onCommitted: gitLog.refresh,
-                                onFilesReverted: sessions.reloadFromDisk,
-                              ),
-                            LeftTool.pullRequests => PullRequestsPanel(
-                                store: prs,
-                                onOpenDiff: (number, path) {
-                                  prs.session(number).showFile(path);
-                                  workspace.openSpecial('$prDiffTabPrefix$number');
+                        final top = layout.visibleTopTool;
+                        final bottom = layout.visibleBottomTool;
+                        if (top == null && bottom == null) return const SizedBox.shrink();
+                        Widget panelFor(LeftTool tool) => ToolWindowScope(
+                              key: ValueKey(tool),
+                              tool: tool,
+                              layout: layout,
+                              child: ListenableBuilder(
+                                listenable: workspace,
+                                builder: (context, _) => switch (tool) {
+                                  LeftTool.project => ProjectExplorerWidget(
+                                      treeData: workspace.tree,
+                                      activeFilePath: workspace.activeFile,
+                                      onSelectFile: workspace.openFile,
+                                      onLoadChildren: client.listDirectory,
+                                    ),
+                                  LeftTool.commit => CommitPanel(
+                                      key: ValueKey(workspace.rootPath),
+                                      client: client,
+                                      onOpenDiff: workspace.openDiff,
+                                      onOpenFile: workspace.openFile,
+                                      onCommitted: gitLog.refresh,
+                                      onFilesReverted: sessions.reloadFromDisk,
+                                    ),
+                                  LeftTool.pullRequests => PullRequestsPanel(
+                                      store: prs,
+                                      onOpenDiff: (number, path) {
+                                        prs.session(number).showFile(path);
+                                        workspace.openSpecial('$prDiffTabPrefix$number');
+                                      },
+                                      onOpenTimeline: (number) => workspace.openSpecial('$prTimelineTabPrefix$number'),
+                                    ),
+                                  LeftTool.structure => StructureWidget(
+                                      activeFile: workspace.activeFile,
+                                      outline: workspace.outline,
+                                      onSelectSymbol: (sym) => workspace.selectSymbol(sym['name'] as String?),
+                                    ),
+                                  LeftTool.build => BuildToolsPanel(store: buildTools, onOpenFile: workspace.openFile),
                                 },
-                                onOpenTimeline: (number) => workspace.openSpecial('$prTimelineTabPrefix$number'),
                               ),
-                            LeftTool.structure => StructureWidget(
-                                activeFile: workspace.activeFile,
-                                outline: workspace.outline,
-                                onSelectSymbol: (sym) => workspace.selectSymbol(sym['name'] as String?),
-                              ),
-                            LeftTool.build => BuildToolsPanel(
-                                store: buildTools,
-                                onOpenFile: workspace.openFile,
-                                onHide: () => layout.selectLeftTool(LeftTool.build),
-                              ),
-                          },
-                        );
+                            );
+                        final panel = top != null && bottom != null
+                            ? LeftSplitView(layout: layout, top: panelFor(top), bottom: panelFor(bottom))
+                            : panelFor(top ?? bottom!);
                         return Row(
                           children: [
                             SizedBox(width: layout.leftWidth, child: panel),

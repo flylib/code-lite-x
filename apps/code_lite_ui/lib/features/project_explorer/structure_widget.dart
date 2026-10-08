@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/intellij_theme.dart';
+import '../tool_window/tool_window_actions.dart';
 
 class StructureWidget extends StatelessWidget {
   final String activeFile;
@@ -33,7 +34,14 @@ class StructureWidget extends StatelessWidget {
             // 侧栏可拖窄到 160px:文件名与计数都要能省略,不能溢出。
             child: Row(
               children: [
-                const Text('STRUCTURE', style: TextStyle(color: IntelliJTheme.textMuted, fontSize: 10, fontWeight: FontWeight.bold)),
+                const Flexible(
+                  child: Text(
+                    'STRUCTURE',
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                    style: TextStyle(color: IntelliJTheme.textMuted, fontSize: 10, fontWeight: FontWeight.bold),
+                  ),
+                ),
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
@@ -45,6 +53,7 @@ class StructureWidget extends StatelessWidget {
                 ),
                 const SizedBox(width: 6),
                 Text('${outline.length}', style: const TextStyle(color: IntelliJTheme.textMuted, fontSize: 10)),
+                const ToolWindowActions(),
               ],
             ),
           ),
