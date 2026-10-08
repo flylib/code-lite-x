@@ -7,12 +7,18 @@ class TitleBarWidget extends StatelessWidget {
   final VoidCallback onRedo;
   final VoidCallback? onSearch;
 
+  /// 项目名(点开是新建 / 打开 / 克隆和最近项目)与当前分支(点开是 Git 操作);由应用组装。
+  final Widget? projectChip;
+  final Widget? branchChip;
+
   const TitleBarWidget({
     super.key,
     required this.activeFile,
     required this.onUndo,
     required this.onRedo,
     this.onSearch,
+    this.projectChip,
+    this.branchChip,
   });
 
   @override
@@ -35,7 +41,8 @@ class TitleBarWidget extends StatelessWidget {
                 children: [
                   _buildTrafficLights(),
                   const SizedBox(width: 12),
-                  _buildBranchBadge(),
+                  if (projectChip != null) projectChip!,
+                  if (branchChip != null) ...[const SizedBox(width: 4), branchChip!],
                   const SizedBox(width: 12),
                   _buildBreadcrumb(),
                 ],
@@ -89,19 +96,6 @@ class TitleBarWidget extends StatelessWidget {
         color: fill,
         shape: BoxShape.circle,
         border: Border.all(color: border, width: 0.8),
-      ),
-    );
-  }
-
-  Widget _buildBranchBadge() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-      child: const Row(
-        children: [
-          Icon(Icons.fork_right, size: 14, color: IntelliJTheme.gitGreen),
-          SizedBox(width: 4),
-          Text('main', style: TextStyle(color: IntelliJTheme.textHigh, fontSize: 11, fontFamily: 'monospace')),
-        ],
       ),
     );
   }

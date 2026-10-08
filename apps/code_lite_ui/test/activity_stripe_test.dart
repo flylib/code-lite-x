@@ -40,6 +40,26 @@ void main() {
     expect(tester.getBottomLeft(find.byTooltip('通知')).dy, greaterThan(560 - 60));
   });
 
+  testWidgets('the title bar shows the project and branch chips left of the file name', (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: TitleBarWidget(
+          activeFile: 'src/main.rs',
+          onUndo: () {},
+          onRedo: () {},
+          projectChip: const Text('PROJECT-CHIP'),
+          branchChip: const Text('BRANCH-CHIP'),
+        ),
+      ),
+    ));
+    final project = tester.getTopLeft(find.text('PROJECT-CHIP')).dx;
+    final branch = tester.getTopLeft(find.text('BRANCH-CHIP')).dx;
+    final file = tester.getTopLeft(find.text('src/main.rs')).dx;
+    expect(project, lessThan(branch));
+    expect(branch, lessThan(file));
+    expect(find.text('main'), findsNothing, reason: '不再有写死的 main');
+  });
+
   testWidgets('the title bar no longer has a Debug button, Run stays', (tester) async {
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(

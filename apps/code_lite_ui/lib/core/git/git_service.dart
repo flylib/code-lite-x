@@ -129,6 +129,27 @@ class GitService {
   // 对外 API:Git Log 工具窗口(对应旧 codelite_git_call)
   // =========================================================================
 
+  /// HEAD 文件的内容(`ref: refs/heads/main` 或游离时的哈希),用来发现别处(终端)切了分支。
+  /// 只读一个小文件,不起 git 进程,可以高频轮询;不是仓库时返回空串。
+  Future<String> headFingerprint() async {
+    try {
+      var gitDir = '$root${Platform.pathSeparator}.git';
+      final type = await FileSystemEntity.type(gitDir);
+      if (type == FileSystemEntityType.file) {
+        // worktree / 子模块:`.git` 是个指向真实目录的文件
+        final line = (await File(gitDir).readAsString()).trim();
+        if (!line.startsWith('gitdir:')) return '';
+        final target = line.substring('gitdir:'.length).trim();
+        gitDir = File(target).isAbsolute ? target : '$root${Platform.pathSeparator}$target';
+      } else if (type != FileSystemEntityType.directory) {
+        return '';
+      }
+      return (await File('$gitDir${Platform.pathSeparator}HEAD').readAsString()).trim();
+    } catch (_) {
+      return '';
+    }
+  }
+
   /// 按 [method](如 "git.log"、"git.cherry_pick")分派。永不抛异常,错误编码进返回的 Map。
   Future<Map<String, dynamic>> call(String method, [Map<String, dynamic> params = const {}]) async {
     final m = method.trim();
@@ -261,6 +282,26 @@ class GitService {
         return _pushUpTo(p.str('hash'));
       case 'git.is_pushed':
         return {'pushed': await _isPushed(p.str('hash'))};
+      case 'git.checkout':
+        return {'branch': await _checkoutBranch(p.str('name'))};
+      case 'git.update':
+        return {'output': await _update()};
+      case 'git.push':
+        return _push();
+      case 'git.merge':
+        await _merge(p.str('name'));
+        return {};
+      case 'git.rebase_onto':
+        await _rebaseOnto(p.str('name'));
+        return {};
+      case 'git.rename_branch':
+        await _renameBranch(p.str('name'), p.str('new_name'));
+        return {};
+      case 'git.delete_branch':
+        await _deleteBranch(p.str('name'), p.optBool('force') ?? false);
+        return {};
+      case 'git.recent_branches':
+        return {'branches': await _recentBranches(p.optInt('limit') ?? 5)};
       default:
         throw GitException('未知的 git 方法: $method');
     }
@@ -604,6 +645,94 @@ class GitService {
     if ((await _headHash()).isEmpty) throw GitException('仓库还没有任何提交');
     if (await _tryResolveCommit('HEAD^') == null) throw GitException('HEAD 没有父提交,无法撤销');
     await _run(['reset', '--soft', 'HEAD~1']);
+  }
+
+  /// 切到分支 [name]。本地分支直接切;`origin/foo` 这样的远程分支,没有同名本地分支时
+  /// 新建一个跟踪它的本地分支。返回实际所在的本地分支名。
+  Future<String> _checkoutBranch(String rawName) async {
+    final name = rawName.trim();
+    if (name.isEmpty || name.startsWith('-')) throw GitException('无效的分支名: $name');
+    await _ensureIdle();
+    Future<bool> exists(String ref) async => (await _raw(['show-ref', '--verify', '--quiet', ref])).success;
+    if (await exists('refs/heads/$name')) {
+      await _run(['switch', name]);
+      return name;
+    }
+    if (await exists('refs/remotes/$name')) {
+      final short = name.substring(name.indexOf('/') + 1);
+      if (await exists('refs/heads/$short')) {
+        await _run(['switch', short]);
+      } else {
+        await _run(['switch', '--track', name]);
+      }
+      return short;
+    }
+    throw GitException('找不到分支: $name');
+  }
+
+  static const _noPrompt = {'GIT_TERMINAL_PROMPT': '0', 'GIT_MERGE_AUTOEDIT': 'no'};
+
+  /// Update Project:拉取并合并当前分支的上游。返回 git 的输出。
+  Future<String> _update() async {
+    await _ensureIdle();
+    final current = await _currentBranchName();
+    if (current == null) throw GitException('当前处于游离 HEAD,无法更新');
+    if (await _configGet('branch.$current.merge') == null) {
+      throw GitException('分支 $current 没有上游分支,先推送它(会设置上游)');
+    }
+    return (await _run(['pull', '--no-rebase', '--no-edit'], env: _noPrompt)).trim();
+  }
+
+  /// Push:把当前分支推到上游;没有上游时推到 origin(或唯一的远程)并设置上游。
+  Future<Map<String, dynamic>> _push() async {
+    final current = await _currentBranchName();
+    if (current == null) throw GitException('当前处于游离 HEAD,无法推送');
+    final remote = await _configGet('branch.$current.remote');
+    if (remote != null && remote != '.') {
+      await _run(['push'], env: _noPrompt);
+      return {'remote': remote, 'branch': current, 'set_upstream': false};
+    }
+    final remotes = rustLines(await _run(['remote'])).map((r) => r.trim()).where((r) => r.isNotEmpty).toList();
+    if (remotes.isEmpty) throw GitException('没有配置远程仓库');
+    final target = remotes.contains('origin') ? 'origin' : remotes.first;
+    await _run(['push', '-u', target, current], env: _noPrompt);
+    return {'remote': target, 'branch': current, 'set_upstream': true};
+  }
+
+  /// 把 [name] 合并进当前分支。有冲突时 git 会报错,仓库停在合并中,需要手动解决。
+  Future<void> _merge(String name) async {
+    await _ensureIdle();
+    final full = await _resolveCommit(name);
+    await _run(['merge', '--no-edit', full], env: _noPrompt);
+  }
+
+  /// 把当前分支变基到 [name] 上。有冲突时停在变基中,需要手动解决。
+  Future<void> _rebaseOnto(String name) async {
+    await _ensureIdle();
+    if (await _currentBranchName() == null) throw GitException('当前处于游离 HEAD,无法变基');
+    final full = await _resolveCommit(name);
+    await _run(['rebase', full], env: _noPrompt);
+  }
+
+  Future<void> _renameBranch(String name, String rawNew) async {
+    final newName = rawNew.trim();
+    final ok = newName.isNotEmpty &&
+        !newName.startsWith('-') &&
+        (await _raw(['check-ref-format', '--branch', newName])).success;
+    if (!ok) throw GitException('无效的分支名: $newName');
+    await _run(['branch', '-m', name, newName]);
+  }
+
+  Future<void> _deleteBranch(String name, bool force) async {
+    if (name.trim().isEmpty || name.startsWith('-')) throw GitException('无效的分支名: $name');
+    if (name == await _currentBranchName()) throw GitException('不能删除当前所在的分支');
+    await _run(['branch', force ? '-D' : '-d', name]);
+  }
+
+  Future<List<String>> _recentBranches(int limit) async {
+    final heads = rustLines(await _run(['for-each-ref', '--format=%(refname:short)', 'refs/heads'])).toSet();
+    final reflog = await _raw(['reflog', '--format=%gs', '-n', '300']);
+    return recentBranches(reflog.success ? rustLines(reflog.stdout) : const [], heads, await _currentBranchName(), limit);
   }
 
   Future<void> _newBranch(String rawName, String rev, bool checkout) async {

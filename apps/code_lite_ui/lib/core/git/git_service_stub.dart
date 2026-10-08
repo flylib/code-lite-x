@@ -7,6 +7,8 @@ class GitService {
 
   final String root;
 
+  Future<String> headFingerprint() async => '';
+
   Future<Map<String, dynamic>> call(String method, [Map<String, dynamic> params = const {}]) async => _unavailable;
 
   Future<Map<String, dynamic>> status() async => _unavailable;

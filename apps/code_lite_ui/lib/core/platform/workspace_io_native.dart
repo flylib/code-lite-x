@@ -113,3 +113,70 @@ String noProjectRoot() {
   dir.createSync(recursive: true);
   return dir.path;
 }
+
+/// 当前用户的主目录;弹窗里的路径用它缩写成 `~`。
+String? homeDirectory() => Platform.environment['HOME'];
+
+/// 仓库地址最后一段去掉 `.git`:`git@github.com:a/b.git`、`https://x/y/z/` → `b`、`z`。
+String repositoryNameFromUrl(String url) {
+  var u = url.trim();
+  while (u.endsWith('/')) {
+    u = u.substring(0, u.length - 1);
+  }
+  final last = u.split(RegExp(r'[/:\\]')).where((s) => s.isNotEmpty).lastOrNull ?? '';
+  return last.endsWith('.git') ? last.substring(0, last.length - 4) : last;
+}
+
+/// 目录不存在,或者是空目录。
+bool _isFreeDirectory(String path) {
+  final t = FileSystemEntity.typeSync(path);
+  if (t == FileSystemEntityType.notFound) return true;
+  return t == FileSystemEntityType.directory && Directory(path).listSync().isEmpty;
+}
+
+/// 把 [url] 克隆到 [parentDir]/[name](name 缺省取地址的最后一段)。
+/// 返回 (项目目录, 错误);不会弹出凭据输入,没有权限就直接失败。
+Future<(String?, String?)> cloneRepository(String url, String parentDir, {String? name}) async {
+  final address = url.trim();
+  if (address.isEmpty) return (null, '请输入仓库地址');
+  if (address.startsWith('-')) return (null, '仓库地址无效');
+  final folder = (name ?? '').trim().isNotEmpty ? name!.trim() : repositoryNameFromUrl(address);
+  if (folder.isEmpty || folder == '.' || folder == '..' || folder.contains('/')) return (null, '无法确定目录名');
+  if (!Directory(parentDir).existsSync()) return (null, '目录不存在: $parentDir');
+  final target = '$parentDir/$folder';
+  if (!_isFreeDirectory(target)) return (null, '目录已存在且不为空: $target');
+  try {
+    final r = await Process.run(
+      'git',
+      ['clone', '--quiet', '--', address, target],
+      environment: {'GIT_TERMINAL_PROMPT': '0'},
+    );
+    if (r.exitCode != 0) {
+      final msg = (r.stderr as String).trim();
+      return (null, msg.isEmpty ? 'git clone 失败(退出码 ${r.exitCode})' : msg);
+    }
+    return (target, null);
+  } on ProcessException catch (e) {
+    return (null, '无法运行 git: ${e.message}');
+  }
+}
+
+/// 在 [parentDir] 下新建项目目录 [name] 并 `git init`。返回 (项目目录, 错误)。
+Future<(String?, String?)> createProject(String parentDir, String name) async {
+  final folder = name.trim();
+  if (folder.isEmpty) return (null, '请输入项目名');
+  if (folder == '.' || folder == '..' || folder.contains('/') || folder.contains('\\')) return (null, '项目名不能包含路径分隔符');
+  if (!Directory(parentDir).existsSync()) return (null, '目录不存在: $parentDir');
+  final target = '$parentDir/$folder';
+  if (!_isFreeDirectory(target)) return (null, '目录已存在且不为空: $target');
+  try {
+    await Directory(target).create(recursive: true);
+    final r = await Process.run('git', ['init', '-q'], workingDirectory: target);
+    if (r.exitCode != 0) return (target, null); // 没能 init 也照样能打开,只是不是仓库
+    return (target, null);
+  } on FileSystemException catch (e) {
+    return (null, '无法创建目录: ${e.message}');
+  } on ProcessException {
+    return (target, null);
+  }
+}

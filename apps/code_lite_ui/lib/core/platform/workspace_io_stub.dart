@@ -19,3 +19,12 @@ Future<String?> writeTextFile(String path, String content) async => 'web 预览�
 Future<Map<String, dynamic>> loadSettings() async => const {};
 
 Future<void> saveSettings(Map<String, dynamic> settings) async {}
+
+String? homeDirectory() => null;
+
+String repositoryNameFromUrl(String url) => '';
+
+Future<(String?, String?)> cloneRepository(String url, String parentDir, {String? name}) async =>
+    (null, 'web 预览不支持克隆');
+
+Future<(String?, String?)> createProject(String parentDir, String name) async => (null, 'web 预览不支持新建项目');

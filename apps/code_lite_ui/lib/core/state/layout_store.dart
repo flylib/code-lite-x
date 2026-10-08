@@ -51,6 +51,14 @@ class LayoutStore extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// 打开左侧的某个工具窗;已经开着就保持开着(菜单项「Commit…」用,不像点图标那样会收起)。
+  void showLeftTool(LeftTool tool) {
+    if (_leftTool == tool && _isLeftOpen) return;
+    _leftTool = tool;
+    _isLeftOpen = true;
+    notifyListeners();
+  }
+
   /// 点底部工具窗的图标:切到那个标签,若已选中则收起整条底栏。
   void selectBottomTab(BottomToolTab tab) {
     if (_bottomTab == tab && _isBottomOpen) {

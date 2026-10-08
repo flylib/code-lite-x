@@ -167,6 +167,9 @@ class ApiClient {
   Future<Map<String, dynamic>> gitCall(String method, [Map<String, dynamic> params = const {}]) =>
       _git.call(method, params);
 
+  /// HEAD 文件内容;变了说明别处(终端)切了分支。不起进程,可高频调用。
+  Future<String> gitHeadFingerprint() => _git.headFingerprint();
+
   /// Retrieves Git status (branch, staged/unstaged changes).
   Future<Map<String, dynamic>> getGitStatus() => _git.status();
 

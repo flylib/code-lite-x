@@ -17,6 +17,8 @@ import 'features/commit/diff_tab.dart';
 import 'features/editor/code_editor_controller.dart' show EditorPosition;
 import 'features/editor/editor_session_manager.dart';
 import 'features/editor/editor_view_widget.dart';
+import 'features/git/branch_actions.dart';
+import 'features/git/branch_store.dart';
 import 'features/git/git_log_store.dart';
 import 'features/plugins/plugin_banner.dart';
 import 'features/project_explorer/project_explorer_widget.dart';
@@ -29,6 +31,9 @@ import 'features/search/global_search_modal.dart';
 import 'features/settings/settings_dialog.dart';
 import 'features/status_bar/status_bar_widget.dart';
 import 'features/terminal/terminal_store.dart';
+import 'features/title_bar/branch_menu.dart';
+import 'features/title_bar/project_dialogs.dart';
+import 'features/title_bar/project_menu.dart';
 import 'features/title_bar/title_bar_widget.dart';
 
 /// 应用根:建 store,挂 scope,之后不再持有可变 UI 状态。
@@ -50,6 +55,8 @@ class _CodeLiteAppState extends State<CodeLiteApp> {
   final LayoutStore _layout = LayoutStore();
   late final TerminalStore _terminals = TerminalStore(_client);
   late final GitLogStore _gitLog = GitLogStore(_client);
+  late final BranchStore _branches = BranchStore(_client);
+  late final BranchActions _branchActions = BranchActions(_branches, showCommitWindow: () => _layout.showLeftTool(LeftTool.commit));
   late final PullRequestsStore _prs = PullRequestsStore(_client);
   late final SettingsStore _settings = SettingsStore(sessions: _sessions);
   late final PluginManager _plugins = PluginManager(client: _client);
@@ -61,6 +68,7 @@ class _CodeLiteAppState extends State<CodeLiteApp> {
     _sessions = EditorSessionManager(client: _client);
     _workspace = WorkspaceStore(client: _client, sessions: _sessions);
     _workspace.addListener(_onWorkspaceChanged);
+    _branches.onChanged = _onRepoChanged;
     // 自动保存:应用失去焦点(切到终端 / 浏览器)时立刻把改动写盘,外部工具看到的就是最新内容。
     _lifecycle = AppLifecycleListener(onInactive: _sessions.saveAll, onHide: _sessions.saveAll);
     _bootstrap();
@@ -82,12 +90,37 @@ class _CodeLiteAppState extends State<CodeLiteApp> {
     _lastRoot = root;
     _gitLog.invalidate();
     _prs.invalidate();
+    // 只在有项目时关注分支;没有项目(启动时、关闭项目后)不起任何 git 进程和定时器
+    _branches.reset();
+    if (root != null) {
+      _branches.start();
+    } else {
+      _branches.stop();
+    }
+  }
+
+  /// git 动了仓库(切分支 / 更新 / 合并 / 变基 ……,或者别处在终端里切了分支):
+  /// 日志窗要跟上;文件内容变了的话,文件树和没有未保存修改的标签也要。
+  void _onRepoChanged(bool worktreeChanged) {
+    if (_layout.isBottomOpen && _layout.bottomTab == BottomToolTab.git) {
+      _gitLog.refresh();
+    } else {
+      _gitLog.invalidate();
+    }
+    if (!worktreeChanged) return;
+    _workspace.load();
+    // 有未保存修改的标签不动:那是用户正在写的东西,不能被磁盘上的内容盖掉
+    _sessions.reloadFromDisk([
+      for (final path in _sessions.tabs.keys)
+        if (!_sessions.isTabDirty(path)) path,
+    ]);
   }
 
   @override
   void dispose() {
     _lifecycle.dispose();
     _workspace.removeListener(_onWorkspaceChanged);
+    _branches.dispose();
     _gitLog.dispose();
     _prs.dispose();
     _settings.dispose(); // 先于 _sessions:它监听 sessions.appearance
@@ -112,7 +145,7 @@ class _CodeLiteAppState extends State<CodeLiteApp> {
           notifier: _workspace,
           child: SessionScope(
             notifier: _sessions,
-            child: _Workbench(client: _client, terminals: _terminals, gitLog: _gitLog, prs: _prs, settings: _settings, plugins: _plugins),
+            child: _Workbench(client: _client, terminals: _terminals, gitLog: _gitLog, branches: _branches, branchActions: _branchActions, prs: _prs, settings: _settings, plugins: _plugins),
           ),
         ),
       ),
@@ -125,6 +158,8 @@ class _Workbench extends StatelessWidget {
     required this.client,
     required this.terminals,
     required this.gitLog,
+    required this.branches,
+    required this.branchActions,
     required this.prs,
     required this.settings,
     required this.plugins,
@@ -133,6 +168,8 @@ class _Workbench extends StatelessWidget {
   final ApiClient client;
   final TerminalStore terminals;
   final GitLogStore gitLog;
+  final BranchStore branches;
+  final BranchActions branchActions;
   final PullRequestsStore prs;
   final SettingsStore settings;
   final PluginManager plugins;
@@ -146,6 +183,8 @@ class _Workbench extends StatelessWidget {
     return _AppMenuBar(
       settings: settings,
       plugins: plugins,
+      branches: branches,
+      branchActions: branchActions,
       child: CallbackShortcuts(
       bindings: <ShortcutActivator, VoidCallback>{
         // macOS 由系统菜单的 ⌘, 处理;其它平台没有菜单栏,用 IntelliJ 的 Ctrl+Alt+S。
@@ -162,7 +201,7 @@ class _Workbench extends StatelessWidget {
           backgroundColor: IntelliJTheme.editorBg,
           body: Column(
             children: [
-              // 标题栏只关心当前文件名,订阅 workspace 即可。
+              // 标题栏订阅 workspace(当前文件、项目);分支那一块自己订阅 BranchStore。
               ListenableBuilder(
                 listenable: workspace,
                 builder: (context, _) => TitleBarWidget(
@@ -170,6 +209,16 @@ class _Workbench extends StatelessWidget {
                   onUndo: workspace.undo,
                   onRedo: workspace.redo,
                   onSearch: () => _openSearch(context),
+                  projectChip: ProjectChip(
+                    projectPath: workspace.rootPath,
+                    recent: workspace.recentProjects,
+                    home: io.homeDirectory(),
+                    onSwitch: (path) => _openRecent(context, workspace, path),
+                    onNewProject: () => _newProject(context, workspace),
+                    onOpen: () => _openFolder(context, workspace),
+                    onClone: () => _cloneRepository(context, workspace),
+                  ),
+                  branchChip: BranchChip(store: branches, actions: branchActions),
                 ),
               ),
 
@@ -476,11 +525,19 @@ class _EditorRegion extends StatelessWidget {
 /// 原生菜单栏(macOS)。只订阅 workspace 的最近项目 / 是否有项目,
 /// 工作台子树作为 `child` 传入,菜单变化时不会重建它。
 class _AppMenuBar extends StatelessWidget {
-  const _AppMenuBar({required this.child, required this.settings, required this.plugins});
+  const _AppMenuBar({
+    required this.child,
+    required this.settings,
+    required this.plugins,
+    required this.branches,
+    required this.branchActions,
+  });
 
   final Widget child;
   final SettingsStore settings;
   final PluginManager plugins;
+  final BranchStore branches;
+  final BranchActions branchActions;
 
   @override
   Widget build(BuildContext context) {
@@ -488,7 +545,7 @@ class _AppMenuBar extends StatelessWidget {
     if (defaultTargetPlatform != TargetPlatform.macOS) return child;
     final workspace = context.workspaceRead;
     return ListenableBuilder(
-      listenable: workspace,
+      listenable: Listenable.merge([workspace, branches]),
       child: child,
       builder: (context, child) => PlatformMenuBar(
         menus: <PlatformMenuItem>[
@@ -523,6 +580,7 @@ class _AppMenuBar extends StatelessWidget {
             ],
           ),
           _fileMenu(context, workspace),
+          _gitMenu(context),
           const PlatformMenu(
             label: 'Window',
             menus: <PlatformMenuItem>[
@@ -537,6 +595,45 @@ class _AppMenuBar extends StatelessWidget {
         ],
         child: child!,
       ),
+    );
+  }
+
+  /// Git 菜单:标题栏分支弹窗里那几个操作,带上同样的快捷键。不是 Git 仓库时置灰。
+  PlatformMenu _gitMenu(BuildContext context) {
+    final enabled = branches.isRepo && branches.busy == null;
+    VoidCallback? when(void Function() run) => enabled ? run : null;
+    return PlatformMenu(
+      label: 'Git',
+      menus: <PlatformMenuItem>[
+        PlatformMenuItemGroup(members: <PlatformMenuItem>[
+          PlatformMenuItem(
+            label: 'Update Project…',
+            shortcut: const SingleActivator(LogicalKeyboardKey.keyT, meta: true),
+            onSelected: when(() => branchActions.update(context)),
+          ),
+          PlatformMenuItem(
+            label: 'Commit…',
+            shortcut: const SingleActivator(LogicalKeyboardKey.keyK, meta: true),
+            onSelected: when(branchActions.showCommitWindow),
+          ),
+          PlatformMenuItem(
+            label: 'Push…',
+            shortcut: const SingleActivator(LogicalKeyboardKey.keyP, meta: true, shift: true),
+            onSelected: when(() => branchActions.push(context)),
+          ),
+        ]),
+        PlatformMenuItemGroup(members: <PlatformMenuItem>[
+          PlatformMenuItem(
+            label: 'New Branch…',
+            shortcut: const SingleActivator(LogicalKeyboardKey.keyN, meta: true, alt: true),
+            onSelected: when(() => branchActions.newBranch(context)),
+          ),
+          PlatformMenuItem(
+            label: 'Checkout Tag or Revision…',
+            onSelected: when(() => branchActions.checkoutRevision(context)),
+          ),
+        ]),
+      ],
     );
   }
 
@@ -607,59 +704,6 @@ class _AppMenuBar extends StatelessWidget {
   static String _recentLabel(String path) {
     final name = path.split('/').where((s) => s.isNotEmpty).lastOrNull ?? path;
     return '$name — $path';
-  }
-
-  /// 切换项目会丢弃未保存的标签,有脏标签时先确认。
-  Future<bool> _confirmDiscard(
-      BuildContext context, WorkspaceStore workspace) async {
-    if (workspace.sessions.autosave) await workspace.sessions.saveAll();
-    if (!workspace.sessions.hasDirtyTabs) return true;
-    if (!context.mounted) return false;
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('有未保存的修改'),
-        content: const Text('继续将丢弃这些修改。'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('取消')),
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('丢弃并继续')),
-        ],
-      ),
-    );
-    return ok ?? false;
-  }
-
-  Future<void> _openFolder(
-      BuildContext context, WorkspaceStore workspace) async {
-    final path = await io.pickDirectory();
-    if (path == null || !context.mounted) return;
-    if (!await _confirmDiscard(context, workspace) || !context.mounted) return;
-    await _open(context, workspace, path);
-  }
-
-  Future<void> _openRecent(
-      BuildContext context, WorkspaceStore workspace, String path) async {
-    if (!await _confirmDiscard(context, workspace) || !context.mounted) return;
-    await _open(context, workspace, path);
-  }
-
-  Future<void> _open(
-      BuildContext context, WorkspaceStore workspace, String path) async {
-    final ok = await workspace.openFolder(path);
-    if (!ok && context.mounted) {
-      ScaffoldMessenger.maybeOf(context)
-          ?.showSnackBar(SnackBar(content: Text('无法打开项目: $path')));
-    }
-  }
-
-  Future<void> _closeProject(
-      BuildContext context, WorkspaceStore workspace) async {
-    if (!await _confirmDiscard(context, workspace)) return;
-    workspace.closeProject();
   }
 
   Future<void> _newFile(BuildContext context, WorkspaceStore workspace) async {
@@ -764,4 +808,85 @@ class _SideResizeHandleState extends State<_SideResizeHandle> {
       ),
     );
   }
+}
+
+// ---------------------------------------------------------------------------
+// 项目的打开 / 切换 / 新建 / 克隆:标题栏的项目弹窗和 File 菜单共用。
+// ---------------------------------------------------------------------------
+
+/// 切换项目会丢弃未保存的标签,有脏标签时先确认。
+Future<bool> _confirmDiscard(
+    BuildContext context, WorkspaceStore workspace) async {
+  if (workspace.sessions.autosave) await workspace.sessions.saveAll();
+  if (!workspace.sessions.hasDirtyTabs) return true;
+  if (!context.mounted) return false;
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('有未保存的修改'),
+      content: const Text('继续将丢弃这些修改。'),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消')),
+        TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('丢弃并继续')),
+      ],
+    ),
+  );
+  return ok ?? false;
+}
+
+Future<void> _openFolder(
+    BuildContext context, WorkspaceStore workspace) async {
+  final path = await io.pickDirectory();
+  if (path == null || !context.mounted) return;
+  if (!await _confirmDiscard(context, workspace) || !context.mounted) return;
+  await _open(context, workspace, path);
+}
+
+Future<void> _openRecent(
+    BuildContext context, WorkspaceStore workspace, String path) async {
+  if (!await _confirmDiscard(context, workspace) || !context.mounted) return;
+  await _open(context, workspace, path);
+}
+
+Future<void> _open(
+    BuildContext context, WorkspaceStore workspace, String path) async {
+  final ok = await workspace.openFolder(path);
+  if (!ok && context.mounted) {
+    ScaffoldMessenger.maybeOf(context)
+        ?.showSnackBar(SnackBar(content: Text('无法打开项目: $path')));
+  }
+}
+
+Future<void> _closeProject(
+    BuildContext context, WorkspaceStore workspace) async {
+  if (!await _confirmDiscard(context, workspace)) return;
+  workspace.closeProject();
+}
+
+/// 新建 / 克隆默认放在当前项目的上一级;没有项目就放用户主目录。
+String _defaultProjectLocation(WorkspaceStore workspace) {
+  final root = workspace.rootPath;
+  if (root != null) {
+    final i = root.lastIndexOf('/');
+    if (i > 0) return root.substring(0, i);
+  }
+  return io.homeDirectory() ?? '';
+}
+
+Future<void> _newProject(BuildContext context, WorkspaceStore workspace) async {
+  final path = await showNewProjectDialog(context, initialLocation: _defaultProjectLocation(workspace), home: io.homeDirectory());
+  if (path == null || !context.mounted) return;
+  if (!await _confirmDiscard(context, workspace) || !context.mounted) return;
+  await _open(context, workspace, path);
+}
+
+Future<void> _cloneRepository(BuildContext context, WorkspaceStore workspace) async {
+  final path = await showCloneDialog(context, initialLocation: _defaultProjectLocation(workspace), home: io.homeDirectory());
+  if (path == null || !context.mounted) return;
+  if (!await _confirmDiscard(context, workspace) || !context.mounted) return;
+  await _open(context, workspace, path);
 }

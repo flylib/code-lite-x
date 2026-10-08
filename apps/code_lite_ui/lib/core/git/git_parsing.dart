@@ -309,3 +309,29 @@ List<Map<String, dynamic>> parseNameStatusZ(String raw) {
   }
   return changes;
 }
+
+// ---------------------------------------------------------------------------
+// 最近用过的分支(标题栏分支菜单的 Recent)
+// ---------------------------------------------------------------------------
+
+/// 从 `git reflog --format=%gs` 的主题行里挑出最近切换过的分支:最新的在前,
+/// 只保留 [existing] 里还在的本地分支,去掉 [current] 和重复,最多 [limit] 个。
+///
+/// 切换记录形如 `checkout: moving from main to feat/x`:目标 `feat/x` 比来源 `main` 更近。
+List<String> recentBranches(Iterable<String> reflogSubjects, Set<String> existing, String? current, int limit) {
+  final out = <String>[];
+  void add(String name) {
+    if (name == current || !existing.contains(name) || out.contains(name)) return;
+    out.add(name);
+  }
+
+  final moving = RegExp(r'^checkout: moving from (.+) to (.+)$');
+  for (final subject in reflogSubjects) {
+    final m = moving.firstMatch(subject.trim());
+    if (m == null) continue;
+    add(m.group(2)!);
+    add(m.group(1)!);
+    if (out.length >= limit) break;
+  }
+  return out.take(limit).toList();
+}

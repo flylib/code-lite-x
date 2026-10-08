@@ -2,6 +2,7 @@ import 'package:code_lite_ui/features/project_explorer/structure_widget.dart';
 import 'package:code_lite_ui/features/project_explorer/project_explorer_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:code_lite_ui/features/title_bar/project_menu.dart';
 import 'package:code_lite_ui/app.dart';
 
 void main() {
@@ -17,7 +18,9 @@ void main() {
     // 标题栏不再显示写死的项目名 / 版本徽标。
     expect(find.text('[Flutter + Rust]'), findsNothing);
     expect(find.text('v0.1.0'), findsNothing);
-    expect(find.text('main'), findsWidgets);
+    // 左边是项目入口(没打开项目时写 No Project;打开了就是项目名),不再有写死的 main 分支徽标。
+    expect(find.byType(ProjectChip), findsOneWidget);
+    expect(find.text('main'), findsNothing);
 
     // 启动不再硬编码打开某个文件:恢复上次项目,没有就是空态,由 File → Open 进入项目。
     expect(find.text('planner.rs'), findsNothing);
