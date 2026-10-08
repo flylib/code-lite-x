@@ -59,7 +59,8 @@ void main() {
     h.update(java, lines);
     expect(h.spansAt(0).first.style!.color, const Color(0xFFCC7832));
     h.update(java, lines, scheme: colorSchemeById('monokai'));
-    expect(h.lastRetokenized, 1);
+    // 分词状态与配色无关,换配色不必重新分词;着色片段按新配色重新生成
+    expect(h.lastRetokenized, 0);
     expect(h.spansAt(0).first.style!.color, const Color(0xFFF92672));
   });
 
