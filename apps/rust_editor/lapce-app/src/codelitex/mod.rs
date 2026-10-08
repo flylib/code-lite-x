@@ -20,3 +20,4 @@ pub mod git;
 pub mod git_log;
 pub mod commit_graph;
 pub mod git_log_tree;
+pub mod git_diff;

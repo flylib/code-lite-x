@@ -139,8 +139,19 @@ fn icon_button<S: std::fmt::Display + 'static>(
     on_click: impl Fn() + 'static,
     active: impl Fn() -> bool + 'static,
 ) -> impl View {
+    icon_button_disabled(config, icon, tooltip, on_click, active, || false)
+}
+
+fn icon_button_disabled<S: std::fmt::Display + 'static>(
+    config: Config,
+    icon: &'static str,
+    tooltip: S,
+    on_click: impl Fn() + 'static,
+    active: impl Fn() -> bool + 'static,
+    disabled: impl Fn() -> bool + Copy + 'static,
+) -> impl View {
     let tip = tooltip.to_string();
-    clickable_icon(move || icon, on_click, active, || false, move || tip.clone(), config)
+    clickable_icon(move || icon, on_click, active, disabled, move || tip.clone(), config)
         .style(|s| s.margin_horiz(1.0))
 }
 
@@ -851,13 +862,22 @@ fn commit_details(data: GitLogData, d: GitCommitDetails) -> impl View {
     let files = d.files.clone();
     let repo = data.repo_name();
     let collapsed = data.files_collapsed;
-    let (expand, collapse) = (data.clone(), data.clone());
+    let (expand, collapse, open_diff) = (data.clone(), data.clone(), data.clone());
+    let selected_file = data.selected_file;
     let no_files = files.is_empty();
     let rows_files = files.clone();
     let rows_data = data.clone();
 
     stack((
         stack((
+            icon_button_disabled(
+                config,
+                LapceIcons::GIT_DIFF,
+                "Show diff (or double-click a file)",
+                move || open_diff.open_selected_file_diff(),
+                || false,
+                move || selected_file.get().is_none(),
+            ),
             empty().style(|s| s.flex_grow(1.0)),
             icon_button(config, LapceIcons::FOLD_DOWN, "Expand all", move || expand.expand_all_files(), || false),
             icon_button(config, LapceIcons::FOLD_UP, "Collapse all", move || collapse.collapse_all_files(), || false),
@@ -915,6 +935,8 @@ fn file_row(data: GitLogData, row: FileRow) -> impl View {
     let key = row.key.clone();
     let path = row.path.clone();
     let click = data.clone();
+    let double_click = data.clone();
+    let double_click_path = row.path.clone();
     let name = row.label.clone();
     let trailing = match (row.dir_count, &row.renamed_from) {
         (Some(n), _) => Some(format!("{n} {}", if n == 1 { "file" } else { "files" })),
@@ -945,6 +967,11 @@ fn file_row(data: GitLogData, row: FileRow) -> impl View {
     .on_click_stop(move |_| match &path {
         Some(p) => click.selected_file.set(Some(p.clone())),
         None => click.toggle_file_dir(&key),
+    })
+    .on_double_click_stop(move |_| {
+        if let Some(p) = &double_click_path {
+            double_click.open_file_diff(p);
+        }
     })
     .debug_name(letter.unwrap_or("dir"))
     .style(move |s| {

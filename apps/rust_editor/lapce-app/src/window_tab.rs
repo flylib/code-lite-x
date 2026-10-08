@@ -1654,6 +1654,14 @@ impl WindowTabData {
             InternalCommand::OpenFileChanges { path } => {
                 self.main_split.open_file_changes(path);
             }
+            InternalCommand::OpenCommitDiff {
+                path,
+                left_version,
+                right_version,
+            } => {
+                self.main_split
+                    .open_history_diff(path, left_version, right_version);
+            }
             InternalCommand::ReloadFileExplorer => {
                 self.file_explorer.reload();
             }

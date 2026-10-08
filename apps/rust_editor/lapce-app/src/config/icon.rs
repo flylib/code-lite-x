@@ -54,6 +54,7 @@ impl LapceIcons {
     pub const GIT_CHEVRON_LEFT: &'static str = "git.chevron_left";
     pub const GIT_CHEVRON_RIGHT: &'static str = "git.chevron_right";
     pub const GIT_DETAILS: &'static str = "git.details";
+    pub const GIT_DIFF: &'static str = "git.diff";
     pub const GIT_BRANCH: &'static str = "git.branch";
     pub const GIT_COMMIT_CURRENT: &'static str = "git.current";
     pub const SCM_DIFF_MODIFIED: &'static str = "scm.diff.modified";

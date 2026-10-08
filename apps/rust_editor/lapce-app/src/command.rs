@@ -626,6 +626,13 @@ pub enum InternalCommand {
     OpenFileChanges {
         path: PathBuf,
     },
+    /// CodeLiteX: a file in one commit against its parent. The versions say where each side
+    /// comes from (see `codelitex::git_diff`).
+    OpenCommitDiff {
+        path: PathBuf,
+        left_version: String,
+        right_version: String,
+    },
     ReloadFileExplorer,
     /// Test whether a file/directory can be created at that path
     TestPathCreation {

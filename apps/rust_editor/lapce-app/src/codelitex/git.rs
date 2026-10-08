@@ -429,6 +429,21 @@ fn collect_refs(repo: &Repository) -> Result<HashMap<Oid, Vec<GitRef>>, git2::Er
     Ok(map)
 }
 
+/// What a file looked like in a commit, as text for the diff view.
+pub fn read_file_at(workspace_path: &Path, oid: &str, path: &str) -> Result<String, git2::Error> {
+    let repo = Repository::discover(workspace_path)?;
+    let commit = repo.find_commit(Oid::from_str(oid)?)?;
+    let entry = commit.tree()?.get_path(Path::new(path))?;
+    let blob = repo.find_blob(entry.id())?;
+    if blob.is_binary() {
+        return Ok("Binary file not shown\n".to_string());
+    }
+    if blob.size() > super::git_diff::MAX_TEXT_BYTES {
+        return Ok(format!("File too large to show ({} MB)\n", blob.size() / (1024 * 1024)));
+    }
+    Ok(String::from_utf8_lossy(blob.content()).into_owned())
+}
+
 /// Tag names, newest-looking last.
 pub fn get_tags(workspace_path: &Path) -> Result<Vec<String>, git2::Error> {
     let repo = Repository::discover(workspace_path)?;
@@ -885,5 +900,29 @@ mod tests {
         let (_repo, [.., c4]) = merged_repo(dir.path());
         let page = get_commit_page(dir.path(), &query(None, "", 0, 50)).unwrap();
         assert_eq!(page.head, Some(c4.to_string()));
+    }
+
+    // ----- reading a file at a commit -------------------------------------------------------
+
+    #[test]
+    fn a_file_is_read_as_it_was_in_each_commit() {
+        let dir = tempfile::tempdir().unwrap();
+        let repo = new_repo(dir.path());
+        let c1 = commit(&repo, "refs/heads/main", &[], &[("a.txt", Some("one\n"))], "first", 100, ANN);
+        let c2 = commit(&repo, "refs/heads/main", &[c1], &[("a.txt", Some("one\ntwo\n"))], "second", 200, ANN);
+        assert_eq!(read_file_at(dir.path(), &c1.to_string(), "a.txt").unwrap(), "one\n");
+        assert_eq!(read_file_at(dir.path(), &c2.to_string(), "a.txt").unwrap(), "one\ntwo\n");
+        assert!(read_file_at(dir.path(), &c1.to_string(), "missing.txt").is_err());
+        assert!(read_file_at(dir.path(), "nothex", "a.txt").is_err());
+    }
+
+    #[test]
+    fn binary_and_huge_files_are_replaced_by_a_note() {
+        let dir = tempfile::tempdir().unwrap();
+        let repo = new_repo(dir.path());
+        let big = "x".repeat(super::super::git_diff::MAX_TEXT_BYTES + 1);
+        let c1 = commit(&repo, "refs/heads/main", &[], &[("bin.dat", Some("ab\0cd")), ("big.txt", Some(&big))], "first", 100, ANN);
+        assert_eq!(read_file_at(dir.path(), &c1.to_string(), "bin.dat").unwrap(), "Binary file not shown\n");
+        assert!(read_file_at(dir.path(), &c1.to_string(), "big.txt").unwrap().starts_with("File too large to show"));
     }
 }

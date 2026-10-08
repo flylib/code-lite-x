@@ -728,6 +728,83 @@ impl MainSplitData {
         );
     }
 
+    /// CodeLiteX: show a file in one commit against its parent (or against nothing).
+    pub fn open_history_diff(
+        &self,
+        path: PathBuf,
+        left_version: String,
+        right_version: String,
+    ) {
+        let [left, right] = [left_version, right_version].map(|version| {
+            let history = DocHistory {
+                path: path.clone(),
+                version,
+            };
+            let doc = Rc::new(Doc::new_history(
+                self.scope,
+                DocContent::History(history.clone()),
+                self.editors,
+                self.common.clone(),
+            ));
+            self.load_history_content(&doc, &history);
+            doc
+        });
+
+        // the diff is the point now, not the panel it was opened from
+        if self.common.focus.get_untracked() != Focus::Workbench {
+            self.common.focus.set(Focus::Workbench);
+        }
+        self.get_editor_tab_child(
+            EditorTabChildSource::DiffEditor { left, right },
+            false,
+            false,
+        );
+    }
+
+    /// Fill a history document with the text its version stands for.
+    pub fn load_history_content(&self, doc: &Rc<Doc>, history: &DocHistory) {
+        use crate::codelitex::{
+            git,
+            git_diff::{HistorySource, parse_version},
+        };
+
+        match parse_version(&history.version) {
+            Some(HistorySource::Empty) => doc.init_content(Rope::from("")),
+            Some(HistorySource::Commit { oid, path }) => {
+                let Some(workspace) = self.common.workspace.path.clone() else {
+                    doc.init_content(Rope::from(""));
+                    return;
+                };
+                let (oid, path) = (oid.to_string(), path.to_string());
+                let doc = doc.clone();
+                let send = create_ext_action(self.scope, move |text: String| {
+                    doc.init_content(Rope::from(text));
+                });
+                std::thread::spawn(move || {
+                    send(git::read_file_at(&workspace, &oid, &path).unwrap_or_else(
+                        |e| format!("Cannot read the file: {}\n", e.message()),
+                    ));
+                });
+            }
+            // `head`, and anything this version of the editor does not know
+            Some(HistorySource::Head) | None => {
+                let doc = doc.clone();
+                let send = create_ext_action(self.scope, move |result| {
+                    if let Ok(ProxyResponse::BufferHeadResponse { content, .. }) =
+                        result
+                    {
+                        doc.init_content(Rope::from(content));
+                    }
+                });
+                self.common
+                    .proxy
+                    .get_buffer_head(history.path.clone(), move |result| {
+                        send(result);
+                    });
+            }
+        }
+    }
+
     pub fn open_diff_files(&self, left_path: PathBuf, right_path: PathBuf) {
         let [left, right] =
             [left_path, right_path].map(|path| self.get_doc(path, None).0);

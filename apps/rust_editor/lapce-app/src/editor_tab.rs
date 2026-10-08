@@ -266,6 +266,22 @@ impl EditorTabChild {
                     .with(|diff_editors| diff_editors.get(&diff_editor_id).cloned());
                 let confirmed = diff_editor_data.as_ref().map(|d| d.confirmed);
 
+                // CodeLiteX: a file in one commit is titled `App.java (4d26280)`
+                let commit_title = diff_editor_data.as_ref().and_then(|d| {
+                    let [left, right] = [&d.left, &d.right].map(|data| {
+                        data.doc_signal().with(|doc| doc.content.get())
+                    });
+                    match (left, right) {
+                        (DocContent::History(l), DocContent::History(r)) => {
+                            crate::codelitex::git_diff::commit_diff_title(
+                                &r.path, &l.version, &r.version,
+                            )
+                            .map(|title| (r.path, title))
+                        }
+                        _ => None,
+                    }
+                });
+
                 let info = diff_editor_data
                     .map(|diff_editor_data| {
                         [diff_editor_data.left, diff_editor_data.right].map(|data| {
@@ -291,6 +307,11 @@ impl EditorTabChild {
                     .unwrap_or([None, None]);
 
                 let (icon, color, path, is_pristine) = match info {
+                    _ if commit_title.is_some() => {
+                        let (path, title) = commit_title.unwrap();
+                        let (svg, color) = config.file_svg(&path);
+                        (svg, color, title, true)
+                    }
                     [Some((path, is_pristine)), None]
                     | [None, Some((path, is_pristine))] => {
                         let (svg, color) = config.file_svg(&path);

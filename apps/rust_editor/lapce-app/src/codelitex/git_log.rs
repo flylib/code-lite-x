@@ -29,10 +29,10 @@ use super::{
         self, GitBranchInfo, GitChangeKind, GitCommitDetails, GitCommitInfo, GitLogPage,
         GitLogQuery,
     },
-    git_log_tree,
+    git_diff, git_log_tree,
 };
 use crate::{
-    command::{CommandExecuted, CommandKind, LapceCommand},
+    command::{CommandExecuted, CommandKind, InternalCommand, LapceCommand},
     editor::EditorData,
     keypress::{KeyPressFocus, condition::Condition},
     main_split::Editors,
@@ -576,6 +576,35 @@ impl GitLogData {
     }
 
     // ----- layout and folding -------------------------------------------------------------
+
+    /// Open the diff of one changed file of the selected commit against its first parent.
+    pub fn open_file_diff(&self, path: &str) {
+        let Some(Ok(details)) = self.details.get_untracked() else {
+            return;
+        };
+        let Some(file) = details.files.iter().find(|f| f.path == path) else {
+            return;
+        };
+        let (left_version, right_version) = git_diff::commit_file_versions(
+            &details.info.oid,
+            details.info.parents.first().map(String::as_str),
+            file,
+        );
+        self.common
+            .internal_command
+            .send(InternalCommand::OpenCommitDiff {
+                path: PathBuf::from(&file.path),
+                left_version,
+                right_version,
+            });
+    }
+
+    /// The diff button: open the file that is selected in the file tree.
+    pub fn open_selected_file_diff(&self) {
+        if let Some(path) = self.selected_file.get_untracked() {
+            self.open_file_diff(&path);
+        }
+    }
 
     pub fn toggle_branches(&self) {
         self.show_branches.update(|v| *v = !*v);

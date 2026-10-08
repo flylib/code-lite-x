@@ -14,8 +14,7 @@ use lapce_core::buffer::{
     diff::{DiffExpand, DiffLines, expand_diff_lines, rope_diff},
     rope_text::RopeText,
 };
-use lapce_rpc::{buffer::BufferId, proxy::ProxyResponse};
-use lapce_xi_rope::Rope;
+use lapce_rpc::buffer::BufferId;
 use serde::{Deserialize, Serialize};
 
 use super::{EditorData, EditorViewKind};
@@ -70,24 +69,8 @@ impl DiffEditorInfo {
                     );
                     let doc = Rc::new(doc);
 
-                    {
-                        let doc = doc.clone();
-                        let send = create_ext_action(cx, move |result| {
-                            if let Ok(ProxyResponse::BufferHeadResponse {
-                                content,
-                                ..
-                            }) = result
-                            {
-                                doc.init_content(Rope::from(content));
-                            }
-                        });
-                        common.proxy.get_buffer_head(
-                            history.path.clone(),
-                            move |result| {
-                                send(result);
-                            },
-                        );
-                    }
+                    // CodeLiteX: `head`, or the file at a commit; see `codelitex::git_diff`
+                    data.load_history_content(&doc, history);
 
                     doc
                 }
