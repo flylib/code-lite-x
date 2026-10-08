@@ -29,6 +29,9 @@ class IntelliJTheme {
   static const Color gitRed = Color(0xFFDB5860);
   static const Color gitYellow = Color(0xFFE5A84B);
 
+  /// 修改过的文件(日志详情栏里的文件名),取自 IntelliJ 的截图。
+  static const Color gitModified = Color(0xFF70AEFF);
+
   // Text Colors
   static const Color textHigh = Color(0xFFDFE1E5);
   static const Color textPrimary = Color(0xFFBCBEC4);

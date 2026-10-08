@@ -12,8 +12,13 @@ const double _kRowHeight = 24;
 const TextStyle _kText = TextStyle(color: IntelliJTheme.textPrimary, fontSize: 12);
 const TextStyle _kMuted = TextStyle(color: IntelliJTheme.textMuted, fontSize: 12);
 
-/// 日志详情栏里变更文件的颜色:删除的灰着,其余(新增 / 修改 / 重命名 / 复制)都是绿色。
-Color gitChangeColor(String status) => status == 'D' ? IntelliJTheme.textMuted : IntelliJTheme.gitGreen;
+/// 日志详情栏里变更文件的颜色(与 IntelliJ 一致):新增绿色,删除灰色,
+/// 修改 / 重命名 / 复制是亮蓝色。
+Color gitChangeColor(String status) => switch (status) {
+      'A' => IntelliJTheme.gitGreen,
+      'D' => IntelliJTheme.textMuted,
+      _ => IntelliJTheme.gitModified,
+    };
 
 String formatGitDate(DateTime t) {
   String two(int v) => v.toString().padLeft(2, '0');

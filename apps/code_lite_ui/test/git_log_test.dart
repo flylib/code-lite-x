@@ -4,6 +4,7 @@ import 'package:code_lite_ui/core/client/api_client.dart';
 import 'package:code_lite_ui/core/theme/intellij_theme.dart';
 import 'package:code_lite_ui/features/git/git_log_store.dart';
 import 'package:code_lite_ui/features/git/git_log_window.dart' show gitChangeColor;
+import 'package:flutter/painting.dart' show Color;
 import 'package:flutter_test/flutter_test.dart';
 
 /// 端到端:真实 git 仓库 → Dart GitService → GitLogStore。
@@ -125,10 +126,11 @@ void main() {
     store.dispose();
   });
 
-  test('changed files in the log details are green, deleted ones grey', () {
-    for (final status in ['A', 'M', 'R', 'C', 'T']) {
-      expect(gitChangeColor(status), IntelliJTheme.gitGreen, reason: status);
-    }
+  test('changed files in the log details: added green, deleted grey, the rest the IntelliJ blue', () {
+    expect(gitChangeColor('A'), IntelliJTheme.gitGreen);
     expect(gitChangeColor('D'), IntelliJTheme.textMuted);
+    for (final status in ['M', 'R', 'C', 'T']) {
+      expect(gitChangeColor(status), const Color(0xFF70AEFF), reason: status);
+    }
   });
 }
