@@ -196,10 +196,15 @@ fn file_node_text_view(
                     ),
                 ))
             } else {
-                let is_dir = node.is_dir;
+                // CodeLiteX: a folded package chain shows its dotted name
+                let compact_name = node.compact_name.clone();
                 container(
                     label(move || {
-                        crate::codelitex::project_tree::file_node_display_name(&path, is_dir)
+                        compact_name.clone().unwrap_or_else(|| {
+                            path.file_name()
+                                .map(|f| f.to_string_lossy().to_string())
+                                .unwrap_or_default()
+                        })
                     })
                     .style(move |s| {
                         s.height(ui_line_height.get())

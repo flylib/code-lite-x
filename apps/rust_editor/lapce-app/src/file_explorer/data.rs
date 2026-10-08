@@ -241,6 +241,12 @@ impl FileExplorerData {
                                 node.children.insert(item.path.clone(), item);
                             }
                         }
+
+                        // CodeLiteX: package chains (`com.example.app`) fold into one row, which
+                        // needs to know the directories below before they are opened.
+                        for child in node.package_dirs_to_preread() {
+                            data.read_dir(&child);
+                        }
                     }
                     root.update_node_count_recursive(&path);
                 });
