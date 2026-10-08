@@ -28,7 +28,7 @@ use lapce_rpc::{
 use tracing::error;
 
 #[derive(Parser)]
-#[clap(name = "Lapce-proxy")]
+#[clap(name = "CodeLiteX-proxy")]
 #[clap(version = meta::VERSION)]
 struct Cli {
     #[clap(short, long, action, hide = true)]

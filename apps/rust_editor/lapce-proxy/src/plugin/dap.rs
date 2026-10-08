@@ -319,8 +319,8 @@ impl DapClient {
 
     pub(crate) fn initialize(&mut self) -> Result<()> {
         let params = dap_types::InitializeParams {
-            client_id: Some("lapce".to_owned()),
-            client_name: Some("Lapce".to_owned()),
+            client_id: Some("codelitex".to_owned()),
+            client_name: Some("CodeLiteX".to_owned()),
             adapter_id: "".to_string(),
             locale: Some("en-us".to_owned()),
             lines_start_at_one: Some(true),

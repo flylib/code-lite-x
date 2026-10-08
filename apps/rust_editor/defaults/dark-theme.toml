@@ -1,7 +1,7 @@
 #:schema ../extra/schemas/color-theme.json
 
 [color-theme]
-name = "Lapce Dark"
+name = "CodeLiteX Dark"
 
 [ui]
 font-family = ""
@@ -14,24 +14,24 @@ scroll-width = 10
 drop-shadow-width = 0
 
 [color-theme.base]
-black = "#282C34"
-blue = "#61AFEF"
-cyan = "#56B6C2"
-green = "#98C379"
-grey = "#3E4451"
-magenta = "#C678DD"
-orange = "#D19A66"
-purple = "#C678DD"
-red = "#E06C75"
-white = "#ABB2BF"
-yellow = "#E5C07B"
+black = "#1E1F22"
+blue = "#56A8F5"
+cyan = "#2AACB8"
+green = "#6AAB73"
+grey = "#393B40"
+magenta = "#C886E5"
+orange = "#CF8E6D"
+purple = "#C886E5"
+red = "#DB5860"
+white = "#BCBEC4"
+yellow = "#E5A84B"
 
 primary-background = "$black"
 # Background for 'secondary' elements: panels, palette, status bar, completion, hover
-secondary-background = "#21252B"
-current-background = "#2C313A"
+secondary-background = "#2B2D30"
+current-background = "#232428"
 text = "$white"
-dim-text = "#5C6370"
+dim-text = "#707278"
 
 [color-theme.syntax]
 "comment" = "$dim-text"
@@ -82,23 +82,23 @@ dim-text = "#5C6370"
 "bracket.unpaired" = "$red"
 
 [color-theme.ui]
-"lapce.error" = "$red"
-"lapce.warn" = "$yellow"
+"lapce.error" = "#F97A7A"
+"lapce.warn" = "#E5A84B"
 "lapce.dropdown_shadow" = "#000000"
-"lapce.border" = "#000000"
-"lapce.scroll_bar" = "#3E4451BB"
+"lapce.border" = "#393B40"
+"lapce.scroll_bar" = "#393B4088"
 
-"lapce.button.primary.background" = "#50a14f"
-"lapce.button.primary.foreground" = "$black"
+"lapce.button.primary.background" = "#3574F0"
+"lapce.button.primary.foreground" = "#FFFFFF"
 
 # tab
 "lapce.tab.active.background" = "$primary-background"
-"lapce.tab.active.foreground" = "$text"
-"lapce.tab.active.underline" = "#528BFF"
+"lapce.tab.active.foreground" = "#DFE1E5"
+"lapce.tab.active.underline" = "#3574F0"
 
 "lapce.tab.inactive.background" = "$secondary-background"
-"lapce.tab.inactive.foreground" = "$text"
-"lapce.tab.inactive.underline" = "#528BFF77"
+"lapce.tab.inactive.foreground" = "$dim-text"
+"lapce.tab.inactive.underline" = "#3574F044"
 
 "lapce.tab.separator" = ""
 
@@ -106,28 +106,28 @@ dim-text = "#5C6370"
 "lapce.icon.inactive" = "$dim-text"
 
 "lapce.remote.icon" = "$black"
-"lapce.remote.local" = "#4078F2"
-"lapce.remote.connected" = "#50A14F"
-"lapce.remote.connecting" = "#C18401"
-"lapce.remote.disconnected" = "#E45649"
+"lapce.remote.local" = "#3574F0"
+"lapce.remote.connected" = "#59A869"
+"lapce.remote.connecting" = "#E5A84B"
+"lapce.remote.disconnected" = "#DB5860"
 
-"lapce.plugin.name" = "#DDDDDD"
+"lapce.plugin.name" = "#DFE1E5"
 "lapce.plugin.description" = "$text"
-"lapce.plugin.author" = "#B0B0B0"
+"lapce.plugin.author" = "$dim-text"
 
 "editor.background" = "$primary-background"
 "editor.foreground" = "$text"
 "editor.dim" = "$dim-text"
-"editor.focus" = "#CCCCCC"
-"editor.caret" = "#528BFF"
-"editor.selection" = "$grey"
-"editor.current_line" = "#2C313C"
+"editor.focus" = "#3574F0"
+"editor.caret" = "#589DF6"
+"editor.selection" = "#3574F033"
+"editor.current_line" = "#26282E"
 "editor.debug_break_line" = "#528abF37"
 "editor.link" = "$blue"
 "editor.visible_whitespace" = "$grey"
 "editor.indent_guide" = "$grey"
-"editor.drag_drop_background" = "#79c1fc55"
-"editor.drag_drop_tab_background" = "#0b0e1455"
+"editor.drag_drop_background" = "#3574F055"
+"editor.drag_drop_tab_background" = "#1E1F2255"
 "editor.sticky_header_background" = "$primary-background"
 
 "inlay_hint.foreground" = "$text"

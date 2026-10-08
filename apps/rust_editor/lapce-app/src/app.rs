@@ -115,11 +115,11 @@ mod grammars;
 mod logging;
 
 #[derive(Parser)]
-#[clap(name = "Lapce")]
+#[clap(name = "CodeLiteX")]
 #[clap(version=meta::VERSION)]
 #[derive(Debug)]
 struct Cli {
-    /// Launch new window even if Lapce is already running
+    /// Launch new window even if CodeLiteX is already running
     #[clap(short, long, action)]
     new: bool,
     /// Don't return instantly when opened in a terminal
@@ -205,7 +205,7 @@ impl AppData {
     fn default_window_config(&self) -> WindowConfig {
         WindowConfig::default()
             .apply_default_theme(false)
-            .title("Lapce")
+            .title("CodeLiteX")
     }
 
     pub fn new_window(&self, folder: Option<PathBuf>) {
@@ -3674,8 +3674,8 @@ fn window(window_data: WindowData) -> impl View {
             .or_else(|| window_tabs.last())
             .and_then(|(_, window_tab)| window_tab.workspace.display());
         match workspace {
-            Some(workspace) => format!("{workspace} - Lapce"),
-            None => "Lapce".to_string(),
+            Some(workspace) => format!("{workspace} - CodeLiteX"),
+            None => "CodeLiteX".to_string(),
         }
     })
     .on_event_stop(EventListener::ImeEnabled, move |_| {
@@ -3703,7 +3703,7 @@ fn window(window_data: WindowData) -> impl View {
             let lapce_command = window_tab.common.lapce_command;
             window_menu(lapce_command, workbench_command)
         } else {
-            Menu::new("Lapce")
+            Menu::new("CodeLiteX")
         }
     })
     .style(|s| s.size_full())
@@ -3718,7 +3718,7 @@ pub fn launch() {
     }
 
     let (reload_handle, _guard) = logging::logging();
-    trace!(TraceLevel::INFO, "Starting up Lapce..");
+    trace!(TraceLevel::INFO, "Starting up CodeLiteX..");
 
     #[cfg(feature = "vendored-fonts")]
     {
@@ -4166,10 +4166,10 @@ pub fn window_menu(
     lapce_command: Listener<LapceCommand>,
     workbench_command: Listener<LapceWorkbenchCommand>,
 ) -> Menu {
-    Menu::new("Lapce")
+    Menu::new("CodeLiteX")
         .entry({
-            let mut menu = Menu::new("Lapce")
-                .entry(MenuItem::new("About Lapce").action(move || {
+            let mut menu = Menu::new("CodeLiteX")
+                .entry(MenuItem::new("About CodeLiteX").action(move || {
                     workbench_command.send(LapceWorkbenchCommand::ShowAbout)
                 }))
                 .separator()
@@ -4188,13 +4188,13 @@ pub fn window_menu(
                         )),
                 )
                 .separator()
-                .entry(MenuItem::new("Quit Lapce").action(move || {
+                .entry(MenuItem::new("Quit CodeLiteX").action(move || {
                     workbench_command.send(LapceWorkbenchCommand::Quit);
                 }));
             if cfg!(target_os = "macos") {
                 menu = menu
                     .separator()
-                    .entry(MenuItem::new("Hide Lapce"))
+                    .entry(MenuItem::new("Hide CodeLiteX"))
                     .entry(MenuItem::new("Hide Others"))
                     .entry(MenuItem::new("Show All"))
             }

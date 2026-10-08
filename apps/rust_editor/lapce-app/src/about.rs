@@ -21,10 +21,8 @@ use crate::{
 struct AboutUri {}
 
 impl AboutUri {
-    const LAPCE: &'static str = "https://lapce.dev";
-    const GITHUB: &'static str = "https://github.com/lapce/lapce";
-    const MATRIX: &'static str = "https://matrix.to/#/#lapce-editor:matrix.org";
-    const DISCORD: &'static str = "https://discord.gg/n8tGJ6Rn6D";
+    const CODELITEX_REPO: &'static str = "https://github.com/flylib/code-lite-x";
+    const LAPCE_BASE: &'static str = "https://github.com/lapce/lapce";
     const CODICONS: &'static str = "https://github.com/microsoft/vscode-codicons";
 }
 
@@ -105,7 +103,7 @@ pub fn about_popup(window_tab_data: Rc<WindowTabData>) -> impl View {
                 s.size(logo_size, logo_size)
                     .color(config.get().color(LapceColor::EDITOR_FOREGROUND))
             }),
-            label(|| "Lapce".to_string()).style(move |s| {
+            label(|| "CodeLiteX".to_string()).style(move |s| {
                 s.font_bold()
                     .margin_top(10.0)
                     .color(config.get().color(LapceColor::EDITOR_FOREGROUND))
@@ -115,38 +113,24 @@ pub fn about_popup(window_tab_data: Rc<WindowTabData>) -> impl View {
                     .color(config.get().color(LapceColor::EDITOR_DIM))
             }),
             web_link(
-                || "Website".to_string(),
-                || AboutUri::LAPCE.to_string(),
+                || "Repository".to_string(),
+                || AboutUri::CODELITEX_REPO.to_string(),
                 move || config.get().color(LapceColor::EDITOR_LINK),
                 internal_command,
             )
             .style(|s| s.margin_top(20.0)),
-            web_link(
-                || "GitHub".to_string(),
-                || AboutUri::GITHUB.to_string(),
-                move || config.get().color(LapceColor::EDITOR_LINK),
-                internal_command,
-            )
-            .style(|s| s.margin_top(10.0)),
-            web_link(
-                || "Discord".to_string(),
-                || AboutUri::DISCORD.to_string(),
-                move || config.get().color(LapceColor::EDITOR_LINK),
-                internal_command,
-            )
-            .style(|s| s.margin_top(10.0)),
-            web_link(
-                || "Matrix".to_string(),
-                || AboutUri::MATRIX.to_string(),
-                move || config.get().color(LapceColor::EDITOR_LINK),
-                internal_command,
-            )
-            .style(|s| s.margin_top(10.0)),
             label(|| "Attributions".to_string()).style(move |s| {
                 s.font_bold()
                     .color(config.get().color(LapceColor::EDITOR_DIM))
-                    .margin_top(40.0)
+                    .margin_top(30.0)
             }),
+            web_link(
+                || "Based on Lapce (Apache-2.0)".to_string(),
+                || AboutUri::LAPCE_BASE.to_string(),
+                move || config.get().color(LapceColor::EDITOR_LINK),
+                internal_command,
+            )
+            .style(|s| s.margin_top(10.0)),
             web_link(
                 || "Codicons (CC-BY-4.0)".to_string(),
                 || AboutUri::CODICONS.to_string(),

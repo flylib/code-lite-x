@@ -74,7 +74,8 @@
 - 当前分支：`rust`。
 - **阶段 0 已完成**：基线版本、依赖来源和离线编译条件已经确认。
 - **阶段 1 已完成**（2026-10-08）：Lapce 桌面编辑器 GUI 可视验收与核心工作流检查通过。
-- 阶段 2（CodeLiteX 产品基础）待开始。
+- **阶段 2 已完成**（2026-10-08）：CodeLiteX 产品基础完成（名称、图标、主题、配置目录与扩展模块边界）。
+- 阶段 3（工作区与编辑器功能）待开始。
 
 ### 阶段 0 详情
 
@@ -87,7 +88,7 @@
 
 ### 阶段 1 详情
 
-- Lapce 集成到 `apps/rust_editor/` 独立 Cargo 工作区。
+- Lapce 集成到 `apps/rust_editor/` 独立 Cargo工作区。
 - `cargo build --offline --locked` 与 `cargo run --offline --locked` 均成功。
 - GUI 可视验收（通过 CGWindowListCreateImage 截图确认）：
   - ✅ 窗口正常渲染：标题栏、红黄绿信号灯、"Open Folder" 命令面板。
@@ -101,3 +102,28 @@
   - ✅ 状态栏：`Ln 1, Col 1, Char 0 · LF · Markdown`；零错误 `⊘ 0 ⚠ 0`。
 - `apps/rust_editor/README_CODELITEX.md` 记录独立工作区构建方式。
 - 原有 Flutter 应用和根 Cargo 工作区未改动。
+
+### 阶段 2 详情
+
+- **应用名称与标识**：
+  - 二进制名称：生成独立 `codelitex` (224MB) 和 `codelitex-proxy` (89MB)，同时保留 `lapce` 兼容别名。
+  - 窗口标题：正式显示 `CodeLiteX` 以及 `<workspace> - CodeLiteX`。
+  - CLI 与版本：`codelitex -V` 输出 `CodeLiteX 0.4.6+Debug.84f5d7b`。
+  - 关于窗口（About Popup）：主标题 `CodeLiteX`，仓库链接指向 `flylib/code-lite-x`，保留 Lapce (Apache-2.0) 与 Codicons (CC-BY-4.0) 明确署名。
+  - 应用菜单：macOS 菜单更新为 `CodeLiteX`、`About CodeLiteX`、`Quit CodeLiteX`、`Hide CodeLiteX`。
+  - 命令行集成：`Install CodeLiteX to PATH` 创建 `/usr/local/bin/codelitex`。
+- **应用图标与资源**：
+  - 生成 `codelitex.icns`（859KB，全尺寸 16-1024 视网膜清晰度）并部署至 `CodeLiteX.app` / `Lapce.app`。
+  - 生成 CodeLiteX 矢量徽标 SVG 与高分辨率 PNG 资源并嵌入构建。
+- **IntelliJ Darcula 配色主题**：
+  - 默认暗色主题全面对齐 IntelliJ Darcula（`#1E1F22` 编辑器底色、`#2B2D30` 面板底色、`#393B40` 边框、`#3574F0` 激活蓝、关键字 `#CF8E6D`、字符串 `#6AAB73`、注释 `#7A7E85`）。
+- **配置与数据目录**：
+  - 数据与配置路径更新为 `ProjectDirs::from("com", "codelite", "CodeLiteX-<branch>")`。
+  - 便携模式目录更新为 `codelitex-data`。
+- **扩展模块边界**：
+  - 创建独立模块 `lapce-app/src/codelitex/`，封装品牌常量、组织标识与扩展契约，严格隔离对上游核心侵入。
+- **构建与测试验证**：
+  - `cargo build --offline` 成功，离线 0 外部网络请求。
+  - 进程启动与 macOS 窗口渲染确认（截图已归档），IPC Socket 通信打开文件正常。
+  - Rust 根工作区、lapce-core、lapce-rpc 测试 100% 通过（0 failed）。
+  - Flutter 端全套自动化测试 100% 通过（0 failed）。
