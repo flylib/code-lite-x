@@ -6,14 +6,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// 没用到的变量 / 字段:LSP 给的 Unnecessary 标记 → 文字变灰,没有下划线,不算警告(IntelliJ 的做法)。
-Map<String, dynamic> _json({int line = 0, int from = 0, int to = 5, int severity = 2, List<int>? tags, int? endLine}) => {
+Map<String, dynamic> _json({int line = 0, int from = 0, int to = 5, int severity = 2, List<int>? tags, int? endLine, String message = 'The value of the field X.y is not used', String code = '570425421'}) => {
       'range': {
         'start': {'line': line, 'character': from},
         'end': {'line': endLine ?? line, 'character': to},
       },
       'severity': severity,
-      'message': 'The value of the field X.y is not used',
-      'code': '570425421',
+      'message': message,
+      'code': code,
       if (tags != null) 'tags': tags,
     };
 
@@ -120,6 +120,49 @@ void main() {
     await tester.pumpWidget(editor([EditorDiagnostic.fromJson(_json(from: 13, to: 31))]));
     await tester.pump();
     expect(squiggles(), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox());
+    ctrl.dispose();
+  });
+  testWidgets('hover: no tooltip for an unused symbol; a real warning / error still gets one', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(900, 400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final ctrl = CodeEditorController(initialText: 'private long targetExistingRows = -1L;\nint other = 1;');
+    Widget editor(List<EditorDiagnostic> diags) => MaterialApp(
+          home: Scaffold(
+            body: EditorViewWidget(
+              openTabs: const ['A.java'],
+              activeFile: 'A.java',
+              codeContent: '',
+              controller: ctrl,
+              appearance: EditorAppearance(),
+              diagnostics: diags,
+              onSelectTab: (_) {},
+              onCloseTab: (_) {},
+            ),
+          ),
+        );
+    // 编辑器里别的 Tooltip(标签页等)不管,只看诊断提示:消息以 [代码] 开头
+    Finder diagTips(String code) => find.byWidgetPredicate((w) => w is Tooltip && (w.message ?? '').startsWith('[$code]'));
+
+    // 1. 只有「未使用」:变灰,但鼠标放上去不弹提示
+    await tester.pumpWidget(editor([EditorDiagnostic.fromJson(_json(from: 13, to: 31, tags: [1]))]));
+    await tester.pump();
+    expect(diagTips('570425421'), findsNothing, reason: '未使用的变量不显示提示');
+
+    // 2. 对照:同一位置是普通警告,照旧有提示
+    await tester.pumpWidget(editor([EditorDiagnostic.fromJson(_json(from: 13, to: 31))]));
+    await tester.pump();
+    expect(diagTips('570425421'), findsOneWidget);
+
+    // 3. 同一行既有「未使用」又有真正的错误:提示显示错误的消息,不是未使用的那条
+    await tester.pumpWidget(editor([
+      EditorDiagnostic.fromJson(_json(from: 13, to: 31, tags: [1])),
+      EditorDiagnostic.fromJson(_json(from: 0, to: 7, severity: 1, message: 'Syntax error', code: '1234')),
+    ]));
+    await tester.pump();
+    expect(diagTips('1234'), findsOneWidget);
+    expect(diagTips('570425421'), findsNothing);
 
     await tester.pumpWidget(const SizedBox());
     ctrl.dispose();

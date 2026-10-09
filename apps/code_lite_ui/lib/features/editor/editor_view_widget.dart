@@ -1765,8 +1765,11 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
       ),
     );
 
-    if (lineDiags.isNotEmpty) {
-      final diag = lineDiags.first;
+    // 没用到的变量 / 字段 / import 只变灰,不弹提示(IntelliJ 也是这样);
+    // 这一行里如果还有真正的错误 / 警告,提示显示它们的消息。
+    final tipDiags = lineDiags.where((d) => !d.isUnnecessary);
+    if (tipDiags.isNotEmpty) {
+      final diag = tipDiags.first;
       return Tooltip(
         message: '[${diag.code ?? (diag.isError ? "Error" : "Warning")}] ${diag.message}',
         child: lineContent,
