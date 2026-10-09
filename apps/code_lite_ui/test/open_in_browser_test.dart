@@ -42,6 +42,17 @@ void main() {
     }
   });
 
+  test('tab paths: absolute ones (from the file tree) are used as they are, relative ones go under the project root', () {
+    const root = '/Users/dev/Worker/java/bcpoker_admin';
+    expect(absoluteFilePath(root, '/Users/dev/Worker/java/bcpoker_admin/index.html'), '/Users/dev/Worker/java/bcpoker_admin/index.html',
+        reason: '文件树给的是绝对路径:不能再拼一遍项目根');
+    expect(absoluteFilePath(root, 'web/index.html'), '$root/web/index.html');
+    expect(absoluteFilePath('$root/', 'index.html'), '$root/index.html', reason: '不留双斜杠');
+    expect(absoluteFilePath(r'C:\proj', r'D:\other\a.html'), r'D:\other\a.html');
+    expect(absoluteFilePath(r'C:\proj', 'a.html'), r'C:\proj/a.html');
+    expect(absoluteFilePath(r'C:\proj\', 'a.html'), r'C:\proj\a.html');
+  });
+
   group('bar', () {
     Widget host(Widget bar) => MaterialApp(home: Scaffold(body: Align(alignment: Alignment.topRight, child: bar)));
 

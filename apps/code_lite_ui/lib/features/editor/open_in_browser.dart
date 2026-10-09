@@ -11,6 +11,14 @@ bool isHtmlFile(String path) {
   return lower.endsWith('.html') || lower.endsWith('.htm') || lower.endsWith('.xhtml');
 }
 
+/// 标签的路径转成绝对路径。文件树给的标签路径本来就是绝对路径(项目内其它入口给的是相对项目根的),
+/// 绝对的原样返回,相对的接在 [root] 后面。
+String absoluteFilePath(String root, String path) {
+  final absolute = path.startsWith('/') || path.startsWith(r'\\') || RegExp(r'^[A-Za-z]:[\\/]').hasMatch(path);
+  if (absolute) return path;
+  return root.endsWith('/') || root.endsWith(r'\') ? '$root$path' : '$root/$path';
+}
+
 /// 本机浏览器:检测一次(应用装了新浏览器要重启才看得到,和 IntelliJ 差不多),图标转换结果也缓存。
 /// 三个操作可替换,测试里不碰真实的系统。
 class BrowserService {

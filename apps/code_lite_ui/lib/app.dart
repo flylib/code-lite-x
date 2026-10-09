@@ -524,7 +524,7 @@ class _EditorRegion extends StatelessWidget {
           paneActionsBuilder: (path) => isHtmlFile(path) && !sessions.isSpecialTab(path)
               ? OpenInBrowserBar(
                   service: browsers,
-                  file: '${client.rootPath}/$path',
+                  file: absoluteFilePath(client.rootPath, path),
                   // 浏览器读的是磁盘:没落盘的改动先存下来
                   beforeOpen: () => workspace.saveFile(path),
                 )
