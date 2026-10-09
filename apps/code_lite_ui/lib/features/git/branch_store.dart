@@ -9,6 +9,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../core/client/api_client.dart';
 import 'git_log_store.dart' show GitLocalBranch, GitRemoteBranch;
+import 'repo_operation.dart';
 
 class BranchStore extends ChangeNotifier {
   BranchStore(this._client, {this.pollInterval = const Duration(seconds: 2)});
@@ -31,6 +32,9 @@ class BranchStore extends ChangeNotifier {
 
   /// 最近切换过的本地分支,最新的在前,不含当前分支。
   List<String> recent = const [];
+
+  /// 进行中的合并 / 变基 / cherry-pick / revert(含冲突文件);没有时为 null。
+  RepoOperation? operation;
 
   /// 正在执行的操作名(给界面显示进度),空闲时为 null。
   String? busy;
@@ -70,6 +74,7 @@ class BranchStore extends ChangeNotifier {
     local = const [];
     remote = const [];
     recent = const [];
+    operation = null;
     _fingerprint = '';
     _notify();
   }
@@ -80,10 +85,13 @@ class BranchStore extends ChangeNotifier {
     final res = await _client.gitCall('git.branches');
     final recentRes = res['status'] == 'ok' ? await _client.gitCall('git.recent_branches', {'limit': 5}) : const <String, dynamic>{};
     final fingerprint = await _client.gitHeadFingerprint();
+    // 指纹里带「|」说明有合并 / 变基在进行:才去读冲突(要起好几个 git 进程,平时不必)
+    final opRes = res['status'] == 'ok' && fingerprint.contains('|') ? await _client.gitCall('git.operation_state') : const <String, dynamic>{};
     if (token != _token || _disposed) return; // 期间项目换了或又加载了一次
     _loading = false;
     _fingerprint = fingerprint;
     isRepo = res['status'] == 'ok';
+    operation = opRes['status'] == 'ok' ? RepoOperation.fromJson(opRes) : null;
     if (isRepo) {
       current = res['current'] as String?;
       detached = res['detached'] == true;
@@ -103,6 +111,7 @@ class BranchStore extends ChangeNotifier {
       local = const [];
       remote = const [];
       recent = const [];
+      operation = null;
     }
     _notify();
   }

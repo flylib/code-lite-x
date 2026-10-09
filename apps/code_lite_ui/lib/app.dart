@@ -37,6 +37,7 @@ import 'features/settings/settings_dialog.dart';
 import 'features/status_bar/status_bar_widget.dart';
 import 'features/terminal/terminal_store.dart';
 import 'features/title_bar/branch_menu.dart';
+import 'features/title_bar/operation_buttons.dart';
 import 'features/title_bar/project_dialogs.dart';
 import 'features/title_bar/project_menu.dart';
 import 'features/title_bar/title_bar_widget.dart';
@@ -63,7 +64,11 @@ class _CodeLiteAppState extends State<CodeLiteApp> {
   late final TerminalStore _terminals = TerminalStore(_client);
   late final GitLogStore _gitLog = GitLogStore(_client);
   late final BranchStore _branches = BranchStore(_client);
-  late final BranchActions _branchActions = BranchActions(_branches, showCommitWindow: () => _layout.showLeftTool(LeftTool.commit));
+  late final BranchActions _branchActions = BranchActions(
+    _branches,
+    showCommitWindow: () => _layout.showLeftTool(LeftTool.commit),
+    openFile: (path) => _workspace.openFile(path),
+  );
   late final PullRequestsStore _prs = PullRequestsStore(_client);
   late final SettingsStore _settings = SettingsStore(sessions: _sessions, layout: _layout);
   late final PluginManager _plugins = PluginManager(client: _client);
@@ -275,6 +280,7 @@ class _Workbench extends StatelessWidget {
                     onClone: () => _cloneRepository(context, workspace),
                   ),
                   branchChip: BranchChip(store: branches, actions: branchActions),
+                  operationButtons: OperationButtons(store: branches, actions: branchActions),
                 ),
               ),
 

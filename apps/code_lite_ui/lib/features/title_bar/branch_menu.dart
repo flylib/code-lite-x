@@ -19,10 +19,13 @@ class BranchChip extends StatelessWidget {
     return ListenableBuilder(
       listenable: store,
       builder: (context, _) {
-        if (!store.isRepo || store.label.isEmpty) return const SizedBox.shrink();
+        final op = store.operation;
+        if (!store.isRepo || (store.label.isEmpty && op == null)) return const SizedBox.shrink();
+        // 合并 / 变基进行中:「⚠ Merging kdev」;变基时 HEAD 是游离的,分支名取操作里的
+        final label = op == null ? store.label : (op.kind == null ? op.verb : '${op.verb} ${op.branch ?? store.label}'.trim());
         return Builder(
           builder: (context) => Tooltip(
-            message: store.busy != null ? '${store.busy}…' : 'Git Branch: ${store.label}',
+            message: store.busy != null ? '${store.busy}…' : (op == null ? 'Git Branch: ${store.label}' : '$label(有冲突要解决时点右边的按钮)'),
             waitDuration: const Duration(milliseconds: 600),
             child: InkWell(
               borderRadius: BorderRadius.circular(6),
@@ -36,12 +39,14 @@ class BranchChip extends StatelessWidget {
                   children: [
                     if (store.busy != null)
                       const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: IntelliJTheme.accentBlue))
+                    else if (op != null)
+                      const Icon(Icons.warning_amber_rounded, size: 17, color: Color(0xFFE5A83A))
                     else
                       Icon(store.detached ? Icons.commit : Icons.fork_right, size: 16, color: IntelliJTheme.textSecondary),
                     const SizedBox(width: 6),
                     ConstrainedBox(
                       constraints: const BoxConstraints(maxWidth: 260),
-                      child: Text(store.label, overflow: TextOverflow.ellipsis, style: const TextStyle(color: IntelliJTheme.textHigh, fontSize: 13)),
+                      child: Text(label, overflow: TextOverflow.ellipsis, style: const TextStyle(color: IntelliJTheme.textHigh, fontSize: 13)),
                     ),
                     const SizedBox(width: 2),
                     const Icon(Icons.keyboard_arrow_down, size: 16, color: IntelliJTheme.textMuted),

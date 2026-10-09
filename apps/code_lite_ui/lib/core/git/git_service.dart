@@ -144,7 +144,14 @@ class GitService {
       } else if (type != FileSystemEntityType.directory) {
         return '';
       }
-      return (await File('$gitDir${Platform.pathSeparator}HEAD').readAsString()).trim();
+      final head = (await File('$gitDir${Platform.pathSeparator}HEAD').readAsString()).trim();
+      // 合并 / 变基 / cherry-pick / revert 进行中也算「变了」:这些不改 HEAD 文件,
+      // 但标题栏要出现(或消失)冲突按钮。终端里 git merge 出了冲突也能发现。
+      final ops = [
+        for (final n in const ['MERGE_HEAD', 'rebase-merge', 'rebase-apply', 'CHERRY_PICK_HEAD', 'REVERT_HEAD'])
+          if (await FileSystemEntity.type('$gitDir${Platform.pathSeparator}$n') != FileSystemEntityType.notFound) n,
+      ];
+      return ops.isEmpty ? head : '$head|${ops.join(',')}';
     } catch (_) {
       return '';
     }
@@ -302,6 +309,17 @@ class GitService {
         return {};
       case 'git.recent_branches':
         return {'branches': await _recentBranches(p.optInt('limit') ?? 5)};
+      case 'git.operation_state':
+        return _operationState();
+      case 'git.accept_side':
+        await _acceptSide(p.str('path'), p.str('side'));
+        return {};
+      case 'git.abort_operation':
+        await _abortOperation();
+        return {};
+      case 'git.continue_operation':
+        await _continueOperation();
+        return {};
       default:
         throw GitException('未知的 git 方法: $method');
     }
@@ -703,7 +721,19 @@ class GitService {
   Future<void> _merge(String name) async {
     await _ensureIdle();
     final full = await _resolveCommit(name);
-    await _run(['merge', '--no-edit', full], env: _noPrompt);
+    // 按哈希合并,提交信息里就只剩哈希(`Merge commit '33e80ce…'`);按 git 平时的格式写成
+    // `Merge branch 'feat' into kdev`,历史里读得懂,冲突窗口也能显示被合并的分支名。
+    var kind = 'commit';
+    for (final (ref, label) in const [('refs/heads/', 'branch'), ('refs/remotes/', 'remote-tracking branch'), ('refs/tags/', 'tag')]) {
+      if ((await _raw(['rev-parse', '--verify', '--quiet', '$ref$name'])).success) {
+        kind = label;
+        break;
+      }
+    }
+    final current = await _currentBranchName();
+    final into = current == null || current == 'main' || current == 'master' ? '' : ' into $current';
+    final message = kind == 'commit' ? null : "Merge $kind '$name'$into";
+    await _run(['merge', '--no-edit', if (message != null) ...['-m', message], full], env: _noPrompt);
   }
 
   /// 把当前分支变基到 [name] 上。有冲突时停在变基中,需要手动解决。
@@ -1189,6 +1219,104 @@ class GitService {
 
   Future<bool> _rebaseInProgress() async =>
       await _gitPathExists('rebase-merge') || await _gitPathExists('rebase-apply');
+
+  /// 进行中的操作:`merge` / `rebase` / `cherry-pick` / `revert`,没有则 null。
+  /// 变基里 git 也会留下 CHERRY_PICK_HEAD,所以先看变基。
+  Future<String?> _operationKind() async {
+    if (await _rebaseInProgress()) return 'rebase';
+    if (await _gitPathExists('MERGE_HEAD')) return 'merge';
+    if (await _gitPathExists('CHERRY_PICK_HEAD')) return 'cherry-pick';
+    if (await _gitPathExists('REVERT_HEAD')) return 'revert';
+    return null;
+  }
+
+  /// 读 `.git/<name>` 的文本;不存在返回 null。
+  Future<String?> _readGitFile(String name) async {
+    final out = await _raw(['rev-parse', '--git-path', name]);
+    if (!out.success) return null;
+    final p = out.stdout.trim();
+    final file = File(File(p).isAbsolute ? p : '$root${Platform.pathSeparator}$p');
+    try {
+      return await file.exists() ? (await file.readAsString()).trim() : null;
+    } on FileSystemException {
+      return null;
+    }
+  }
+
+  /// 进行中的操作和冲突文件,标题栏的「合并中」按钮据此显示:
+  /// `{operation, branch, incoming, onto, conflicts: [{path, yours, theirs}]}`。
+  /// 没有进行中的操作时 operation 为 null(冲突也可能来自 stash apply 之类,照样列出)。
+  Future<Map<String, dynamic>> _operationState() async {
+    final kind = await _operationKind();
+    final status = await _raw(['status', '--porcelain=v1', '-z', '--untracked-files=no']);
+    final conflicts = status.success ? parseConflictsZ(status.stdout, rebase: kind == 'rebase') : <Map<String, dynamic>>[];
+    String? branch;
+    String? incoming;
+    String? onto;
+    switch (kind) {
+      case 'merge':
+        branch = await _currentBranchName();
+        incoming = parseMergeIncoming(await _readGitFile('MERGE_MSG') ?? '');
+        // 按哈希合并的(`Merge commit '33e80ce'`)或认不出来:反查它属于哪个分支
+        if (incoming == null || RegExp(r'^[0-9a-f]{7,40}$').hasMatch(incoming)) incoming = await _describeRef('MERGE_HEAD');
+      case 'rebase':
+        // 变基时 HEAD 是游离的;被变基的分支名在 head-name 里
+        final name = await _readGitFile('rebase-merge/head-name') ?? await _readGitFile('rebase-apply/head-name');
+        branch = name?.replaceFirst('refs/heads/', '');
+        final ontoHash = await _readGitFile('rebase-merge/onto') ?? await _readGitFile('rebase-apply/onto');
+        onto = ontoHash == null ? null : await _describeRef(ontoHash);
+      case 'cherry-pick' || 'revert':
+        branch = await _currentBranchName();
+        incoming = await _describeRef(kind == 'revert' ? 'REVERT_HEAD' : 'CHERRY_PICK_HEAD');
+    }
+    return {'operation': kind, 'branch': branch, 'incoming': incoming, 'onto': onto, 'conflicts': conflicts};
+  }
+
+  /// [rev] 的可读名字:分支 / 标签名,没有就用短哈希。
+  Future<String?> _describeRef(String rev) async {
+    final named = await _raw(['name-rev', '--name-only', '--no-undefined', '--refs=refs/heads/*', '--refs=refs/remotes/*', '--refs=refs/tags/*', rev]);
+    final name = named.success ? named.stdout.trim() : '';
+    if (name.isNotEmpty && !name.contains('~') && !name.contains('^')) return name.replaceFirst(RegExp(r'^remotes/'), '');
+    final short = await _raw(['rev-parse', '--short', rev]);
+    return short.success ? nonEmpty(short.stdout.trim()) : null;
+  }
+
+  /// 解决一个冲突文件:整个采用「Yours」(自己的)或「Theirs」(对方的)那一侧,并标记为已解决(git add)。
+  /// 那一侧把文件删了(或根本没有)时,采用它就是删除这个文件。
+  Future<void> _acceptSide(String path, String side) async {
+    if (side != 'yours' && side != 'theirs') throw GitException('无效的选择: $side');
+    if (path.trim().isEmpty || path.startsWith('-')) throw GitException('无效的路径: $path');
+    final state = await _operationState();
+    final entry = (state['conflicts'] as List).cast<Map<String, dynamic>>().where((c) => c['path'] == path).firstOrNull;
+    if (entry == null) throw GitException('$path 没有冲突');
+    final label = entry[side] as String;
+    if (label == 'Deleted' || label == '—') {
+      await _run(['rm', '--quiet', '--', path]);
+      return;
+    }
+    // git 的 --ours 是 HEAD 这一侧;变基时 HEAD 是对方的分支,「Yours」对应 --theirs
+    final ours = (side == 'yours') != (state['operation'] == 'rebase');
+    await _run(['checkout', ours ? '--ours' : '--theirs', '--', path]);
+    await _run(['add', '--', path]);
+  }
+
+  /// 放弃进行中的合并 / 变基 / cherry-pick / revert,回到操作之前的状态。
+  Future<void> _abortOperation() async {
+    final kind = await _operationKind();
+    if (kind == null) throw GitException('没有进行中的合并 / 变基');
+    await _run([kind, '--abort']);
+  }
+
+  /// 冲突都解决后完成这个操作:合并 → 提交合并结果;变基 / cherry-pick / revert → continue。
+  Future<void> _continueOperation() async {
+    final state = await _operationState();
+    final kind = state['operation'] as String?;
+    if (kind == null) throw GitException('没有进行中的合并 / 变基');
+    final left = (state['conflicts'] as List).length;
+    if (left > 0) throw GitException('还有 $left 个文件有冲突');
+    const env = {'GIT_EDITOR': 'true', 'GIT_TERMINAL_PROMPT': '0', 'GIT_MERGE_AUTOEDIT': 'no'};
+    await _run(kind == 'merge' ? ['commit', '--no-edit'] : [kind, '--continue'], env: env);
+  }
 
   /// 写操作失败时会执行 `--abort`;若用户自己有进行中的操作,先拒绝,免得误中止别人的现场。
   Future<void> _ensureIdle() async {

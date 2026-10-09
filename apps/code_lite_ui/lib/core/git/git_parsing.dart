@@ -335,3 +335,49 @@ List<String> recentBranches(Iterable<String> reflogSubjects, Set<String> existin
   }
   return out.take(limit).toList();
 }
+
+// ---------------------------------------------------------------------------
+// 合并 / 变基冲突
+// ---------------------------------------------------------------------------
+
+/// `git status --porcelain=v1` 里表示「未合并」的两位状态码 → (我方, 对方) 对这个文件做了什么。
+/// 我方 = 当前 HEAD 那一侧,对方 = 正在合进来的那一侧;'—' 表示那一侧没有这个文件。
+const Map<String, (String, String)> unmergedSides = {
+  'UU': ('Modified', 'Modified'),
+  'AA': ('Added', 'Added'),
+  'DD': ('Deleted', 'Deleted'),
+  'AU': ('Added', '—'),
+  'UA': ('—', 'Added'),
+  'DU': ('Deleted', 'Modified'),
+  'UD': ('Modified', 'Deleted'),
+};
+
+/// 解析 `git status --porcelain=v1 -z` 里的冲突文件。每项 `{path, yours, theirs}`。
+///
+/// [rebase] 为真时左右互换:变基是把你的提交一个个重放到对方的分支上,git 的「ours」是对方的分支,
+/// 「theirs」才是你的提交 —— 对用户来说「Yours」仍然应该是自己的改动(IntelliJ 也是这样)。
+List<Map<String, dynamic>> parseConflictsZ(String raw, {bool rebase = false}) {
+  final parts = raw.split('\u0000');
+  final out = <Map<String, dynamic>>[];
+  for (var i = 0; i < parts.length; i++) {
+    final e = parts[i];
+    if (e.length < 4) continue;
+    final code = e.substring(0, 2);
+    // 重命名 / 复制后面跟着一项原路径
+    if ('RC'.contains(code[0]) || 'RC'.contains(code[1])) i++;
+    final sides = unmergedSides[code];
+    if (sides == null) continue;
+    out.add({
+      'path': e.substring(3),
+      'yours': rebase ? sides.$2 : sides.$1,
+      'theirs': rebase ? sides.$1 : sides.$2,
+    });
+  }
+  return out;
+}
+
+/// 从 MERGE_MSG 的第一行取出被合并的分支名:`Merge branch 'feat/x' into kdev` → feat/x。认不出来返回 null。
+String? parseMergeIncoming(String mergeMsg) {
+  final first = mergeMsg.split('\n').first;
+  return RegExp(r"^Merge (?:remote-tracking branch|branch|tag|commit) '([^']+)'").firstMatch(first)?.group(1);
+}

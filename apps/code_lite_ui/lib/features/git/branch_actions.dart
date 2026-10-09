@@ -5,17 +5,22 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/intellij_theme.dart';
 import 'branch_store.dart';
+import 'conflicts_dialog.dart';
+import 'repo_operation.dart';
 
 const TextStyle _text = TextStyle(color: IntelliJTheme.textPrimary, fontSize: 12);
 const TextStyle _muted = TextStyle(color: IntelliJTheme.textMuted, fontSize: 12);
 
 class BranchActions {
-  BranchActions(this.store, {required this.showCommitWindow});
+  BranchActions(this.store, {required this.showCommitWindow, this.openFile});
 
   final BranchStore store;
 
   /// Commit…:打开左侧的 Commit 工具窗。
   final VoidCallback showCommitWindow;
+
+  /// 冲突窗口里「Open File」:在编辑器里打开这个文件(路径相对项目根)。
+  final void Function(String path)? openFile;
 
   void _toast(BuildContext context, String message, {bool error = false}) {
     if (!context.mounted) return;
@@ -113,6 +118,70 @@ class BranchActions {
     await _run(context, 'Delete', 'git.delete_branch', {'name': name, 'force': result},
         success: '已删除分支 $name', worktree: false);
   }
+
+  /// 标题栏的冲突按钮:列出有冲突的文件,可以整个采用一侧、打开文件,或者(没有冲突了)完成合并。
+  Future<void> showConflicts(BuildContext context) async {
+    await showDialog<void>(
+      context: context,
+      builder: (_) => ConflictsDialog(
+        store: store,
+        accept: acceptSide,
+        openFile: openConflictFile,
+        finish: continueOperation,
+        abort: abortOperation,
+      ),
+    );
+  }
+
+  /// 采用 [files] 里每个文件的 [side]('yours' / 'theirs')。有一个失败就停下并提示。
+  Future<void> acceptSide(BuildContext context, List<ConflictFile> files, String side) async {
+    final label = side == 'yours' ? 'Accept Yours' : 'Accept Theirs';
+    for (final f in files) {
+      final err = await store.run(label, 'git.accept_side', {'path': f.path, 'side': side});
+      if (err != null) {
+        if (context.mounted) _toast(context, '$label 失败(${f.path}): $err', error: true);
+        return;
+      }
+    }
+  }
+
+  /// 在编辑器里打开冲突文件。冲突路径相对仓库根,项目可能是仓库的子目录,要换算成相对项目的路径。
+  Future<void> openConflictFile(String repoPath) async {
+    final open = openFile;
+    if (open == null) return;
+    final info = await store.call('git.repo_info');
+    final prefix = info['status'] == 'ok' ? info['prefix'] as String? ?? '' : '';
+    open(prefix.isNotEmpty && repoPath.startsWith(prefix) ? repoPath.substring(prefix.length) : repoPath);
+  }
+
+  /// 放弃进行中的合并 / 变基(标题栏的红色 ×)。会丢掉已经做的解决,所以先问一句。
+  Future<bool> abortOperation(BuildContext context) async {
+    final op = store.operation;
+    if (op == null || !op.canAbort) return false;
+    final ok = await _confirm(
+      context,
+      'Abort ${op.noun}',
+      '放弃这次${_zh(op.kind)}?\n\n会执行 git ${op.kind} --abort:已经解决的冲突都会丢掉,工作区回到操作之前的状态。',
+      action: 'Abort ${op.noun}',
+    );
+    if (!ok || !context.mounted) return false;
+    return _run(context, 'Abort ${op.noun}', 'git.abort_operation', const {}, success: '已放弃${_zh(op.kind)}');
+  }
+
+  /// 冲突都解决后完成:合并 → 提交合并结果,变基 → 继续。
+  Future<bool> continueOperation(BuildContext context) async {
+    final op = store.operation;
+    if (op == null || !op.canAbort) return false;
+    return _run(context, 'Continue ${op.noun}', 'git.continue_operation', const {}, success: '${_zh(op.kind)}已完成');
+  }
+
+  static String _zh(String? kind) => switch (kind) {
+        'merge' => '合并',
+        'rebase' => '变基',
+        'cherry-pick' => 'cherry-pick',
+        'revert' => 'revert',
+        _ => '操作',
+      };
 
   Future<bool> _confirm(BuildContext context, String title, String message, {required String action}) async {
     final ok = await showDialog<bool>(

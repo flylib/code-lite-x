@@ -11,6 +11,9 @@ class TitleBarWidget extends StatelessWidget {
   final Widget? projectChip;
   final Widget? branchChip;
 
+  /// 分支名右边的按钮:合并 / 变基有冲突时的「查看冲突」和「放弃」。
+  final Widget? operationButtons;
+
   const TitleBarWidget({
     super.key,
     required this.activeFile,
@@ -19,6 +22,7 @@ class TitleBarWidget extends StatelessWidget {
     this.onSearch,
     this.projectChip,
     this.branchChip,
+    this.operationButtons,
   });
 
   @override
@@ -43,6 +47,7 @@ class TitleBarWidget extends StatelessWidget {
                   const SizedBox(width: 12),
                   if (projectChip != null) projectChip!,
                   if (branchChip != null) ...[const SizedBox(width: 4), branchChip!],
+                  if (operationButtons != null) operationButtons!,
                   const SizedBox(width: 12),
                   _buildBreadcrumb(),
                 ],
