@@ -297,4 +297,81 @@ void main() {
       expect((await stateOf(s))['operation'], isNull);
     });
   });
+
+  group('three-way merge', () {
+    test('merge_versions gives base / yours / theirs; resolve_with writes the result and marks it resolved', () async {
+      final d = conflictingRepo();
+      final s = GitService(d.path);
+      await s.call('git.merge', {'name': 'feat'});
+      final v = await s.call('git.merge_versions', {'path': 'a.txt'});
+      expect(v['status'], 'ok');
+      expect(v['base'], 'base\n');
+      expect(v['yours'], 'main change\n');
+      expect(v['theirs'], 'feat change\n');
+
+      expect((await s.call('git.resolve_with', {'path': 'a.txt', 'content': 'main change\nfeat change\n'}))['status'], 'ok');
+      expect(read(d, 'a.txt'), 'main change\nfeat change\n');
+      expect(pathsOf(await stateOf(s)), isEmpty);
+      expect((await s.call('git.continue_operation'))['status'], 'ok');
+      expect(git(d, ['show', 'HEAD:a.txt']), 'main change\nfeat change');
+    });
+
+    test('rebase: yours is your own commit, theirs is upstream', () async {
+      final d = conflictingRepo();
+      git(d, ['switch', '-q', 'feat']);
+      final s = GitService(d.path);
+      await s.call('git.rebase_onto', {'name': 'main'});
+      final v = await s.call('git.merge_versions', {'path': 'a.txt'});
+      expect(v['yours'], 'feat change\n');
+      expect(v['theirs'], 'main change\n');
+    });
+
+    test('a side without the file gives null; non-conflicted paths are refused', () async {
+      final d = initRepo();
+      write(d, 'f.txt', 'x\n');
+      commit(d, 'base');
+      git(d, ['switch', '-q', '-c', 'feat']);
+      write(d, 'f.txt', 'feat\n');
+      commit(d, 'feat');
+      git(d, ['switch', '-q', 'main']);
+      File('${d.path}/f.txt').deleteSync();
+      write(d, 'other.txt', 'o\n');
+      commit(d, 'main');
+      final s = GitService(d.path);
+      await s.call('git.merge', {'name': 'feat'});
+      final v = await s.call('git.merge_versions', {'path': 'f.txt'});
+      expect(v['yours'], isNull);
+      expect(v['theirs'], 'feat\n');
+      expect((await s.call('git.merge_versions', {'path': 'other.txt'}))['error'], contains('没有冲突'));
+      expect((await s.call('git.resolve_with', {'path': 'other.txt', 'content': 'x'}))['status'], 'error');
+      expect(read(d, 'other.txt'), 'o\n');
+    });
+
+    test('project opened at a subdirectory of the repo: paths are repo-relative and still work; glob characters are literal', () async {
+      final d = initRepo();
+      write(d, 'svc/src/A.java', 'base\n');
+      write(d, 'svc/[x].txt', 'base\n');
+      write(d, 'svc/x.txt', 'untouched\n');
+      commit(d, 'base');
+      git(d, ['switch', '-q', '-c', 'feat']);
+      write(d, 'svc/src/A.java', 'feat\n');
+      write(d, 'svc/[x].txt', 'feat\n');
+      commit(d, 'feat');
+      git(d, ['switch', '-q', 'main']);
+      write(d, 'svc/src/A.java', 'main\n');
+      write(d, 'svc/[x].txt', 'main\n');
+      commit(d, 'main');
+
+      final s = GitService('${d.path}/svc');
+      await s.call('git.merge', {'name': 'feat'});
+      expect(pathsOf(await stateOf(s))..sort(), ['svc/[x].txt', 'svc/src/A.java']);
+      expect((await s.call('git.merge_versions', {'path': 'svc/src/A.java'}))['theirs'], 'feat\n');
+      expect((await s.call('git.accept_side', {'path': 'svc/src/A.java', 'side': 'theirs'}))['status'], 'ok');
+      expect(read(d, 'svc/src/A.java'), 'feat\n');
+      expect((await s.call('git.resolve_with', {'path': 'svc/[x].txt', 'content': 'merged\n'}))['status'], 'ok');
+      expect(read(d, 'svc/[x].txt'), 'merged\n');
+      expect(read(d, 'svc/x.txt'), 'untouched\n', reason: '[x] 没被当成通配符去匹配 x.txt');
+      expect(pathsOf(await stateOf(s)), isEmpty);
+    });
+  });
 }

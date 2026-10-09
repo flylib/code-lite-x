@@ -320,6 +320,11 @@ class GitService {
       case 'git.continue_operation':
         await _continueOperation();
         return {};
+      case 'git.merge_versions':
+        return _mergeVersions(p.str('path'));
+      case 'git.resolve_with':
+        await _resolveWith(p.str('path'), p.str('content'));
+        return {};
       default:
         throw GitException('未知的 git 方法: $method');
     }
@@ -1285,19 +1290,53 @@ class GitService {
   /// 那一侧把文件删了(或根本没有)时,采用它就是删除这个文件。
   Future<void> _acceptSide(String path, String side) async {
     if (side != 'yours' && side != 'theirs') throw GitException('无效的选择: $side');
-    if (path.trim().isEmpty || path.startsWith('-')) throw GitException('无效的路径: $path');
-    final state = await _operationState();
-    final entry = (state['conflicts'] as List).cast<Map<String, dynamic>>().where((c) => c['path'] == path).firstOrNull;
-    if (entry == null) throw GitException('$path 没有冲突');
+    final state = await _conflictEntry(path);
+    final entry = (state['conflicts'] as List).cast<Map<String, dynamic>>().firstWhere((c) => c['path'] == path);
     final label = entry[side] as String;
     if (label == 'Deleted' || label == '—') {
-      await _run(['rm', '--quiet', '--', path]);
+      await _run(['rm', '--quiet', '--', _topPath(path)]);
       return;
     }
     // git 的 --ours 是 HEAD 这一侧;变基时 HEAD 是对方的分支,「Yours」对应 --theirs
     final ours = (side == 'yours') != (state['operation'] == 'rebase');
-    await _run(['checkout', ours ? '--ours' : '--theirs', '--', path]);
-    await _run(['add', '--', path]);
+    await _run(['checkout', ours ? '--ours' : '--theirs', '--', _topPath(path)]);
+    await _run(['add', '--', _topPath(path)]);
+  }
+
+  /// 冲突路径是相对仓库根的,而这里的工作目录可能是仓库的子目录(项目只打开了一部分):
+  /// 用 `:(top,literal)` 让 git 按仓库根解释,并且不把路径里的 `*` `?` 当通配符。
+  static String _topPath(String path) => ':(top,literal)$path';
+
+  Future<Map<String, dynamic>> _conflictEntry(String path) async {
+    if (path.trim().isEmpty || path.startsWith('-')) throw GitException('无效的路径: $path');
+    final state = await _operationState();
+    final entry = (state['conflicts'] as List).cast<Map<String, dynamic>>().where((c) => c['path'] == path).firstOrNull;
+    if (entry == null) throw GitException('$path 没有冲突');
+    return state;
+  }
+
+  /// 三方合并用的三个版本:`{base, yours, theirs}`,某一侧没有这个文件时为 null。
+  /// 取自索引里的冲突阶段(1 = 共同祖先,2 = HEAD,3 = 合进来的);变基时 2、3 对调,Yours 永远是自己的提交。
+  Future<Map<String, dynamic>> _mergeVersions(String path) async {
+    final state = await _conflictEntry(path);
+    Future<String?> stage(int n) async {
+      final out = await _raw(['show', ':$n:$path']);
+      return out.success ? out.stdout : null;
+    }
+
+    final rebase = state['operation'] == 'rebase';
+    final head = await stage(2), incoming = await stage(3);
+    return {'base': await stage(1), 'yours': rebase ? incoming : head, 'theirs': rebase ? head : incoming};
+  }
+
+  /// 三方合并窗口的 Apply:把合并结果写进工作区的文件,并标记为已解决(git add)。
+  Future<void> _resolveWith(String path, String content) async {
+    await _conflictEntry(path);
+    final top = (await _run(['rev-parse', '--show-toplevel'])).trim();
+    final file = File('$top/$path');
+    await file.parent.create(recursive: true);
+    await file.writeAsString(content);
+    await _run(['add', '--', _topPath(path)]);
   }
 
   /// 放弃进行中的合并 / 变基 / cherry-pick / revert,回到操作之前的状态。

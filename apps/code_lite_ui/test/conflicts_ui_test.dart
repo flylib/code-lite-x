@@ -21,6 +21,7 @@ class FakeRepo extends ApiClient {
   String? onto;
   List<Map<String, dynamic>> conflicts = [];
   String repoPrefix = '';
+  Map<String, dynamic> versions = {'base': 'a\nm\nb\n', 'yours': 'A\nm\nb\n', 'theirs': 'a\nm\nB\n'};
   final Map<String, Map<String, dynamic>> failures = {};
   final List<(String, Map<String, dynamic>)> calls = [];
 
@@ -65,6 +66,11 @@ class FakeRepo extends ApiClient {
         return {'status': 'ok'};
       case 'git.repo_info':
         return {'status': 'ok', 'prefix': repoPrefix};
+      case 'git.merge_versions':
+        return {'status': 'ok', ...versions};
+      case 'git.resolve_with':
+        conflicts = [for (final c in conflicts) if (c['path'] != params['path']) c];
+        return {'status': 'ok'};
     }
     return {'status': 'ok'};
   }
@@ -101,13 +107,11 @@ void main() {
     late FakeRepo repo;
     late BranchStore store;
     late BranchActions actions;
-    late List<String> opened;
 
     setUp(() {
       repo = FakeRepo();
       store = BranchStore(repo);
-      opened = [];
-      actions = BranchActions(store, showCommitWindow: () {}, openFile: opened.add);
+      actions = BranchActions(store, showCommitWindow: () {});
     });
     tearDown(() => store.dispose());
 
@@ -218,7 +222,7 @@ void main() {
       expect(find.text('Added'), findsNWidgets(2));
       expect(find.text('Accept Yours'), findsOneWidget);
       expect(find.text('Accept Theirs'), findsOneWidget);
-      expect(find.text('Merge'), findsOneWidget);
+      expect(find.text('Merge...'), findsOneWidget);
       // 两个文件、都没选:按钮不可用
       expect(tester.widget<OutlinedButton>(find.widgetWithText(OutlinedButton, 'Accept Yours')).onPressed, isNull);
 
@@ -279,24 +283,76 @@ void main() {
       await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
       await tester.pump();
       expect(tester.widget<OutlinedButton>(find.widgetWithText(OutlinedButton, 'Accept Yours')).onPressed, isNotNull);
-      expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Merge')).onPressed, isNull, reason: '选了两个:不能同时打开');
+      expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Merge...')).onPressed, isNull, reason: '选了两个:不能同时合并');
       await tester.tap(find.text('Accept Yours'));
       await tester.pumpAndSettle();
       expect([for (final c in repo.callsTo('git.accept_side')) c['path']], ['a.txt', 'c.txt']);
       expect(find.byKey(const ValueKey('conflict-b.txt')), findsOneWidget);
     });
 
-    testWidgets('Merge opens the file in the editor (path made relative to the project) and closes the window', (tester) async {
-      repo
-        ..repoPrefix = 'service/'
-        ..startMerge([file('service/src/A.java')]);
+    testWidgets('Merge... opens the three-way merge window; Apply saves the result and the file leaves the list', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1400, 900));
+      repo.startMerge([file('svc/A.java'), file('b.txt')]);
       await show(tester);
+      await tester.binding.setSurfaceSize(const Size(1400, 900));
       await tester.tap(find.byKey(const ValueKey('operation-conflicts')));
       await tester.pumpAndSettle();
-      await tester.tap(find.widgetWithText(FilledButton, 'Merge'));
+      await tester.tap(find.byKey(const ValueKey('conflict-svc/A.java')));
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.tap(find.text('Merge...'));
       await tester.pumpAndSettle();
-      expect(opened, ['src/A.java']);
-      expect(find.text('Conflicts'), findsNothing);
+      expect(repo.callsTo('git.merge_versions'), [
+        {'path': 'svc/A.java'},
+      ]);
+      expect(find.text('Merge Revisions for svc/A.java'), findsOneWidget);
+      expect(find.text('Changes from kdev'), findsOneWidget);
+      expect(find.text('Changes from feat/retention'), findsOneWidget);
+      expect(find.text('2 changes. 0 conflicts.'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('采用两侧所有不冲突的改动'));
+      await tester.pump();
+      expect(find.text('所有改动都处理完了'), findsOneWidget);
+      await tester.tap(find.text('Apply'));
+      await tester.pumpAndSettle();
+      expect(repo.callsTo('git.resolve_with'), [
+        {'path': 'svc/A.java', 'content': 'A\nm\nB\n'},
+      ]);
+      expect(find.text('Merge Revisions for svc/A.java'), findsNothing);
+      expect(find.text('Conflicts'), findsOneWidget, reason: '回到冲突窗口');
+      expect(find.byKey(const ValueKey('conflict-svc/A.java')), findsNothing);
+      expect(find.byKey(const ValueKey('conflict-b.txt')), findsOneWidget);
+    });
+
+    testWidgets('double-clicking a row opens the merge window; Accept Right there accepts theirs; Cancel does nothing', (tester) async {
+      repo.startMerge([file('a.txt'), file('gone.txt', 'Deleted', 'Modified')]);
+      await show(tester);
+      await tester.binding.setSurfaceSize(const Size(1400, 900));
+      await tester.tap(find.byKey(const ValueKey('operation-conflicts')));
+      await tester.pumpAndSettle();
+
+      // 一侧删除了:没法逐块合并
+      await tester.tap(find.byKey(const ValueKey('conflict-gone.txt')));
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Merge...')).onPressed, isNull);
+
+      await tester.tap(find.byKey(const ValueKey('conflict-a.txt')));
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.tap(find.byKey(const ValueKey('conflict-a.txt')));
+      await tester.pumpAndSettle();
+      expect(find.text('Merge Revisions for a.txt'), findsOneWidget);
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(find.text('Merge Revisions for a.txt'), findsNothing);
+      expect(repo.callsTo('git.resolve_with'), isEmpty);
+      expect(repo.callsTo('git.accept_side'), isEmpty);
+
+      await tester.tap(find.text('Merge...'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Accept Right'));
+      await tester.pumpAndSettle();
+      expect(repo.callsTo('git.accept_side'), [
+        {'path': 'a.txt', 'side': 'theirs'},
+      ]);
     });
 
     testWidgets('a failure is reported and the file stays listed; the window has its own Abort; rebase columns', (tester) async {

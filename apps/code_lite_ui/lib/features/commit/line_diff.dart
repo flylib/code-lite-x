@@ -87,6 +87,54 @@ List<int> changeBlockStarts(List<DiffRow> rows) => [
   return (start: s, oldEnd: eo, newEnd: en);
 }
 
+/// 一段改动:[a] 里 [aStart, aEnd) 这几行被换成了 [b] 里 [bStart, bEnd) 这几行。
+/// 纯插入时 aStart == aEnd,纯删除时 bStart == bEnd。
+class LineHunk {
+  const LineHunk(this.aStart, this.aEnd, this.bStart, this.bEnd);
+
+  final int aStart;
+  final int aEnd;
+  final int bStart;
+  final int bEnd;
+
+  /// 这段改动让后面的行号偏移了多少(b 比 a 多几行)。
+  int get delta => (bEnd - bStart) - (aEnd - aStart);
+
+  @override
+  String toString() => 'LineHunk($aStart..$aEnd → $bStart..$bEnd)';
+}
+
+/// [a] 改成 [b] 的各段改动,按位置排序;相邻两段之间至少隔着一行没变的。三方合并用。
+List<LineHunk> lineHunks(List<String> a, List<String> b) {
+  var start = 0;
+  while (start < a.length && start < b.length && a[start] == b[start]) {
+    start++;
+  }
+  var endA = a.length, endB = b.length;
+  while (endA > start && endB > start && a[endA - 1] == b[endB - 1]) {
+    endA--;
+    endB--;
+  }
+  final ops = _myers(a.sublist(start, endA), b.sublist(start, endB));
+  final hunks = <LineHunk>[];
+  var i = start, j = start, k = 0;
+  while (k < ops.length) {
+    if (ops[k] == 0) {
+      i++;
+      j++;
+      k++;
+      continue;
+    }
+    final si = i, sj = j;
+    while (k < ops.length && ops[k] != 0) {
+      ops[k] < 0 ? i++ : j++;
+      k++;
+    }
+    hunks.add(LineHunk(si, i, sj, j));
+  }
+  return hunks;
+}
+
 /// Myers O(ND) 差分。返回编辑脚本:0 保留、-1 删除 a 的一行、+1 插入 b 的一行。
 List<int> _myers(List<String> a, List<String> b) {
   final n = a.length, m = b.length;

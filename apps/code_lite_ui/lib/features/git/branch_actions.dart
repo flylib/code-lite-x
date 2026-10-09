@@ -6,21 +6,19 @@ import 'package:flutter/material.dart';
 import '../../core/theme/intellij_theme.dart';
 import 'branch_store.dart';
 import 'conflicts_dialog.dart';
+import 'merge_window.dart';
 import 'repo_operation.dart';
 
 const TextStyle _text = TextStyle(color: IntelliJTheme.textPrimary, fontSize: 12);
 const TextStyle _muted = TextStyle(color: IntelliJTheme.textMuted, fontSize: 12);
 
 class BranchActions {
-  BranchActions(this.store, {required this.showCommitWindow, this.openFile});
+  BranchActions(this.store, {required this.showCommitWindow});
 
   final BranchStore store;
 
   /// Commit…:打开左侧的 Commit 工具窗。
   final VoidCallback showCommitWindow;
-
-  /// 冲突窗口里「Merge」:在编辑器里打开这个文件(路径相对项目根)。
-  final void Function(String path)? openFile;
 
   void _toast(BuildContext context, String message, {bool error = false}) {
     if (!context.mounted) return;
@@ -126,7 +124,7 @@ class BranchActions {
       builder: (_) => ConflictsDialog(
         store: store,
         accept: acceptSide,
-        openFile: openConflictFile,
+        merge: mergeFile,
         finish: continueOperation,
         abort: abortOperation,
       ),
@@ -145,13 +143,34 @@ class BranchActions {
     }
   }
 
-  /// 在编辑器里打开冲突文件。冲突路径相对仓库根,项目可能是仓库的子目录,要换算成相对项目的路径。
-  Future<void> openConflictFile(String repoPath) async {
-    final open = openFile;
-    if (open == null) return;
-    final info = await store.call('git.repo_info');
-    final prefix = info['status'] == 'ok' ? info['prefix'] as String? ?? '' : '';
-    open(prefix.isNotEmpty && repoPath.startsWith(prefix) ? repoPath.substring(prefix.length) : repoPath);
+  /// 冲突窗口的 Merge:打开三方合并窗口;Apply 写回结果并标记已解决,Accept Left / Right 整个采用一侧。
+  Future<void> mergeFile(BuildContext context, ConflictFile file) async {
+    final v = await store.call('git.merge_versions', {'path': file.path});
+    if (!context.mounted) return;
+    if (v['status'] != 'ok') {
+      _toast(context, '读取 ${file.path} 的各个版本失败: ${v['error']}', error: true);
+      return;
+    }
+    final op = store.operation;
+    final outcome = await showMergeWindow(
+      context,
+      path: file.path,
+      base: v['base'] as String? ?? '',
+      yours: v['yours'] as String? ?? '',
+      theirs: v['theirs'] as String? ?? '',
+      yoursTitle: op?.branch ?? store.current ?? 'Yours',
+      theirsTitle: (op?.kind == 'rebase' ? op?.onto : op?.incoming) ?? 'Theirs',
+    );
+    if (outcome == null || !context.mounted) return;
+    switch (outcome.kind) {
+      case MergeOutcomeKind.apply:
+        final err = await store.run('Merge', 'git.resolve_with', {'path': file.path, 'content': outcome.content ?? ''});
+        if (err != null && context.mounted) _toast(context, '保存 ${file.path} 失败: $err', error: true);
+      case MergeOutcomeKind.acceptLeft:
+        await acceptSide(context, [file], 'yours');
+      case MergeOutcomeKind.acceptRight:
+        await acceptSide(context, [file], 'theirs');
+    }
   }
 
   /// 放弃进行中的合并 / 变基(标题栏的红色 ×)。会丢掉已经做的解决,所以先问一句。

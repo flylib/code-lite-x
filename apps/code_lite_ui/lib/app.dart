@@ -64,11 +64,7 @@ class _CodeLiteAppState extends State<CodeLiteApp> {
   late final TerminalStore _terminals = TerminalStore(_client);
   late final GitLogStore _gitLog = GitLogStore(_client);
   late final BranchStore _branches = BranchStore(_client);
-  late final BranchActions _branchActions = BranchActions(
-    _branches,
-    showCommitWindow: () => _layout.showLeftTool(LeftTool.commit),
-    openFile: (path) => _workspace.openFile(path),
-  );
+  late final BranchActions _branchActions = BranchActions(_branches, showCommitWindow: () => _layout.showLeftTool(LeftTool.commit));
   late final PullRequestsStore _prs = PullRequestsStore(_client);
   late final SettingsStore _settings = SettingsStore(sessions: _sessions, layout: _layout);
   late final PluginManager _plugins = PluginManager(client: _client);

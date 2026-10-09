@@ -17,14 +17,15 @@ class ConflictsDialog extends StatefulWidget {
     super.key,
     required this.store,
     required this.accept,
-    required this.openFile,
+    required this.merge,
     required this.finish,
     required this.abort,
   });
 
   final BranchStore store;
   final Future<void> Function(BuildContext context, List<ConflictFile> files, String side) accept;
-  final Future<void> Function(String path) openFile;
+  /// 打开三方合并窗口。
+  final Future<void> Function(BuildContext context, ConflictFile file) merge;
   final Future<bool> Function(BuildContext context) finish;
   final Future<bool> Function(BuildContext context) abort;
 
@@ -35,6 +36,10 @@ class ConflictsDialog extends StatefulWidget {
 class _ConflictsDialogState extends State<ConflictsDialog> {
   final Set<String> _selected = {};
   bool _working = false;
+
+  // 自己判断双击:InkWell 的 onDoubleTap 会把每次单击都推迟到双击超时之后
+  String? _lastTapPath;
+  DateTime _lastTapAt = DateTime(0);
 
   RepoOperation? get _op => widget.store.operation;
 
@@ -105,16 +110,12 @@ class _ConflictsDialogState extends State<ConflictsDialog> {
                                     const SizedBox(height: 8),
                                     _button('Accept Theirs', files.isEmpty || busy ? null : () => _guarded(() => widget.accept(context, files, 'theirs'))),
                                     const SizedBox(height: 8),
-                                    // 三栏合并工具还没有:Merge 先在编辑器里打开带冲突标记的文件,手动改
+                                    // 一侧把文件删了(或没有)时没什么可逐块合并的,用 Accept 选一侧
                                     _button(
-                                      'Merge',
-                                      files.length != 1 || busy
+                                      'Merge...',
+                                      files.length != 1 || busy || !_mergeable(files.single)
                                           ? null
-                                          : () async {
-                                              final path = files.single.path;
-                                              Navigator.pop(context);
-                                              await widget.openFile(path);
-                                            },
+                                          : () => _guarded(() => widget.merge(context, files.single)),
                                       primary: true,
                                     ),
                                   ],
@@ -149,6 +150,8 @@ class _ConflictsDialogState extends State<ConflictsDialog> {
   }
 
   static String _sideLabel(String side, String? name) => name == null ? side : '$side ($name)';
+
+  static bool _mergeable(ConflictFile f) => const {'Modified', 'Added'}.contains(f.yours) && const {'Modified', 'Added'}.contains(f.theirs);
 
   Widget _button(String label, VoidCallback? onTap, {bool primary = false}) {
     final style = primary
@@ -190,17 +193,21 @@ class _ConflictsDialogState extends State<ConflictsDialog> {
     return InkWell(
       key: ValueKey('conflict-${f.path}'),
       hoverColor: IntelliJTheme.hoverBg,
-      onTap: () => setState(() {
-        // ⌘ / Ctrl 点击多选,普通点击只选这一个
-        final keys = HardwareKeyboard.instance;
-        final multi = keys.isMetaPressed || keys.isControlPressed;
-        if (!multi) _selected.clear();
-        if (multi && selected) {
-          _selected.remove(f.path);
-        } else {
-          _selected.add(f.path);
+      onTap: () {
+        // 双击直接打开合并窗口(IntelliJ 也是)
+        final now = DateTime.now();
+        final isDouble = _lastTapPath == f.path && now.difference(_lastTapAt) < const Duration(milliseconds: 400);
+        _lastTapPath = f.path;
+        _lastTapAt = isDouble ? DateTime(0) : now;
+        if (isDouble && !_working && widget.store.busy == null && _mergeable(f)) {
+          setState(() => _selected
+            ..clear()
+            ..add(f.path));
+          _guarded(() => widget.merge(context, f));
+          return;
         }
-      }),
+        _select(f, selected);
+      },
       child: Container(
         height: 28,
         color: selected ? IntelliJTheme.selectionBg : null,
@@ -221,6 +228,18 @@ class _ConflictsDialogState extends State<ConflictsDialog> {
       ),
     );
   }
+
+  void _select(ConflictFile f, bool selected) => setState(() {
+        // ⌘ / Ctrl 点击多选,普通点击只选这一个
+        final keys = HardwareKeyboard.instance;
+        final multi = keys.isMetaPressed || keys.isControlPressed;
+        if (!multi) _selected.clear();
+        if (multi && selected) {
+          _selected.remove(f.path);
+        } else {
+          _selected.add(f.path);
+        }
+      });
 
   /// 冲突都解决了:提示可以完成了。
   Widget _resolved(RepoOperation op, bool busy) {
