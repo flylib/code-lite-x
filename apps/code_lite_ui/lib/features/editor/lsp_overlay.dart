@@ -4,6 +4,9 @@ import '../../core/theme/intellij_theme.dart';
 /// Diagnostics display models for the editor.
 class EditorDiagnostic {
   final int line;
+
+  /// 范围的结束行;跨行时 [colEnd] 属于这一行,不是 [line]。
+  final int endLine;
   final int colStart;
   final int colEnd;
   final int severity; // 1: Error, 2: Warning, 3: Info, 4: Hint
@@ -11,18 +14,24 @@ class EditorDiagnostic {
   final String? code;
   final String? source;
 
+  /// LSP 的 DiagnosticTag:1 = Unnecessary(没用到的符号 / import),2 = Deprecated。
+  final List<int> tags;
+
   const EditorDiagnostic({
     required this.line,
+    int? endLine,
     required this.colStart,
     required this.colEnd,
     required this.severity,
     required this.message,
     this.code,
     this.source,
-  });
+    this.tags = const [],
+  }) : endLine = endLine ?? line;
 
   factory EditorDiagnostic.fromJson(Map<String, dynamic> json) {
     int line = 0;
+    int? endLine;
     int colStart = 0;
     int colEnd = 0;
     if (json['range'] != null) {
@@ -32,6 +41,7 @@ class EditorDiagnostic {
       line = (start?['line'] as num?)?.toInt() ?? 0;
       colStart = (start?['character'] as num?)?.toInt() ?? 0;
       colEnd = (end?['character'] as num?)?.toInt() ?? (colStart + 5);
+      endLine = (end?['line'] as num?)?.toInt();
     } else {
       line = (json['line_start'] as num?)?.toInt() ?? 0;
       colStart = (json['col_start'] as num?)?.toInt() ?? 0;
@@ -40,17 +50,62 @@ class EditorDiagnostic {
 
     return EditorDiagnostic(
       line: line,
+      endLine: endLine,
       colStart: colStart,
       colEnd: colEnd,
       severity: (json['severity'] as num?)?.toInt() ?? 1,
       message: json['message'] as String? ?? 'Diagnostic error',
       code: json['code']?.toString(),
       source: json['source'] as String?,
+      tags: [for (final t in (json['tags'] as List? ?? const [])) if (t is num) t.toInt()],
     );
   }
 
-  bool get isError => severity == 1;
-  bool get isWarning => severity == 2;
+  /// 「没用到」:IntelliJ 把变量 / 字段 / import 的文字变灰,不画下划线,也不算警告。
+  bool get isUnnecessary => tags.contains(1);
+
+  bool get isError => severity == 1 && !isUnnecessary;
+  bool get isWarning => severity == 2 && !isUnnecessary;
+}
+
+/// 没用到的符号的文字颜色(灰)。
+const Color unusedTextColor = Color(0xFF808385);
+
+/// 把 [diagnostics] 里「没用到」的范围在 [spans](一行的着色片段)里改成灰色。
+/// 只改前景色,保留粗体 / 斜体等其它样式,也不改变文字,所以不影响宽度测量。
+/// [lineText] 是这一行的文字;范围跨到后面的行时,灰到行尾。没有要变灰的就原样返回 [spans]。
+List<TextSpan> fadeUnused(List<TextSpan> spans, String lineText, Iterable<EditorDiagnostic> diagnostics, int lineIndex) {
+  final ranges = <(int, int)>[];
+  for (final d in diagnostics) {
+    if (!d.isUnnecessary || d.line != lineIndex) continue;
+    final end = d.endLine > d.line ? lineText.length : d.colEnd.clamp(0, lineText.length);
+    final start = d.colStart.clamp(0, lineText.length);
+    if (end > start) ranges.add((start, end));
+  }
+  if (ranges.isEmpty) return spans;
+
+  bool faded(int i) => ranges.any((r) => i >= r.$1 && i < r.$2);
+  final out = <TextSpan>[];
+  var pos = 0;
+  for (final span in spans) {
+    final text = span.text ?? '';
+    // 在范围边界处把片段切开,每一段要么全灰要么全不灰
+    final cuts = <int>{
+      for (final r in ranges) ...[r.$1 - pos, r.$2 - pos],
+    }.where((c) => c > 0 && c < text.length).toList()
+      ..sort();
+    var from = 0;
+    for (final cut in [...cuts, text.length]) {
+      if (cut == from && text.isNotEmpty) continue;
+      final piece = text.substring(from, cut);
+      out.add(faded(pos + from)
+          ? TextSpan(text: piece, style: (span.style ?? const TextStyle()).copyWith(color: unusedTextColor))
+          : TextSpan(text: piece, style: span.style));
+      from = cut;
+    }
+    pos += text.length;
+  }
+  return out;
 }
 
 /// Floating Hover Tooltip Card in IntelliJ Darcula styling.

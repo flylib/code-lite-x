@@ -633,7 +633,11 @@ class LspService {
         'window': {'workDoneProgress': false},
         'textDocument': {
           'synchronization': {'dynamicRegistration': false, 'willSave': false, 'didSave': false},
-          'publishDiagnostics': {'relatedInformation': false},
+          // tagSupport:服务端据此才会给「未使用」的符号打 Unnecessary 标记(jdtls、rust-analyzer、gopls 都认)
+          'publishDiagnostics': {
+            'relatedInformation': false,
+            'tagSupport': {'valueSet': [1, 2]},
+          },
           'documentSymbol': {
             'dynamicRegistration': false,
             'hierarchicalDocumentSymbolSupport': true,

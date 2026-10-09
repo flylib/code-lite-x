@@ -1662,9 +1662,10 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
     int guideLevel = 0,
   }) {
     final hl = highlighter;
-    final spans = hl.spansAt(lineIndex);
 
     final lineDiags = diagnostics.where((d) => d.line == lineIndex).toList();
+    // 没用到的变量 / 字段 / import:文字变灰,不画下划线(IntelliJ 的做法)
+    final spans = fadeUnused(hl.spansAt(lineIndex), lineText, lineDiags, lineIndex);
     final hasError = lineDiags.any((d) => d.isError);
     final hasWarning = lineDiags.any((d) => d.isWarning);
 
@@ -1789,7 +1790,7 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
           final height = constraints.maxHeight;
           return Stack(
             children: [
-              ...diagnostics.map((d) {
+              ...diagnostics.where((d) => !d.isUnnecessary).map((d) {
                 final topPos = totalLines > 0 ? (d.line / totalLines) * height : 0.0;
                 return Positioned(
                   top: topPos.clamp(0.0, height - 4),
