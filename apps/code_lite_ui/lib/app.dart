@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -89,11 +91,24 @@ class _CodeLiteAppState extends State<CodeLiteApp> {
     _branches.onChanged = _onRepoChanged;
     _build.addListener(_onBuildToolsChanged);
     // 自动保存:应用失去焦点(切到终端 / 浏览器)时立刻把改动写盘,外部工具看到的就是最新内容。
-    _lifecycle = AppLifecycleListener(onInactive: _sessions.saveAll, onHide: _sessions.saveAll);
+    _lifecycle = AppLifecycleListener(
+      onInactive: _onLeaveForeground,
+      onHide: _onLeaveForeground,
+      onDetach: _workspace.saveSession,
+    );
     _bootstrap();
   }
 
   late final AppLifecycleListener _lifecycle;
+
+  /// 离开前台(切走 / 隐藏 / 退出):文件写盘,同时记下标签、光标和滚动位置,下次打开项目时恢复。
+  void _onLeaveForeground() {
+    _sessions.saveAll();
+    _workspace.saveSession();
+  }
+
+  /// 光标和滚动位置不会通知任何人,定时看一眼(没变就不写盘),这样被强杀 / 崩溃也只丢几秒。
+  Timer? _sessionTimer;
 
   Future<void> _bootstrap() async {
     // 先接入已装插件(着色规则、语言服务器启动方式),再打开上次的项目
@@ -112,10 +127,13 @@ class _CodeLiteAppState extends State<CodeLiteApp> {
     // 只在有项目时关注分支;没有项目(启动时、关闭项目后)不起任何 git 进程和定时器
     _branches.reset();
     _build.reload();
+    _sessionTimer?.cancel();
     if (root != null) {
       _branches.start();
+      _sessionTimer = Timer.periodic(const Duration(seconds: 5), (_) => _workspace.saveSession());
     } else {
       _branches.stop();
+      _sessionTimer = null;
     }
   }
 
@@ -147,6 +165,7 @@ class _CodeLiteAppState extends State<CodeLiteApp> {
 
   @override
   void dispose() {
+    _sessionTimer?.cancel();
     _lifecycle.dispose();
     _workspace.removeListener(_onWorkspaceChanged);
     _branches.dispose();

@@ -6,6 +6,12 @@ Future<String?> createEmptyFile(String root, String relPath) async => 'web é¢„è§
 
 Future<bool> directoryExists(String path) async => false;
 
+Future<bool> fileExists(String path) async => false;
+
+Future<Map<String, dynamic>> loadSessions() async => const {};
+
+Future<void> saveSessions(Map<String, dynamic> sessions) async {}
+
 Future<List<String>> loadRecentProjects() async => const [];
 
 Future<void> saveRecentProjects(List<String> paths) async {}

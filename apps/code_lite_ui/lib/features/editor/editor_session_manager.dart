@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import '../../core/client/api_client.dart';
+import '../../core/state/session_snapshot.dart';
 import '../../core/lsp/lsp.dart';
 import 'code_editor_controller.dart';
 import 'editor_appearance.dart';
@@ -27,12 +28,23 @@ class EditorTabState {
     this.diagnostics = const [],
     this.activeSymbol,
     this.loadError,
+    double initialScroll = 0,
   })  : fileName = filePath.split('/').last,
         controller = CodeEditorController(initialText: initialContent),
-        verticalScroll = ScrollController(),
-        horizontalScroll = ScrollController();
+        verticalScroll = ScrollController(initialScrollOffset: initialScroll),
+        horizontalScroll = ScrollController(),
+        _lastScroll = initialScroll;
 
   bool get isDirty => controller.isDirty;
+
+  double _lastScroll;
+
+  /// 竖向滚动位置。标签没显示时滚动控制器没有挂在视图上、读不到偏移,
+  /// 这时用最后一次读到的(或恢复时指定的)值,免得记成 0。
+  double get scrollOffset {
+    if (verticalScroll.hasClients) _lastScroll = verticalScroll.offset;
+    return _lastScroll;
+  }
 
   void dispose() {
     controller.dispose();
@@ -212,8 +224,23 @@ class EditorSessionManager extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// 现在的标签、光标和滚动位置,下次打开这个项目时用来恢复。
+  SessionSnapshot snapshot() {
+    final tabs = <TabSnapshot>[];
+    for (final path in _tabOrder) {
+      final tab = _tabs[path];
+      // 特殊标签(差异、PR)没有对应的文件;读不出来的文件下次也读不出来
+      if (tab == null || isSpecialTab(path) || tab.loadError != null) continue;
+      final pos = tab.controller.cursorPosition;
+      tabs.add(TabSnapshot(path: path, line: pos.line, col: pos.col, scroll: tab.scrollOffset));
+    }
+    final active = _activePath;
+    return SessionSnapshot(tabs: tabs, active: tabs.any((t) => t.path == active) ? active : null);
+  }
+
   /// Opens a tab or switches to it if already open.
-  Future<EditorTabState> openFile(String path, {String? defaultContent}) async {
+  /// [scroll]:新建标签时的初始竖向滚动位置(恢复上次状态用)。
+  Future<EditorTabState> openFile(String path, {String? defaultContent, double scroll = 0}) async {
     if (autosave && _activePath != path) unawaited(saveAll());
     if (!_tabOrder.contains(path)) {
       _tabOrder.add(path);
@@ -237,6 +264,7 @@ class EditorSessionManager extends ChangeNotifier {
       // 没读到真实内容(二进制 / 无权限 / web 预览)时记下原因:保存会被拒绝,
       // 否则 ⌘S 会用占位文字覆盖掉磁盘上的真文件。
       loadError: loaded ? null : (fileRes['error'] as String? ?? 'unable to open file'),
+      initialScroll: scroll,
     );
     if (loaded) client.lspDidOpen(path, content);
 

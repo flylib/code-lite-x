@@ -49,6 +49,39 @@ Future<String?> createEmptyFile(String root, String relPath) async {
 
 Future<bool> directoryExists(String path) => Directory(path).exists();
 
+Future<bool> fileExists(String path) => File(path).exists();
+
+File? get _sessionsFile {
+  final home = Platform.environment['HOME'];
+  return home == null ? null : File('$home/.codelitex/sessions.json');
+}
+
+/// 各项目上次的打开状态(标签、光标、滚动),`~/.codelitex/sessions.json`。读不出来就当没有。
+Future<Map<String, dynamic>> loadSessions() async {
+  try {
+    final f = _sessionsFile;
+    if (f == null || !await f.exists()) return const {};
+    final decoded = jsonDecode(await f.readAsString());
+    return decoded is Map ? Map<String, dynamic>.from(decoded) : const {};
+  } catch (_) {
+    return const {};
+  }
+}
+
+Future<void> saveSessions(Map<String, dynamic> sessions) async {
+  try {
+    final f = _sessionsFile;
+    if (f == null) return;
+    await f.parent.create(recursive: true);
+    // 先写临时文件再改名:写到一半被杀掉也不会留下半个 JSON
+    final tmp = File('${f.path}.tmp');
+    await tmp.writeAsString(jsonEncode(sessions));
+    await tmp.rename(f.path);
+  } catch (_) {
+    // 记不住上次的状态只是少个便利,不打断用户
+  }
+}
+
 File? get _recentFile {
   final home = Platform.environment['HOME'];
   return home == null ? null : File('$home/.codelitex/recent_projects.json');
