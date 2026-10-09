@@ -21,6 +21,7 @@ import 'features/commit/diff_tab.dart';
 import 'features/editor/code_editor_controller.dart' show EditorPosition;
 import 'features/editor/editor_session_manager.dart';
 import 'features/editor/editor_view_widget.dart';
+import 'features/editor/open_in_browser.dart';
 import 'features/git/branch_actions.dart';
 import 'features/git/branch_store.dart';
 import 'features/git/git_log_store.dart';
@@ -66,6 +67,7 @@ class _CodeLiteAppState extends State<CodeLiteApp> {
   late final PullRequestsStore _prs = PullRequestsStore(_client);
   late final SettingsStore _settings = SettingsStore(sessions: _sessions, layout: _layout);
   late final PluginManager _plugins = PluginManager(client: _client);
+  final BrowserService _browsers = BrowserService();
   late final BuildToolsStore _build = BuildToolsStore(
     plugins: _plugins,
     projectRoot: () => _workspace.rootPath,
@@ -195,7 +197,7 @@ class _CodeLiteAppState extends State<CodeLiteApp> {
           notifier: _workspace,
           child: SessionScope(
             notifier: _sessions,
-            child: _Workbench(client: _client, terminals: _terminals, gitLog: _gitLog, branches: _branches, branchActions: _branchActions, prs: _prs, settings: _settings, plugins: _plugins, buildTools: _build),
+            child: _Workbench(client: _client, terminals: _terminals, gitLog: _gitLog, branches: _branches, branchActions: _branchActions, prs: _prs, settings: _settings, plugins: _plugins, buildTools: _build, browsers: _browsers),
           ),
         ),
       ),
@@ -214,6 +216,7 @@ class _Workbench extends StatelessWidget {
     required this.settings,
     required this.plugins,
     required this.buildTools,
+    required this.browsers,
   });
 
   final ApiClient client;
@@ -225,6 +228,7 @@ class _Workbench extends StatelessWidget {
   final SettingsStore settings;
   final PluginManager plugins;
   final BuildToolsStore buildTools;
+  final BrowserService browsers;
 
   @override
   Widget build(BuildContext context) {
@@ -354,7 +358,7 @@ class _Workbench extends StatelessWidget {
                     Expanded(
                       child: Column(
                         children: [
-                          Expanded(child: _EditorRegion(client: client, gitLog: gitLog, prs: prs, plugins: plugins)),
+                          Expanded(child: _EditorRegion(client: client, gitLog: gitLog, prs: prs, plugins: plugins, browsers: browsers)),
                           ListenableBuilder(
                             listenable: layout,
                             builder: (context, _) {
@@ -415,12 +419,13 @@ class _Workbench extends StatelessWidget {
 /// 编辑区。只订阅会话层 —— 换标签、分屏会重建这里,
 /// 但项目树、底部日志、右侧面板不动。
 class _EditorRegion extends StatelessWidget {
-  const _EditorRegion({required this.client, required this.gitLog, required this.prs, required this.plugins});
+  const _EditorRegion({required this.client, required this.gitLog, required this.prs, required this.plugins, required this.browsers});
 
   final ApiClient client;
   final GitLogStore gitLog;
   final PullRequestsStore prs;
   final PluginManager plugins;
+  final BrowserService browsers;
 
   /// PR 差异里「打开本地文件」:[repoPath] 相对仓库根,换算成相对项目的路径(项目可能是仓库的子目录)。
   Future<void> _openPrLocal(BuildContext context, String repoPath, int line) async {
@@ -514,6 +519,14 @@ class _EditorRegion extends StatelessWidget {
           specialTabBuilder: (id) => _specialTab(context, id, workspace, sessions),
           specialTabTitle: _specialTitle,
           bannerBuilder: (path) => PluginBanner(plugins: plugins, filePath: path),
+          paneActionsBuilder: (path) => isHtmlFile(path) && !sessions.isSpecialTab(path)
+              ? OpenInBrowserBar(
+                  service: browsers,
+                  file: '${client.rootPath}/$path',
+                  // 浏览器读的是磁盘:没落盘的改动先存下来
+                  beforeOpen: () => workspace.saveFile(path),
+                )
+              : null,
           openTabs: sessions.openPaths,
           activeFile: sessions.activePath ?? '',
           // 有 controller 时编辑器直接读它;这里不传全文,免得每次按键都拼一次。

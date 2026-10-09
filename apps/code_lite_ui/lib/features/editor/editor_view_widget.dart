@@ -81,6 +81,9 @@ class EditorViewWidget extends StatefulWidget {
   /// 标签栏与编辑区之间的提示条(比如「安装 Java 插件」);只对普通文件标签显示。
   final Widget? Function(String filePath)? bannerBuilder;
 
+  /// 编辑区右上角浮着的按钮(HTML 文件的「用浏览器打开」);返回 null 不显示。每个面板按自己的文件问一次。
+  final Widget? Function(String filePath)? paneActionsBuilder;
+
   const EditorViewWidget({
     super.key,
     this.projectName = '',
@@ -89,6 +92,7 @@ class EditorViewWidget extends StatefulWidget {
     this.specialTabBuilder,
     this.specialTabTitle,
     this.bannerBuilder,
+    this.paneActionsBuilder,
     required this.openTabs,
     required this.activeFile,
     required this.codeContent,
@@ -1085,6 +1089,9 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
                 ],
               ),
               if (isPrimary) _buildMiniDiffOverlay(),
+              // 右上角的浮动按钮:让开右边 12px 的错误条
+              if (widget.paneActionsBuilder?.call(filePath) case final actions?)
+                Positioned(top: 8, right: 20, child: actions),
             ],
           ),
           ),
