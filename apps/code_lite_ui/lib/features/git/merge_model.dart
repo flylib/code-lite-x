@@ -101,7 +101,7 @@ class _ChunkState {
 
 /// 文件的一段:要么是三方都一样的几行([chunk] 为 null),要么是一处改动。
 class MergeSegment {
-  const MergeSegment.equal(this.baseStart, this.lines) : chunk = null;
+  MergeSegment.equal(this.baseStart, this.lines) : chunk = null;
   MergeSegment.change(MergeChunk this.chunk)
       : baseStart = chunk.baseStart,
         lines = const [];
@@ -111,11 +111,36 @@ class MergeSegment {
   /// 没变的几行(改动块为空)。
   final List<String> lines;
   final MergeChunk? chunk;
+
+  /// 用户在结果里改过这段没变的行之后的内容(改动块的手改记在 [MergeChunk.custom])。
+  List<String>? edited;
+
+  /// 这一段在结果里的内容。
+  List<String> get result => chunk?.result ?? edited ?? lines;
+
+  void _setResult(List<String> lines) {
+    final c = chunk;
+    if (c != null) {
+      c.custom = lines;
+    } else {
+      edited = lines;
+    }
+  }
 }
 
 /// 对齐后的一行:三栏各自的行号(这一栏是补位的空行时为 null)和文字。
 class MergeRow {
-  const MergeRow({this.left, this.result, this.right, this.leftText, this.resultText, this.rightText, this.chunk, this.firstOfChunk = false});
+  const MergeRow({
+    this.left,
+    this.result,
+    this.right,
+    this.leftText,
+    this.resultText,
+    this.rightText,
+    this.chunk,
+    this.firstOfChunk = false,
+    this.edited = false,
+  });
 
   final int? left;
   final int? result;
@@ -127,6 +152,9 @@ class MergeRow {
 
   /// 改动块的第一行:按钮放在这里。
   final bool firstOfChunk;
+
+  /// 结果栏这一行是在没变的段里手改出来的(和两侧的原文不同)。
+  final bool edited;
 }
 
 /// 把文本拆成行,记下换行风格和末尾是否有换行,存回去时原样还原。
@@ -164,7 +192,10 @@ class MergeModel extends ChangeNotifier {
   late final List<MergeSegment> segments;
   late final List<MergeChunk> chunks;
 
-  final List<List<_ChunkState>> _undo = [];
+  final List<(List<_ChunkState>, List<List<String>?>)> _undo = [];
+
+  /// 上一次是在第几行连续打字(连续的输入合成一步撤销);别的操作清掉它。
+  int? _typingLine;
 
   List<String> get leftLines => _leftText.lines;
   List<String> get rightLines => _rightText.lines;
@@ -237,16 +268,68 @@ class MergeModel extends ChangeNotifier {
   // 操作
   // ---------------------------------------------------------------------------
 
-  void _checkpoint() => _undo.add([for (final c in chunks) c._save()]);
+  void _checkpoint() {
+    _typingLine = null;
+    _undo.add((
+      [for (final c in chunks) c._save()],
+      [for (final s in segments) s.edited == null ? null : List.of(s.edited!)],
+    ));
+  }
 
-  /// 撤销上一步(采用、忽略、手改、批量操作都算一步)。
+  /// 撤销上一步(采用、忽略、批量操作、一次拆行 / 合并 / 粘贴、在同一行连续打的字,各算一步)。
   void undo() {
     if (_undo.isEmpty) return;
-    final s = _undo.removeLast();
+    final (chunkStates, edits) = _undo.removeLast();
     for (var i = 0; i < chunks.length; i++) {
-      chunks[i]._restore(s[i]);
+      chunks[i]._restore(chunkStates[i]);
     }
+    for (var i = 0; i < segments.length; i++) {
+      segments[i].edited = edits[i];
+    }
+    _typingLine = null;
     notifyListeners();
+  }
+
+  /// 直接编辑结果:把结果的第 [start, end) 行换成 [lines]。
+  ///
+  /// 改到的段记下新内容:改动块算作手工解决(按钮消失),没变的段只是换了内容。
+  /// 一次改动跨了几段时(比如在块的开头按退格,和上一段合成一行),新内容归第一段,
+  /// 后面几段只留下没被改到的部分。
+  void editResult(int start, int end, List<String> lines) {
+    _checkpoint();
+    _replace(start, end, lines);
+    notifyListeners();
+  }
+
+  /// 改结果里的一行(打字)。在同一行连续打字合成一步撤销。
+  void setResultLine(int line, String text) {
+    final res = resultLines;
+    if (line < 0 || line >= res.length || res[line] == text) return;
+    if (_typingLine != line) {
+      _checkpoint();
+      _typingLine = line;
+    }
+    _replace(line, line + 1, [text]);
+    notifyListeners();
+  }
+
+  void _replace(int start, int end, List<String> lines) {
+    var pos = 0;
+    var first = true;
+    for (final seg in segments) {
+      final res = seg.result;
+      final rs = pos, re = pos + res.length;
+      pos = re;
+      if (re <= start || rs >= end) continue;
+      seg._setResult([
+        if (first) ...res.sublist(0, start - rs),
+        if (first) ...lines,
+        if (re > end) ...res.sublist(end - rs),
+      ]);
+      first = false;
+    }
+    // 没碰到任何一段(结果是空的,往里加第一行):放进最后一段
+    if (first && segments.isNotEmpty) segments.last._setResult([...segments.last.result, ...lines]);
   }
 
   /// 采用 [chunk] 里 [side] 的改动(» / «)。冲突里另一侧已经采用过时,接在它后面。
@@ -273,13 +356,6 @@ class MergeModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 在结果里手改这一块。
-  void edit(MergeChunk chunk, List<String> lines) {
-    _checkpoint();
-    chunk.custom = List.of(lines);
-    notifyListeners();
-  }
-
   /// 「Apply non-conflicting changes」:把还没处理的非冲突改动全部采用。[side] 为 null 时两侧都要。
   int applyNonConflicting([MergeSide? side]) {
     final targets = [
@@ -303,10 +379,7 @@ class MergeModel extends ChangeNotifier {
   // 结果与显示
   // ---------------------------------------------------------------------------
 
-  List<String> get resultLines => [
-        for (final s in segments)
-          if (s.chunk == null) ...s.lines else ...s.chunk!.result,
-      ];
+  List<String> get resultLines => [for (final s in segments) ...s.result];
 
   /// 写回文件的文本:换行风格和末尾换行跟 Yours 一致。
   String get resultText {
@@ -323,9 +396,29 @@ class MergeModel extends ChangeNotifier {
     for (final s in segments) {
       final chunk = s.chunk;
       if (chunk == null) {
-        for (final line in s.lines) {
-          out.add(MergeRow(left: li++, result: oi++, right: ri++, leftText: line, resultText: line, rightText: line));
+        final res = s.result;
+        if (s.edited == null) {
+          for (final line in s.lines) {
+            out.add(MergeRow(left: li++, result: oi++, right: ri++, leftText: line, resultText: line, rightText: line));
+          }
+          continue;
         }
+        // 手改过:原文和改后的再比一次,没动的行仍然和两侧对齐,改过的行标出来
+        for (final d in sideBySideDiff(s.lines, res)) {
+          final o = d.left, n = d.right;
+          out.add(MergeRow(
+            left: o == null ? null : li + o,
+            right: o == null ? null : ri + o,
+            result: n == null ? null : oi + n,
+            leftText: o == null ? null : s.lines[o],
+            rightText: o == null ? null : s.lines[o],
+            resultText: n == null ? null : res[n],
+            edited: n != null && d.kind != DiffRowKind.equal,
+          ));
+        }
+        li += s.lines.length;
+        ri += s.lines.length;
+        oi += res.length;
         continue;
       }
       final res = chunk.result;

@@ -34,8 +34,6 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  Finder resultCell(String text) => find.byWidgetPredicate((w) => w is RichText && w.text.toPlainText() == text);
-
   testWidgets('layout: titles, three columns, counter; buttons only where a side has a pending change', (tester) async {
     await open(tester);
     expect(find.text('Merge Revisions for src/A.java'), findsOneWidget);
@@ -50,7 +48,8 @@ void main() {
     expect(find.byKey(const ValueKey('apply-right-1')), findsOneWidget);
     expect(find.byKey(const ValueKey('apply-right-2')), findsOneWidget);
     expect(find.byKey(const ValueKey('apply-left-2')), findsNothing);
-    expect(resultCell('  int v = 1;'), findsWidgets, reason: '还没处理:结果里是共同祖先的版本');
+    final resultTexts = [for (final f in tester.widgetList<TextField>(find.descendant(of: find.byType(ListView), matching: find.byType(TextField)))) f.controller!.text];
+    expect(resultTexts, contains('  int v = 1;'), reason: '还没处理:结果里是共同祖先的版本');
   });
 
   testWidgets('», « and × resolve chunks; a conflict can take both sides; Cmd+Z undoes; Apply returns the text', (tester) async {
@@ -85,21 +84,86 @@ void main() {
     expect(outcome!.content, 'package a;\nimport x;\nimport y;\nclass A {\n  int v = 3;\n}\n');
   });
 
-  testWidgets('double-click a result chunk to edit it by hand', (tester) async {
-    await open(tester);
-    await tester.tap(find.byKey(const ValueKey('apply-left-1')));
+  Finder lineField(int line) => find.descendant(of: find.byKey(ValueKey('result-line-$line')), matching: find.byType(TextField));
+  TextField fieldAt(WidgetTester tester, int line) => tester.widget<TextField>(lineField(line));
+
+  Future<void> caretAt(WidgetTester tester, int line, int col) async {
+    await tester.tap(lineField(line));
     await tester.pump();
-    final cell = resultCell('  int v = 2;').last; // 左栏也有这一行,结果栏在它后面
-    await tester.tap(cell);
-    await tester.pump(const Duration(milliseconds: 50));
-    await tester.tap(cell);
-    await tester.pumpAndSettle();
-    expect(find.text('编辑这一块的合并结果'), findsOneWidget);
-    await tester.enterText(find.byType(TextField), '  int v = 2 + 3;');
-    await tester.tap(find.text('OK'));
-    await tester.pumpAndSettle();
-    expect(resultCell('  int v = 2 + 3;'), findsOneWidget);
+    final text = fieldAt(tester, line).controller!.text;
+    tester.testTextInput.updateEditingValue(TextEditingValue(text: text, selection: TextSelection.collapsed(offset: col)));
+    await tester.pump();
+  }
+
+  testWidgets('the result column is directly editable: typing in a conflict resolves it, Apply returns the typed text', (tester) async {
+    await open(tester);
+    // 结果:0 package a; 1 import x; 2 class A { 3 int v = 1; 4 }
+    expect(fieldAt(tester, 3).controller!.text, '  int v = 1;');
+    await tester.enterText(lineField(3), '  int v = 2 + 3;');
+    await tester.pump();
     expect(find.text('2 changes. 0 conflicts.'), findsOneWidget, reason: '手改过的冲突算解决了');
+    expect(find.byKey(const ValueKey('apply-left-1')), findsNothing);
+
+    // 没变的行也能改
+    await tester.enterText(lineField(0), 'package b;');
+    await tester.pump();
+    await tester.tap(find.byTooltip('采用两侧所有不冲突的改动'));
+    await tester.pump();
+    await tester.tap(find.text('Apply'));
+    await tester.pumpAndSettle();
+    expect(outcome!.content, 'package b;\nimport x;\nimport y;\nclass A {\n  int v = 2 + 3;\n}\n// end\n');
+  });
+
+  testWidgets('Enter splits a line, Backspace at the start joins it back, the caret follows; arrows move between lines', (tester) async {
+    await open(tester);
+    await caretAt(tester, 2, 7); // "class A| {"
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(fieldAt(tester, 2).controller!.text, 'class A');
+    expect(fieldAt(tester, 3).controller!.text, ' {');
+    expect(fieldAt(tester, 3).focusNode!.hasFocus, isTrue, reason: '光标到了新的一行');
+    expect(fieldAt(tester, 3).controller!.selection.baseOffset, 0);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.backspace);
+    await tester.pumpAndSettle();
+    expect(fieldAt(tester, 2).controller!.text, 'class A {');
+    expect(fieldAt(tester, 2).focusNode!.hasFocus, isTrue);
+    expect(fieldAt(tester, 2).controller!.selection.baseOffset, 7, reason: '光标在接缝处');
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pumpAndSettle();
+    expect(fieldAt(tester, 3).focusNode!.hasFocus, isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await tester.pump(); // 光标在下一帧挪过去
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await tester.pumpAndSettle();
+    expect(fieldAt(tester, 1).focusNode!.hasFocus, isTrue);
+
+    // ⌘Z 撤销的是整个合并的上一步,不是输入框自己的
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyZ);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
+    await tester.pumpAndSettle();
+    expect(fieldAt(tester, 2).controller!.text, 'class A');
+    expect(fieldAt(tester, 3).controller!.text, ' {', reason: '撤销了合并行,回到拆开的状态');
+  });
+
+  testWidgets('pasting several lines splits them into result lines', (tester) async {
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
+      if (call.method == 'Clipboard.getData') return {'text': 'one\ntwo'};
+      return null;
+    });
+    addTearDown(() => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, null));
+    await open(tester);
+    await caretAt(tester, 1, 6); // "import| x;"
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyV);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
+    await tester.pumpAndSettle();
+    expect(fieldAt(tester, 1).controller!.text, 'importone');
+    expect(fieldAt(tester, 2).controller!.text, 'two x;');
+    expect(fieldAt(tester, 2).focusNode!.hasFocus, isTrue);
+    expect(fieldAt(tester, 2).controller!.selection.baseOffset, 3, reason: '光标在粘贴内容的末尾');
   });
 
   testWidgets('Apply with unresolved changes asks first; Back keeps merging', (tester) async {

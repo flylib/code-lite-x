@@ -79,9 +79,9 @@ void main() {
     expect(m.resultLines, ['1', 'c', '2'], reason: '两侧都不要:保留基准');
     expect(c.resolved, isTrue);
 
-    m.edit(c, ['hand', 'made']);
+    m.editResult(1, 2, ['hand', 'made']);
     expect(m.resultLines, ['1', 'hand', 'made', '2']);
-    expect(c.pending(MergeSide.left), isFalse);
+    expect(c.pending(MergeSide.left), isFalse, reason: '手改过的块算解决了');
   });
 
   test('apply non-conflicting changes leaves conflicts alone; per side', () {
@@ -170,5 +170,80 @@ void main() {
       // 没处理时结果就是基准
       expect(model(base, left, right).resultLines, base);
     }
+  });
+
+  group('editing the result directly', () {
+    test('typing on one line: the chunk it falls in is resolved by hand; consecutive typing is one undo step', () {
+      final m = model(['a', 'b', 'c'], ['a', 'B', 'c'], ['a', 'b', 'c', 'd']);
+      expect(m.chunks.map((c) => c.kind), [ChunkKind.left, ChunkKind.right]);
+      m.setResultLine(1, 'bx');
+      m.setResultLine(1, 'bxy');
+      expect(m.resultLines, ['a', 'bxy', 'c']);
+      expect(m.chunks.first.resolved, isTrue);
+      expect(m.chunks.last.resolved, isFalse);
+      m.undo();
+      expect(m.resultLines, ['a', 'b', 'c'], reason: '同一行连续打的字一步撤销');
+      expect(m.canUndo, isFalse);
+
+      m.setResultLine(1, 'q');
+      m.setResultLine(0, 'z');
+      m.undo();
+      expect(m.resultLines, ['a', 'q', 'c'], reason: '换了一行打字就是新的一步');
+      m.setResultLine(1, 'q'); // 没变
+      expect(m.resultLines, ['a', 'q', 'c']);
+    });
+
+    test('editing unchanged lines keeps the three columns aligned; left / right still show the originals', () {
+      final m = model(['a', 'b', 'c'], ['a', 'b', 'C'], ['a', 'b', 'c']);
+      m.editResult(0, 1, ['a1', 'a2', 'a3']);
+      expect(m.resultLines, ['a1', 'a2', 'a3', 'b', 'c']);
+      final rows = m.rows();
+      expect([for (final r in rows) r.leftText], ['a', null, null, 'b', 'C'], reason: '没动的 b 仍然对着 b');
+      expect([for (final r in rows) r.resultText], ['a1', 'a2', 'a3', 'b', 'c']);
+      expect([for (final r in rows) r.edited], [true, true, true, false, false]);
+      expect(rows.last.result, 4);
+      expect(m.chunks.single.resolved, isFalse, reason: '没改到改动块');
+      m.apply(m.chunks.single, MergeSide.left);
+      expect(m.resultLines, ['a1', 'a2', 'a3', 'b', 'C'], reason: '手改别处之后按钮照样能用');
+    });
+
+    test('an edit across a segment boundary (join, split) goes to the first segment', () {
+      final m = model(['a', 'b', 'c'], ['a', 'B', 'c'], ['a', 'b', 'c']);
+      // 在块的第一行行首退格:和上一行(没变的段)合成一行
+      m.editResult(0, 2, ['ab']);
+      expect(m.resultLines, ['ab', 'c']);
+      expect(m.chunks.single.resolved, isTrue, reason: '块的内容被并到前一段:块变空、算手工解决');
+      expect(m.chunks.single.result, isEmpty);
+      m.undo();
+      expect(m.resultLines, ['a', 'b', 'c']);
+      // 拆行
+      m.editResult(2, 3, ['', 'c']);
+      expect(m.resultLines, ['a', 'b', '', 'c']);
+      expect(m.chunks.single.resolved, isFalse);
+      expect(m.resultText, 'a\nb\n\nc\n');
+    });
+
+    test('property: random direct edits keep result = concatenation of segments and rows consistent', () {
+      final rnd = Random(3);
+      for (var round = 0; round < 200; round++) {
+        final base = [for (var i = 0; i < 1 + rnd.nextInt(12); i++) 'l$i'];
+        final left = [...base]..[rnd.nextInt(base.length)] = 'L';
+        final right = [...base, 'R'];
+        final m = model(base, left, right);
+        var expected = List.of(m.resultLines);
+        for (var step = 0; step < 6; step++) {
+          if (expected.isEmpty) break;
+          final start = rnd.nextInt(expected.length);
+          final end = start + 1 + rnd.nextInt((expected.length - start).clamp(1, 3));
+          final e = end > expected.length ? expected.length : end;
+          final lines = [for (var i = 0; i < rnd.nextInt(3); i++) 'e$round.$step.$i'];
+          m.editResult(start, e, lines);
+          expected = [...expected.sublist(0, start), ...lines, ...expected.sublist(e)];
+          expect(m.resultLines, expected, reason: 'round $round step $step');
+          expect([for (final r in m.rows()) if (r.resultText != null) r.resultText], expected);
+          expect([for (final r in m.rows()) if (r.leftText != null) r.leftText], left);
+        }
+      }
+    });
   });
 }

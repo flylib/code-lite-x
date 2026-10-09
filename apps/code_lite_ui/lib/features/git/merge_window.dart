@@ -79,6 +79,9 @@ class _MergeWindowState extends State<MergeWindow> {
   /// 当前所在的改动块(上一处 / 下一处跳转的起点,行号栏旁高亮)。
   MergeChunk? _current;
 
+  /// 结果栏里要把光标放到哪一行哪一列(拆行 / 合并 / 上下移动之后);放好就清掉。
+  (int, int)? _caretTarget;
+
   @override
   void initState() {
     super.initState();
@@ -156,10 +159,41 @@ class _MergeWindowState extends State<MergeWindow> {
     return ok ?? false;
   }
 
-  Future<void> _edit(MergeChunk c) async {
-    final lines = await showDialog<List<String>>(context: context, builder: (_) => _EditChunkDialog(initial: c.result));
-    if (lines != null) m.edit(c, lines);
+  // ---------------------------------------------------------------------------
+  // 结果栏的编辑:每一行是一个输入框,这里处理跨行的操作
+  // ---------------------------------------------------------------------------
+
+  /// 把光标移到结果的第 [line] 行第 [col] 列;那一行不在屏幕上时先滚过去。
+  void _moveCaret(int line, int col) {
+    final rows = m.rows();
+    final i = rows.indexWhere((r) => r.result == line);
+    if (i < 0) return;
+    setState(() => _caretTarget = (line, col));
+    if (!_scroll.hasClients) return;
+    final top = i * _row, viewport = _scroll.position.viewportDimension;
+    if (top < _scroll.offset) {
+      _scroll.jumpTo(top);
+    } else if (top + _row > _scroll.offset + viewport) {
+      _scroll.jumpTo((top + _row - viewport).clamp(0.0, _scroll.position.maxScrollExtent));
+    }
   }
+
+  /// 在第 [line] 行用 [lines] 替换这一行(拆行、粘贴多行),光标放到最后一段的 [col] 处。
+  void _replaceLine(int line, List<String> lines, int col) {
+    m.editResult(line, line + 1, lines);
+    _moveCaret(line + lines.length - 1, col);
+  }
+
+  /// 第 [line] 行和下一行合成一行(行首退格 / 行尾 Delete),光标放在接缝处。
+  void _joinWithNext(int line) {
+    final res = m.resultLines;
+    if (line < 0 || line + 1 >= res.length) return;
+    final at = res[line].length;
+    m.editResult(line, line + 2, [res[line] + res[line + 1]]);
+    _moveCaret(line, at);
+  }
+
+  void _onCaretPlaced() => _caretTarget = null;
 
   @override
   Widget build(BuildContext context) {
@@ -235,7 +269,7 @@ class _MergeWindowState extends State<MergeWindow> {
           const SizedBox(width: 8),
           DiffToolIcon(icon: Icons.undo, tooltip: '撤销 (⌘Z)', onTap: m.canUndo ? m.undo : null),
           const SizedBox(width: 12),
-          const Flexible(child: Text('双击结果里的改动块可以手动修改', style: _muted, overflow: TextOverflow.ellipsis)),
+          const Flexible(child: Text('结果栏可以直接编辑', style: _muted, overflow: TextOverflow.ellipsis)),
           const Spacer(),
           Text(status, key: const ValueKey('merge-status'), style: _title),
         ],
@@ -292,7 +326,7 @@ class _MergeWindowState extends State<MergeWindow> {
   /// 某一栏这一行的底色。[side] 为 null 表示结果栏。
   Color? _bg(MergeRow r, MergeSide? side, bool hasText) {
     final c = r.chunk;
-    if (c == null) return null;
+    if (c == null) return side == null && r.edited ? _resolvedBg : (hasText ? null : diffGapBg);
     Color? color;
     if (side == null) {
       color = c.resolved ? _resolvedBg : (c.isConflict ? _conflictBg : _kindColor(c, c.kind == ChunkKind.right ? MergeSide.right : MergeSide.left));
@@ -336,10 +370,23 @@ class _MergeWindowState extends State<MergeWindow> {
         ]),
         diffLineNumber(r.result, width: _numWidth),
         Expanded(
-          child: GestureDetector(
-            onDoubleTap: c == null ? null : () => _edit(c),
-            child: diffCell(r.resultText, _bg(r, null, r.resultText != null), null),
-          ),
+          child: r.result == null
+              ? diffCell(null, _bg(r, null, false), null)
+              : _ResultLine(
+                  key: ValueKey('result-line-${r.result}'),
+                  line: r.result!,
+                  text: r.resultText ?? '',
+                  background: _bg(r, null, true),
+                  caretCol: _caretTarget?.$1 == r.result ? _caretTarget!.$2 : null,
+                  onCaretPlaced: _onCaretPlaced,
+                  onChanged: (text) => m.setResultLine(r.result!, text),
+                  onReplace: (lines, col) => _replaceLine(r.result!, lines, col),
+                  onJoinNext: () => _joinWithNext(r.result!),
+                  onJoinPrevious: () => _joinWithNext(r.result! - 1),
+                  onMove: (delta, col) => _moveCaret(r.result! + delta, col),
+                  onUndo: m.undo,
+                  lastLine: r.result! == m.resultLines.length - 1,
+                ),
         ),
         gutter([
           if (showButtons && c.pending(MergeSide.right)) ...[
@@ -378,50 +425,159 @@ class _ChunkButton extends StatelessWidget {
       );
 }
 
-/// 手改结果里的一块。控制器由对话框自己持有,关闭动画播完才释放。
-class _EditChunkDialog extends StatefulWidget {
-  const _EditChunkDialog({required this.initial});
+/// 结果栏的一行:可以直接打字。跨行的操作交给窗口:
+/// 回车拆行、行首退格并到上一行、行尾 Delete 并上下一行、↑ ↓ 换行、粘贴多行拆成多行、⌘Z 撤销整个合并的上一步。
+class _ResultLine extends StatefulWidget {
+  const _ResultLine({
+    super.key,
+    required this.line,
+    required this.text,
+    required this.background,
+    required this.caretCol,
+    required this.onCaretPlaced,
+    required this.onChanged,
+    required this.onReplace,
+    required this.onJoinNext,
+    required this.onJoinPrevious,
+    required this.onMove,
+    required this.onUndo,
+    required this.lastLine,
+  });
 
-  final List<String> initial;
+  final int line;
+  final String text;
+  final Color? background;
+
+  /// 非 null:窗口要把光标放到这一行的这一列。
+  final int? caretCol;
+  final VoidCallback onCaretPlaced;
+  final ValueChanged<String> onChanged;
+  final void Function(List<String> lines, int col) onReplace;
+  final VoidCallback onJoinNext;
+  final VoidCallback onJoinPrevious;
+  final void Function(int delta, int col) onMove;
+  final VoidCallback onUndo;
+  final bool lastLine;
 
   @override
-  State<_EditChunkDialog> createState() => _EditChunkDialogState();
+  State<_ResultLine> createState() => _ResultLineState();
 }
 
-class _EditChunkDialogState extends State<_EditChunkDialog> {
-  late final TextEditingController _text = TextEditingController(text: widget.initial.join('\n'));
+class _ResultLineState extends State<_ResultLine> {
+  late final TextEditingController _text = TextEditingController(text: widget.text);
+  final FocusNode _focus = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    _placeCaret();
+  }
+
+  @override
+  void didUpdateWidget(_ResultLine old) {
+    super.didUpdateWidget(old);
+    // 别处改了这一行(采用了一侧、撤销、拆行后这个位置换成了另一行):跟上
+    if (_text.text != widget.text) {
+      final col = _text.selection.baseOffset.clamp(0, widget.text.length);
+      _text.value = TextEditingValue(text: widget.text, selection: TextSelection.collapsed(offset: col));
+    }
+    _placeCaret();
+  }
+
+  void _placeCaret() {
+    final col = widget.caretCol;
+    if (col == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _focus.requestFocus();
+      _text.selection = TextSelection.collapsed(offset: col.clamp(0, _text.text.length));
+      widget.onCaretPlaced();
+    });
+  }
 
   @override
   void dispose() {
     _text.dispose();
+    _focus.dispose();
     super.dispose();
   }
 
-  void _done() => Navigator.pop(context, _text.text.isEmpty ? <String>[] : _text.text.split('\n'));
+  KeyEventResult _onKey(FocusNode node, KeyEvent e) {
+    if (e is! KeyDownEvent && e is! KeyRepeatEvent) return KeyEventResult.ignored;
+    final keys = HardwareKeyboard.instance;
+    final cmd = keys.isMetaPressed || keys.isControlPressed;
+    final sel = _text.selection;
+    final value = _text.text;
+    final start = sel.isValid ? sel.start : value.length;
+    final end = sel.isValid ? sel.end : value.length;
+    final k = e.logicalKey;
+
+    if (cmd && k == LogicalKeyboardKey.keyZ) {
+      widget.onUndo();
+      return KeyEventResult.handled;
+    }
+    if (cmd && k == LogicalKeyboardKey.keyV) {
+      _paste(start, end);
+      return KeyEventResult.handled;
+    }
+    if (k == LogicalKeyboardKey.enter || k == LogicalKeyboardKey.numpadEnter) {
+      widget.onReplace([value.substring(0, start), value.substring(end)], 0);
+      return KeyEventResult.handled;
+    }
+    if (k == LogicalKeyboardKey.backspace && sel.isCollapsed && start == 0 && widget.line > 0) {
+      widget.onJoinPrevious();
+      return KeyEventResult.handled;
+    }
+    if (k == LogicalKeyboardKey.delete && sel.isCollapsed && start == value.length && !widget.lastLine) {
+      widget.onJoinNext();
+      return KeyEventResult.handled;
+    }
+    if (k == LogicalKeyboardKey.arrowUp && !keys.isShiftPressed) {
+      widget.onMove(-1, start);
+      return KeyEventResult.handled;
+    }
+    if (k == LogicalKeyboardKey.arrowDown && !keys.isShiftPressed) {
+      widget.onMove(1, start);
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  /// 单行输入框会把粘贴进来的换行吃掉:自己处理,多行的拆成多行。
+  Future<void> _paste(int start, int end) async {
+    final data = await Clipboard.getData(Clipboard.kTextPlain);
+    final pasted = data?.text?.replaceAll('\r\n', '\n');
+    if (pasted == null || !mounted) return;
+    final value = _text.text;
+    final merged = value.substring(0, start) + pasted + value.substring(end);
+    final lines = merged.split('\n');
+    if (lines.length == 1) {
+      _text.value = TextEditingValue(text: merged, selection: TextSelection.collapsed(offset: start + pasted.length));
+      widget.onChanged(merged);
+      return;
+    }
+    widget.onReplace(lines, lines.last.length - value.substring(end).length);
+  }
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      backgroundColor: IntelliJTheme.panelBg,
-      title: const Text('编辑这一块的合并结果', style: TextStyle(color: IntelliJTheme.textHigh, fontSize: 15)),
-      content: SizedBox(
-        width: 640,
+    return Container(
+      color: widget.background,
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      alignment: Alignment.centerLeft,
+      child: Focus(
+        onKeyEvent: _onKey,
         child: TextField(
           controller: _text,
-          autofocus: true,
-          maxLines: 16,
-          minLines: 6,
-          style: diffCodeStyle.copyWith(color: IntelliJTheme.textHigh),
-          decoration: const InputDecoration(
-            border: OutlineInputBorder(borderSide: BorderSide(color: IntelliJTheme.border)),
-            enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: IntelliJTheme.border)),
-          ),
+          focusNode: _focus,
+          style: diffCodeStyle,
+          maxLines: 1,
+          cursorColor: IntelliJTheme.caret,
+          cursorHeight: 14,
+          decoration: const InputDecoration.collapsed(hintText: null),
+          onChanged: widget.onChanged,
         ),
       ),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-        FilledButton(onPressed: _done, child: const Text('OK')),
-      ],
     );
   }
 }
