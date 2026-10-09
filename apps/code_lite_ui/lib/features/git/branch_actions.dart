@@ -19,7 +19,7 @@ class BranchActions {
   /// Commit…:打开左侧的 Commit 工具窗。
   final VoidCallback showCommitWindow;
 
-  /// 冲突窗口里「Open File」:在编辑器里打开这个文件(路径相对项目根)。
+  /// 冲突窗口里「Merge」:在编辑器里打开这个文件(路径相对项目根)。
   final void Function(String path)? openFile;
 
   void _toast(BuildContext context, String message, {bool error = false}) {

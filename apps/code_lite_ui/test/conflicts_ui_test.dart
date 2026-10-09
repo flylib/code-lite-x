@@ -218,7 +218,7 @@ void main() {
       expect(find.text('Added'), findsNWidgets(2));
       expect(find.text('Accept Yours'), findsOneWidget);
       expect(find.text('Accept Theirs'), findsOneWidget);
-      expect(find.text('Open File'), findsOneWidget);
+      expect(find.text('Merge'), findsOneWidget);
       // 两个文件、都没选:按钮不可用
       expect(tester.widget<OutlinedButton>(find.widgetWithText(OutlinedButton, 'Accept Yours')).onPressed, isNull);
 
@@ -279,21 +279,21 @@ void main() {
       await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
       await tester.pump();
       expect(tester.widget<OutlinedButton>(find.widgetWithText(OutlinedButton, 'Accept Yours')).onPressed, isNotNull);
-      expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Open File')).onPressed, isNull, reason: '选了两个:不能同时打开');
+      expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Merge')).onPressed, isNull, reason: '选了两个:不能同时打开');
       await tester.tap(find.text('Accept Yours'));
       await tester.pumpAndSettle();
       expect([for (final c in repo.callsTo('git.accept_side')) c['path']], ['a.txt', 'c.txt']);
       expect(find.byKey(const ValueKey('conflict-b.txt')), findsOneWidget);
     });
 
-    testWidgets('Open File opens the file in the editor (path made relative to the project) and closes the window', (tester) async {
+    testWidgets('Merge opens the file in the editor (path made relative to the project) and closes the window', (tester) async {
       repo
         ..repoPrefix = 'service/'
         ..startMerge([file('service/src/A.java')]);
       await show(tester);
       await tester.tap(find.byKey(const ValueKey('operation-conflicts')));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Open File'));
+      await tester.tap(find.widgetWithText(FilledButton, 'Merge'));
       await tester.pumpAndSettle();
       expect(opened, ['src/A.java']);
       expect(find.text('Conflicts'), findsNothing);

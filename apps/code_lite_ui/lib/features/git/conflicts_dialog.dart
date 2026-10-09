@@ -105,9 +105,9 @@ class _ConflictsDialogState extends State<ConflictsDialog> {
                                     const SizedBox(height: 8),
                                     _button('Accept Theirs', files.isEmpty || busy ? null : () => _guarded(() => widget.accept(context, files, 'theirs'))),
                                     const SizedBox(height: 8),
-                                    // 三栏合并工具还没有:先在编辑器里打开带冲突标记的文件手动改
+                                    // 三栏合并工具还没有:Merge 先在编辑器里打开带冲突标记的文件,手动改
                                     _button(
-                                      'Open File',
+                                      'Merge',
                                       files.length != 1 || busy
                                           ? null
                                           : () async {
