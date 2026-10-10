@@ -6,6 +6,7 @@ import '../../features/editor/code_editor_controller.dart' show EditorPosition;
 import '../../features/editor/editor_session_manager.dart';
 import '../../features/editor/lsp_overlay.dart';
 import '../client/api_client.dart';
+import '../platform/paths.dart';
 import '../platform/workspace_io.dart' as io;
 import 'session_snapshot.dart';
 
@@ -69,7 +70,8 @@ class WorkspaceStore extends ChangeNotifier {
     final snap = await _sessionStore.read(root);
     final opened = <String>[];
     for (final t in snap.tabs) {
-      if (!await _fileExists('$root/${t.path}')) continue;
+      // 标签路径可能是绝对的(文件树给的),也可能是相对项目根的:不能一律拼上项目根
+      if (!await _fileExists(absoluteFilePath(root, t.path))) continue;
       final tab = await _sessions.openFile(t.path, scroll: t.scroll);
       if (tab.loadError != null) {
         _sessions.closeTab(t.path);

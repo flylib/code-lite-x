@@ -164,6 +164,31 @@ void main() {
       w2.dispose();
     });
 
+    test('tabs opened from the file tree are saved with absolute paths and restore (regression: the project root was joined on again)', () async {
+      // 文件树给的标签路径是绝对的;恢复时曾经把项目根又拼了一遍,路径变成 <root>//<root>/x,当成「文件不存在」整条丢掉
+      disk = {
+        projectA: {
+          'tabs': [
+            {'path': '$projectA/one.txt', 'line': 4},
+            {'path': '$projectA/sub/three.txt'},
+            {'path': 'two.txt', 'line': 2}, // 同一个项目里相对路径的也照常恢复
+          ],
+          'active': '$projectA/sub/three.txt',
+        },
+      };
+      final w = store();
+      await w.openFolder(projectA);
+      expect(w.openTabs, ['$projectA/one.txt', '$projectA/sub/three.txt', 'two.txt']);
+      expect(w.activeFile, '$projectA/sub/three.txt');
+      expect(sessions.tabs['$projectA/one.txt']!.controller.cursorPosition.line, 4);
+      expect(sessions.tabs['two.txt']!.controller.cursorPosition.line, 2);
+
+      // 存回去还是同样的写法,下次启动照样能恢复
+      await w.saveSession();
+      expect((disk[projectA] as Map)['tabs'].map((t) => t['path']).toList(), ['$projectA/one.txt', '$projectA/sub/three.txt', 'two.txt']);
+      w.dispose();
+    });
+
     test('files that no longer exist are skipped; the active tab falls back to the last one', () async {
       disk = {
         projectA: {
