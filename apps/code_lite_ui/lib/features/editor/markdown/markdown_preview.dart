@@ -30,6 +30,10 @@ class MarkdownEnv {
 /// 代码块用编辑器同一套配色高亮,链接 / 图片按文件所在目录解析,
 /// 分屏时和编辑器按比例同步滚动。
 class MarkdownPreview extends StatefulWidget {
+  /// 测试用:预览的 build 次数(滚动不该让它重建)。
+  @visibleForTesting
+  static int debugBuilds = 0;
+
   const MarkdownPreview({
     super.key,
     required this.controller,
@@ -40,7 +44,12 @@ class MarkdownPreview extends StatefulWidget {
     this.onOpenFile,
     this.env = const MarkdownEnv(),
     this.debounce = const Duration(milliseconds: 200),
+    this.eagerLimit = defaultEagerLimit,
   });
+
+  /// 文档不超过这么多字符时,所有块都排版出来(总长精确,可以和编辑器同步滚动);
+  /// 超过就用懒加载列表,不同步(见 [_MarkdownPreviewState._eager])。
+  static const int defaultEagerLimit = 200000;
 
   final CodeEditorController controller;
 
@@ -56,6 +65,7 @@ class MarkdownPreview extends StatefulWidget {
   final ValueChanged<String>? onOpenFile;
   final MarkdownEnv env;
   final Duration debounce;
+  final int eagerLimit;
 
   @override
   State<MarkdownPreview> createState() => _MarkdownPreviewState();
@@ -100,12 +110,22 @@ class _MarkdownPreviewState extends State<MarkdownPreview> {
 
   void _onChange(EditorTextChange _) {
     _timer?.cancel();
-    _timer = Timer(widget.debounce, () {
+    // 文档越大重排越贵,停手等得久一点:每 800 个字符多等 1ms,最多多等 0.8s
+    final extra = Duration(milliseconds: (_text.length / 800).round().clamp(0, 800));
+    _timer = Timer(widget.debounce + extra, () {
       if (!mounted || widget.controller.isDisposed) return;
       final next = widget.controller.text;
       if (next != _text) setState(() => _text = next);
     });
   }
+
+  /// 所有块都排版(总长精确)还是懒加载。
+  ///
+  /// 懒加载列表只排版看得见的几块,总长是按这些块的平均高度估出来的,而且滚到哪估到哪、会剧烈摇摆
+  /// (252 行的文件从 5 千到 7 万像素来回变)。按比例同步滚动时,目标位置跟着估值乱跳,
+  /// 编辑器滚一帧预览就被甩出去几百甚至几万像素,表现为分屏时严重卡顿。
+  /// 所以文档不大时全部排版:总长固定,同步是平滑的;每个块仍有独立的重绘层,滚动只做合成。
+  bool get _eager => _text.length <= widget.eagerLimit;
 
   void _onEditorScroll() {
     final editor = widget.syncWith;
@@ -119,6 +139,7 @@ class _MarkdownPreviewState extends State<MarkdownPreview> {
 
   /// 按比例让 [to] 跟着 [from] 滚(两边内容高度不同,按文档的相对位置对齐)。
   void _follow(ScrollController from, ScrollController to) {
+    if (!_eager) return; // 懒加载时总长是估的,同步会乱跳
     if (_syncing || !from.hasClients || !to.hasClients) return;
     final fromMax = from.position.maxScrollExtent;
     if (fromMax <= 0) return;
@@ -186,21 +207,41 @@ class _MarkdownPreviewState extends State<MarkdownPreview> {
 
   @override
   Widget build(BuildContext context) {
+    MarkdownPreview.debugBuilds++;
     final style = markdownStyleSheet(Theme.of(context));
+    const padding = EdgeInsets.fromLTRB(28, 18, 28, 48);
+    final builders = <String, MarkdownElementBuilder>{'pre': CodeBlockBuilder(widget.scheme)};
     return ColoredBox(
       color: widget.scheme.background,
       // 文字选中用 SelectionArea(能跨段落选);Markdown 自带的 selectable 模式走 SelectableText,画不了内嵌图片
       child: SelectionArea(
-        child: Markdown(
-          data: _text,
-          controller: _scroll,
-          styleSheet: style,
-          extensionSet: md.ExtensionSet.gitHubFlavored,
-          onTapLink: _tapLink,
-          imageBuilder: _image,
-          builders: {'pre': CodeBlockBuilder(widget.scheme)},
-          padding: const EdgeInsets.fromLTRB(28, 18, 28, 48),
-        ),
+        child: _eager
+            // 外层负责滚动,里层 Markdown 在不限高的环境里把每个块都排版出来
+            ? SingleChildScrollView(
+                controller: _scroll,
+                padding: padding,
+                child: Markdown(
+                  data: _text,
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  padding: EdgeInsets.zero,
+                  styleSheet: style,
+                  extensionSet: md.ExtensionSet.gitHubFlavored,
+                  onTapLink: _tapLink,
+                  imageBuilder: _image,
+                  builders: builders,
+                ),
+              )
+            : Markdown(
+                data: _text,
+                controller: _scroll,
+                padding: padding,
+                styleSheet: style,
+                extensionSet: md.ExtensionSet.gitHubFlavored,
+                onTapLink: _tapLink,
+                imageBuilder: _image,
+                builders: builders,
+              ),
       ),
     );
   }

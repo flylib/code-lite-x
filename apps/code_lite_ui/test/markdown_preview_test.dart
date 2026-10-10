@@ -7,6 +7,7 @@ import 'package:code_lite_ui/features/editor/markdown/markdown_preview.dart';
 import 'package:code_lite_ui/features/editor/syntax/color_schemes.dart';
 import 'package:code_lite_ui/features/editor/syntax/tokenizer.dart';
 import 'package:flutter/gestures.dart';
+import 'package:flutter_markdown_plus/flutter_markdown_plus.dart' show Markdown;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -347,6 +348,68 @@ void main() {
       await tester.pump();
       expect(editorScroll.offset / editorScroll.position.maxScrollExtent, closeTo(0.25, 0.02));
       await finish(tester);
+    });
+
+    /// 高度各不相同的块:长短不一的段落、代码块、表格、标题。
+    String mixedDoc(int sections) => [
+          for (var i = 0; i < sections; i++) ...[
+            '## Section $i',
+            'Short paragraph $i.',
+            List.generate(1 + i % 7, (k) => 'A longer paragraph with several words in it, number $k of section $i, so that it wraps over a few lines in the narrow preview column.').join(' '),
+            '```java\n${List.generate(2 + i % 9, (k) => 'int value$k = compute($i, $k);').join('\n')}\n```',
+            '| a | b |\n|---|---|\n${List.generate(1 + i % 5, (k) => '| row $k | ${k * i} |').join('\n')}',
+          ],
+        ].join('\n\n');
+
+    testWidgets('scroll sync is smooth: the preview length is exact and stays put, so it moves a steady amount per frame', (tester) async {
+      // 回归:预览用懒加载列表时,总长是估的、滚到哪估到哪,同步滚动被估值甩得每帧跳几百到几万像素(分屏严重卡顿)
+      await editor(tester, 'README.md', text: mixedDoc(60));
+      await tester.pump(const Duration(milliseconds: 50));
+      final previewScroll = tester.widget<Scrollable>(find.descendant(of: preview(), matching: find.byType(Scrollable)).first).controller!;
+      final previewMax = previewScroll.position.maxScrollExtent;
+      final editorMax = editorScroll.position.maxScrollExtent;
+      expect(previewMax, greaterThan(5000), reason: '所有块都排出来了,不是只算屏幕上那几块');
+
+      final deltas = <double>[];
+      var last = previewScroll.offset;
+      for (var i = 0; i < 200; i++) {
+        editorScroll.jumpTo((editorMax * i / 200).clamp(0.0, editorMax));
+        await tester.pump(const Duration(milliseconds: 16));
+        expect(previewScroll.position.maxScrollExtent, previewMax, reason: '总长不随滚动变化(frame $i)');
+        deltas.add((previewScroll.offset - last).abs());
+        last = previewScroll.offset;
+      }
+      final expected = previewMax / 200; // 按比例,每帧应该移动这么多
+      final worst = deltas.reduce((a, b) => a > b ? a : b);
+      expect(worst, lessThan(expected * 1.5 + 2), reason: '每帧移动 ≈ $expected px,不能有突然的大跳(最大 $worst)');
+      await finish(tester);
+    });
+
+    testWidgets('a very large document falls back to the lazy list and does not sync (its length is only an estimate)', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1300, 800));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      ctrl = CodeEditorController(initialText: mixedDoc(40));
+      final lazyScroll = ScrollController();
+      addTearDown(lazyScroll.dispose);
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: Row(children: [
+            Expanded(child: SingleChildScrollView(controller: lazyScroll, child: const SizedBox(height: 6000))),
+            Expanded(child: MarkdownPreview(controller: ctrl, filePath: 'a.md', root: '/w', scheme: darculaScheme, syncWith: lazyScroll, eagerLimit: 100, env: fake.env)),
+          ]),
+        ),
+      ));
+      await tester.pump(const Duration(milliseconds: 50));
+      final previewScroll = tester.widget<Scrollable>(find.descendant(of: preview(), matching: find.byType(Scrollable)).first).controller!;
+      lazyScroll.jumpTo(lazyScroll.position.maxScrollExtent / 2);
+      await tester.pump();
+      expect(previewScroll.offset, 0, reason: '懒加载:不同步');
+      previewScroll.jumpTo(300);
+      await tester.pump();
+      expect(lazyScroll.offset, lazyScroll.position.maxScrollExtent / 2, reason: '也不反向同步');
+      expect(find.byType(Markdown), findsOneWidget, reason: '仍然能显示');
+      await tester.pumpWidget(const SizedBox());
+      ctrl.dispose();
     });
 
     testWidgets('a link in the preview opens the file through the editor callback', (tester) async {
