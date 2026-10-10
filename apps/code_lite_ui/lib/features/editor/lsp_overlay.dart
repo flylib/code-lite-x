@@ -71,25 +71,63 @@ class EditorDiagnostic {
 /// 没用到的符号的文字颜色(灰)。
 const Color unusedTextColor = Color(0xFF808385);
 
-/// 把 [diagnostics] 里「没用到」的范围在 [spans](一行的着色片段)里改成灰色。
+/// 错误的文字颜色(找不到定义的变量 / 方法、语法错误……出问题的那个词)。
+const Color errorTextColor = Color(0xFFF97A7A);
+
+/// 诊断在 [lineText] 这一行里占的列范围 [起, 止);不在这一行或没有可染的内容返回 null。
+///
+/// 范围跨到后面的行时染到行尾。空范围(服务端只给了一个位置)染那里的整个标识符,
+/// 不在标识符上就染紧挨着的一个字符,免得错误没有任何标记。
+(int, int)? _rangeOnLine(EditorDiagnostic d, String lineText, int lineIndex) {
+  if (d.line != lineIndex || lineText.isEmpty) return null;
+  final start = d.colStart.clamp(0, lineText.length);
+  var end = d.endLine > d.line ? lineText.length : d.colEnd.clamp(0, lineText.length);
+  if (end > start) return (start, end);
+
+  bool word(int i) => RegExp(r'[A-Za-z0-9_$]').hasMatch(lineText[i]);
+  var from = start, to = start;
+  while (from > 0 && word(from - 1)) {
+    from--;
+  }
+  while (to < lineText.length && word(to)) {
+    to++;
+  }
+  if (to > from) return (from, to);
+  return start < lineText.length ? (start, start + 1) : (lineText.length - 1, lineText.length);
+}
+
+/// 按 [diagnostics] 给 [spans](一行的着色片段)里的范围改前景色:
+/// 错误 → 红色(IntelliJ 的做法:出问题的词变红,不画下划线),没用到的符号 → 灰色。两者重叠时错误优先。
 /// 只改前景色,保留粗体 / 斜体等其它样式,也不改变文字,所以不影响宽度测量。
-/// [lineText] 是这一行的文字;范围跨到后面的行时,灰到行尾。没有要变灰的就原样返回 [spans]。
-List<TextSpan> fadeUnused(List<TextSpan> spans, String lineText, Iterable<EditorDiagnostic> diagnostics, int lineIndex) {
-  final ranges = <(int, int)>[];
+/// [lineText] 是这一行的文字;没有要染色的就原样返回 [spans]。
+List<TextSpan> colorDiagnosticRanges(List<TextSpan> spans, String lineText, Iterable<EditorDiagnostic> diagnostics, int lineIndex) {
+  // 按优先级排:靠前的优先(错误 > 没用到)
+  final ranges = <(int, int, Color)>[];
   for (final d in diagnostics) {
-    if (!d.isUnnecessary || d.line != lineIndex) continue;
-    final end = d.endLine > d.line ? lineText.length : d.colEnd.clamp(0, lineText.length);
+    if (!d.isError) continue;
+    if (_rangeOnLine(d, lineText, lineIndex) case (final a, final b)?) ranges.add((a, b, errorTextColor));
+  }
+  for (final d in diagnostics) {
+    if (!d.isUnnecessary) continue;
+    // 灰色只用来标「没用到」:空范围不去猜(没有东西可灰)
     final start = d.colStart.clamp(0, lineText.length);
-    if (end > start) ranges.add((start, end));
+    final end = d.line != lineIndex ? start : (d.endLine > d.line ? lineText.length : d.colEnd.clamp(0, lineText.length));
+    if (d.line == lineIndex && end > start) ranges.add((start, end, unusedTextColor));
   }
   if (ranges.isEmpty) return spans;
 
-  bool faded(int i) => ranges.any((r) => i >= r.$1 && i < r.$2);
+  Color? colorAt(int i) {
+    for (final r in ranges) {
+      if (i >= r.$1 && i < r.$2) return r.$3;
+    }
+    return null;
+  }
+
   final out = <TextSpan>[];
   var pos = 0;
   for (final span in spans) {
     final text = span.text ?? '';
-    // 在范围边界处把片段切开,每一段要么全灰要么全不灰
+    // 在范围边界处把片段切开,每一段的颜色是统一的
     final cuts = <int>{
       for (final r in ranges) ...[r.$1 - pos, r.$2 - pos],
     }.where((c) => c > 0 && c < text.length).toList()
@@ -98,8 +136,9 @@ List<TextSpan> fadeUnused(List<TextSpan> spans, String lineText, Iterable<Editor
     for (final cut in [...cuts, text.length]) {
       if (cut == from && text.isNotEmpty) continue;
       final piece = text.substring(from, cut);
-      out.add(faded(pos + from)
-          ? TextSpan(text: piece, style: (span.style ?? const TextStyle()).copyWith(color: unusedTextColor))
+      final color = colorAt(pos + from);
+      out.add(color != null
+          ? TextSpan(text: piece, style: (span.style ?? const TextStyle()).copyWith(color: color))
           : TextSpan(text: piece, style: span.style));
       from = cut;
     }

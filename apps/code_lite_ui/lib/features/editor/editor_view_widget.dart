@@ -1785,8 +1785,7 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
 
     final lineDiags = diagnostics.where((d) => d.line == lineIndex).toList();
     // 没用到的变量 / 字段 / import:文字变灰,不画下划线(IntelliJ 的做法)
-    final spans = fadeUnused(hl.spansAt(lineIndex), lineText, lineDiags, lineIndex);
-    final hasError = lineDiags.any((d) => d.isError);
+    final spans = colorDiagnosticRanges(hl.spansAt(lineIndex), lineText, lineDiags, lineIndex);
     final hasWarning = lineDiags.any((d) => d.isWarning);
 
     final sel = controller.selection;
@@ -1863,21 +1862,16 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
             ),
 
           // 4. Diagnostic Squiggle
-          if (hasError || hasWarning)
+          // 只有普通警告画下划线;错误是把出问题的词染红(见 colorDiagnosticRanges),没用到的符号是变灰
+          if (hasWarning)
             Positioned(
               left: 0,
               right: 0,
               bottom: 2,
               child: Container(
                 height: 2,
-                decoration: BoxDecoration(
-                  border: Border(
-                    bottom: BorderSide(
-                      color: hasError ? const Color(0xFFF97A7A) : const Color(0xFFE5C07B),
-                      width: 1.5,
-                      style: BorderStyle.solid,
-                    ),
-                  ),
+                decoration: const BoxDecoration(
+                  border: Border(bottom: BorderSide(color: Color(0xFFE5C07B), width: 1.5)),
                 ),
               ),
             ),

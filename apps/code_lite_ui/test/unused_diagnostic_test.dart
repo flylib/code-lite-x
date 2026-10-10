@@ -35,7 +35,7 @@ void main() {
     });
   });
 
-  group('fadeUnused', () {
+  group('colorDiagnosticRanges', () {
     const keyword = TextStyle(color: Color(0xFFCC7832), fontWeight: FontWeight.bold);
     // private long targetExistingRows = -1L;
     const spans = [
@@ -48,7 +48,7 @@ void main() {
 
     test('greys exactly the reported range, splitting spans at its edges and keeping other style', () {
       final d = EditorDiagnostic.fromJson(_json(from: 13, to: 31, tags: [1]));
-      final out = fadeUnused(spans, line, [d], 0);
+      final out = colorDiagnosticRanges(spans, line, [d], 0);
       expect(_text(out), line, reason: '文字不变,宽度测量不受影响');
       expect(out.map((s) => s.text), ['private', ' long ', 'targetExistingRows', ' = -1L;']);
       expect(out[2].style!.color, unusedTextColor);
@@ -57,28 +57,28 @@ void main() {
       expect(out[1].style, isNull);
 
       // 范围落在一个片段中间:切成三段
-      final mid = fadeUnused(spans, line, [EditorDiagnostic.fromJson(_json(from: 13, to: 19, tags: [1]))], 0);
+      final mid = colorDiagnosticRanges(spans, line, [EditorDiagnostic.fromJson(_json(from: 13, to: 19, tags: [1]))], 0);
       expect(_text(mid), line);
       expect([for (final s in mid) if (s.style?.color == unusedTextColor) s.text], ['target']);
       // 跨片段:private 的后半 + 空白
-      final across = fadeUnused(spans, line, [EditorDiagnostic.fromJson(_json(from: 4, to: 9, tags: [1]))], 0);
+      final across = colorDiagnosticRanges(spans, line, [EditorDiagnostic.fromJson(_json(from: 4, to: 9, tags: [1]))], 0);
       expect(_text(across), line);
       expect([for (final s in across) if (s.style?.color == unusedTextColor) s.text], ['ate', ' l']);
       expect(across.first.style, keyword, reason: '没被覆盖的部分保持原样');
     });
 
     test('ignores ordinary diagnostics, other lines, empty ranges; clamps; multi-line goes to end of line', () {
-      expect(identical(fadeUnused(spans, line, [EditorDiagnostic.fromJson(_json(from: 13, to: 31))], 0), spans), isTrue, reason: '没有标记:原样返回');
-      expect(identical(fadeUnused(spans, line, [EditorDiagnostic.fromJson(_json(line: 3, from: 13, to: 31, tags: [1]))], 0), spans), isTrue);
-      expect(identical(fadeUnused(spans, line, [EditorDiagnostic.fromJson(_json(from: 5, to: 5, tags: [1]))], 0), spans), isTrue);
+      expect(identical(colorDiagnosticRanges(spans, line, [EditorDiagnostic.fromJson(_json(from: 13, to: 31))], 0), spans), isTrue, reason: '没有标记:原样返回');
+      expect(identical(colorDiagnosticRanges(spans, line, [EditorDiagnostic.fromJson(_json(line: 3, from: 13, to: 31, tags: [1]))], 0), spans), isTrue);
+      expect(identical(colorDiagnosticRanges(spans, line, [EditorDiagnostic.fromJson(_json(from: 5, to: 5, tags: [1]))], 0), spans), isTrue);
 
-      final clamped = fadeUnused(spans, line, [EditorDiagnostic.fromJson(_json(from: 31, to: 999, tags: [1]))], 0);
+      final clamped = colorDiagnosticRanges(spans, line, [EditorDiagnostic.fromJson(_json(from: 31, to: 999, tags: [1]))], 0);
       expect(_text(clamped), line);
       expect([for (final s in clamped) if (s.style?.color == unusedTextColor) s.text], [' = -1L;']);
 
-      final multi = fadeUnused(spans, line, [EditorDiagnostic.fromJson(_json(from: 8, to: 3, endLine: 4, tags: [1]))], 0);
+      final multi = colorDiagnosticRanges(spans, line, [EditorDiagnostic.fromJson(_json(from: 8, to: 3, endLine: 4, tags: [1]))], 0);
       expect([for (final s in multi) if (s.style?.color == unusedTextColor) s.text].join(), line.substring(8));
-      expect(fadeUnused(const [TextSpan(text: '')], '', [EditorDiagnostic.fromJson(_json(tags: [1]))], 0), hasLength(1));
+      expect(colorDiagnosticRanges(const [TextSpan(text: '')], '', [EditorDiagnostic.fromJson(_json(tags: [1]))], 0), hasLength(1));
     });
   });
 
