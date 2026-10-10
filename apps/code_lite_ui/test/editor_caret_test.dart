@@ -18,8 +18,9 @@ void main() {
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(
         body: EditorViewWidget(
-          openTabs: const ['README.md'],
-          activeFile: 'README.md',
+          // 不用 .md:Markdown 文件默认带预览,预览里也有同样的文字
+          openTabs: const ['notes.txt'],
+          activeFile: 'notes.txt',
           codeContent: ctrl.text,
           controller: ctrl,
           onSelectTab: (_) {},

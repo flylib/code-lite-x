@@ -17,3 +17,6 @@ Future<List<BrowserApp>> detectBrowsers() async => const [];
 Future<String?> openInBrowser(BrowserApp browser, String file) async => '当前平台不支持';
 
 Future<Uint8List?> browserIcon(BrowserApp browser) async => null;
+
+/// 用系统默认浏览器打开网址。成功返回 null,失败返回原因。
+Future<String?> openExternalUrl(String url) async => '当前平台不支持';

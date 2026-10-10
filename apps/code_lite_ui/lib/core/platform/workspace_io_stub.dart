@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 // web 没有 dart:io:文件夹选择与最近项目都不可用,调用方按"不支持"处理。
 
 Future<String?> pickDirectory() async => null;
@@ -7,6 +9,9 @@ Future<String?> createEmptyFile(String root, String relPath) async => 'web 预�
 Future<bool> directoryExists(String path) async => false;
 
 Future<bool> fileExists(String path) async => false;
+
+/// 读文件的原始字节(预览里的本地图片);读不了返回 null。
+Future<Uint8List?> readFileBytes(String path, {int maxBytes = 20 * 1024 * 1024}) async => null;
 
 Future<Map<String, dynamic>> loadSessions() async => const {};
 

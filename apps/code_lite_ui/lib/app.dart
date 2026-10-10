@@ -521,6 +521,7 @@ class _EditorRegion extends StatelessWidget {
           specialTabBuilder: (id) => _specialTab(context, id, workspace, sessions),
           specialTabTitle: _specialTitle,
           bannerBuilder: (path) => PluginBanner(plugins: plugins, filePath: path),
+          onOpenFile: workspace.openFile,
           paneActionsBuilder: (path) => isHtmlFile(path) && !sessions.isSpecialTab(path)
               ? OpenInBrowserBar(
                   service: browsers,

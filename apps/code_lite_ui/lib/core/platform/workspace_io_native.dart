@@ -51,6 +51,17 @@ Future<bool> directoryExists(String path) => Directory(path).exists();
 
 Future<bool> fileExists(String path) => File(path).exists();
 
+/// 读文件的原始字节(预览里的本地图片);超过 [maxBytes] 或读不了返回 null。
+Future<Uint8List?> readFileBytes(String path, {int maxBytes = 20 * 1024 * 1024}) async {
+  try {
+    final f = File(path);
+    if (await f.length() > maxBytes) return null;
+    return await f.readAsBytes();
+  } catch (_) {
+    return null;
+  }
+}
+
 File? get _sessionsFile {
   final home = Platform.environment['HOME'];
   return home == null ? null : File('$home/.codelitex/sessions.json');

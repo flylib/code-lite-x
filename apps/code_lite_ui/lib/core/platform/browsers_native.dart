@@ -131,3 +131,20 @@ Future<Uint8List?> browserIcon(BrowserApp browser) async {
     return null;
   }
 }
+
+/// 用系统默认的程序打开网址 / 邮件链接(macOS `open`、Linux `xdg-open`、Windows `start`)。
+/// 成功返回 null,失败返回原因。只放行 http / https / mailto,别的协议不交给系统。
+Future<String?> openExternalUrl(String url) async {
+  final uri = Uri.tryParse(url);
+  if (uri == null || !const {'http', 'https', 'mailto'}.contains(uri.scheme)) return '不支持的链接: $url';
+  try {
+    final r = Platform.isMacOS
+        ? await Process.run('open', [url])
+        : Platform.isWindows
+            ? await Process.run('cmd', ['/c', 'start', '', url])
+            : await Process.run('xdg-open', [url]);
+    return r.exitCode == 0 ? null : '${r.stderr}'.trim();
+  } catch (e) {
+    return '$e';
+  }
+}

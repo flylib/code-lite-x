@@ -15,6 +15,8 @@ import 'code_editor_controller.dart';
 import 'editor_session_manager.dart';
 import 'ime_text_input_client.dart';
 import 'lsp_overlay.dart';
+import 'markdown/markdown_links.dart';
+import 'markdown/markdown_preview.dart';
 import 'visible_lines.dart';
 import 'syntax/document_highlighter.dart';
 import 'syntax/language.dart';
@@ -81,6 +83,12 @@ class EditorViewWidget extends StatefulWidget {
   /// 标签栏与编辑区之间的提示条(比如「安装 Java 插件」);只对普通文件标签显示。
   final Widget? Function(String filePath)? bannerBuilder;
 
+  /// Markdown 预览里点了指向本地文件的链接:在编辑器里打开它(绝对路径)。
+  final ValueChanged<String>? onOpenFile;
+
+  /// 预览用到的系统能力(测试里替换)。
+  final MarkdownEnv markdownEnv;
+
   /// 编辑区右上角浮着的按钮(HTML 文件的「用浏览器打开」);返回 null 不显示。每个面板按自己的文件问一次。
   final Widget? Function(String filePath)? paneActionsBuilder;
 
@@ -93,6 +101,8 @@ class EditorViewWidget extends StatefulWidget {
     this.specialTabTitle,
     this.bannerBuilder,
     this.paneActionsBuilder,
+    this.onOpenFile,
+    this.markdownEnv = const MarkdownEnv(),
     required this.openTabs,
     required this.activeFile,
     required this.codeContent,
@@ -156,7 +166,30 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
   /// 上次测量字宽时的字号;字号变了要重新测量,并作废按旧字号排好的行。
   double _measuredFontSize = 0;
 
+  /// 当前是 Markdown 文件、而且选的是「只看预览」:编辑器不显示,也不能接收输入。
+  bool get _previewOnly =>
+      _appearance.markdownMode == MarkdownViewMode.preview &&
+      isMarkdownFile(widget.activeFile) &&
+      !isSpecialTabId(widget.activeFile) &&
+      !(widget.splitDirection != SplitDirection.none && widget.secondaryTab != null);
+
+  /// 预览模式下断开输入法(否则敲键盘会改到看不见的文档),切回来再接上。
+  void _syncImeForMode() {
+    if (_previewOnly) {
+      _imeBridge.detach();
+    } else if (_focusNode.hasFocus) {
+      _imeBridge.attach();
+    }
+  }
+
+  late MarkdownViewMode _lastMarkdownMode; // initState 里赋值:late 初始化器是第一次读取时才跑,那时已经是新值了
+
   void _onAppearanceChanged() {
+    if (mounted && _lastMarkdownMode != _appearance.markdownMode) {
+      _lastMarkdownMode = _appearance.markdownMode;
+      setState(() {}); // Markdown 显示方式变了
+      _syncImeForMode();
+    }
     if (_appearance.fontSize == _measuredFontSize) return;
     _measureCharWidth();
     for (final p in _linePainters.values) {
@@ -183,6 +216,7 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
     _initController();
     _initScrollControllers();
     _measureCharWidth();
+    _lastMarkdownMode = _appearance.markdownMode;
     _appearance.addListener(_onAppearanceChanged);
 
     _imeBridge = ImeTextInputBridge(
@@ -192,7 +226,7 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
 
     _focusNode.addListener(() {
       if (_focusNode.hasFocus) {
-        _imeBridge.attach();
+        if (!_previewOnly) _imeBridge.attach();
       } else {
         _imeBridge.detach();
       }
@@ -375,6 +409,7 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
     if (widget.activeFile != oldWidget.activeFile) {
       _fetchDiffHunks();
       _activeHunkOverlay = null;
+      _syncImeForMode();
     }
 
     if (widget.secondaryTab != oldWidget.secondaryTab) {
@@ -444,6 +479,19 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
     final isAlt = HardwareKeyboard.instance.isAltPressed;
     final isCtrl = HardwareKeyboard.instance.isControlPressed;
     final isMeta = HardwareKeyboard.instance.isMetaPressed;
+
+    // 只看预览时编辑器不显示:除了关标签、保存,别的按键都不能落到看不见的文档上
+    if (isPrimary && _previewOnly) {
+      if (isCmd && event.logicalKey == LogicalKeyboardKey.keyW) {
+        widget.onCloseActiveTab != null ? widget.onCloseActiveTab!.call() : widget.onCloseTab(widget.activeFile);
+        return KeyEventResult.handled;
+      }
+      if (isCmd && event.logicalKey == LogicalKeyboardKey.keyS) {
+        widget.onSave?.call();
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
+    }
 
     // 书签:F3 开关、⌥F3 助记书签、⌃数字 跳到对应助记书签(与 IntelliJ 一致)。
     if (event.logicalKey == LogicalKeyboardKey.f3 && !isCmd && !isShift) {
@@ -738,7 +786,7 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
             Expanded(
               child: widget.specialTabBuilder?.call(widget.activeFile) ??
                   (!isSplit
-                      ? primary()
+                      ? _markdownAware(primary)
                       : widget.splitDirection == SplitDirection.horizontal
                           ? Row(
                               children: [
@@ -757,6 +805,70 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  /// Markdown 文件按选的显示方式摆:编辑器 / 编辑器 | 预览 / 预览。其它文件就是编辑器。
+  Widget _markdownAware(Widget Function() editor) {
+    final file = widget.activeFile;
+    if (!isMarkdownFile(file) || isSpecialTabId(file)) return editor();
+    Widget preview({required bool synced}) => MarkdownPreview(
+          key: ValueKey('markdown-preview-$file'),
+          controller: _controller,
+          filePath: file,
+          root: widget.apiClient?.rootPath ?? '',
+          scheme: _appearance.colorScheme,
+          syncWith: synced ? _verticalScroll : null,
+          onOpenFile: widget.onOpenFile,
+          env: widget.markdownEnv,
+        );
+    return switch (_appearance.markdownMode) {
+      MarkdownViewMode.editor => editor(),
+      MarkdownViewMode.preview => preview(synced: false),
+      MarkdownViewMode.split => Row(
+          children: [
+            Expanded(child: editor()),
+            Container(width: 1, color: IntelliJTheme.borderSubtle),
+            Expanded(child: preview(synced: true)),
+          ],
+        ),
+    };
+  }
+
+  /// 标签栏右边的三个按钮:Editor Only / Editor and Preview / Preview Only(只有 Markdown 文件才显示)。
+  Widget _markdownModeButtons() {
+    Widget button(MarkdownViewMode mode, IconData icon, String tip) {
+      final active = _appearance.markdownMode == mode;
+      return Tooltip(
+        message: tip,
+        waitDuration: const Duration(milliseconds: 400),
+        child: InkWell(
+          key: ValueKey('markdown-mode-${mode.name}'),
+          onTap: () => _appearance.setMarkdownMode(mode),
+          borderRadius: BorderRadius.circular(5),
+          child: Container(
+            width: 26,
+            height: 24,
+            alignment: Alignment.center,
+            decoration: active ? BoxDecoration(color: IntelliJTheme.hoverBg, borderRadius: BorderRadius.circular(5)) : null,
+            child: Icon(icon, size: 16, color: active ? IntelliJTheme.textHigh : IntelliJTheme.textMuted),
+          ),
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(right: 6),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          button(MarkdownViewMode.editor, Icons.notes, 'Editor Only'),
+          button(MarkdownViewMode.split, Icons.chrome_reader_mode_outlined, 'Editor and Preview'),
+          button(MarkdownViewMode.preview, Icons.visibility_outlined, 'Preview Only'),
+          const SizedBox(width: 4),
+          Container(width: 1, height: 16, color: IntelliJTheme.border),
+        ],
       ),
     );
   }
@@ -854,6 +966,7 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
               },
             ),
           ),
+          if (isMarkdownFile(widget.activeFile) && !isSpecialTabId(widget.activeFile)) _markdownModeButtons(),
           // Split Pane Action Icons
           Row(
             mainAxisSize: MainAxisSize.min,

@@ -8,6 +8,9 @@ enum BlameColorMode { none, author, age }
 /// Blame 注释栏里作者名的显示方式(View ▸ Names)。
 enum BlameNameMode { full, first, last, initials, email }
 
+/// Markdown 文件的显示方式(标签栏右边的三个按钮):只看源码、源码 | 预览、只看预览。
+enum MarkdownViewMode { editor, split, preview }
+
 /// 编辑器外观开关,所有标签页共用(与 IntelliJ 一样是编辑器级设置,不跟文件走)。
 class EditorAppearance extends ChangeNotifier {
   /// 编辑区字号(行高随之按比例变化)。
@@ -28,6 +31,7 @@ class EditorAppearance extends ChangeNotifier {
   bool _blameAuthor = true;
   BlameColorMode _blameColors = BlameColorMode.author;
   BlameNameMode _blameNames = BlameNameMode.full;
+  MarkdownViewMode _markdownMode = MarkdownViewMode.split;
 
   double get fontSize => _fontSize;
 
@@ -57,6 +61,13 @@ class EditorAppearance extends ChangeNotifier {
   BlameColorMode get blameColors => _blameColors;
   BlameNameMode get blameNames => _blameNames;
 
+  MarkdownViewMode get markdownMode => _markdownMode;
+
+  void setMarkdownMode(MarkdownViewMode mode) {
+    if (mode == _markdownMode) return;
+    _set(() => _markdownMode = mode);
+  }
+
   void setShowLineNumbers(bool v) => _set(() => _showLineNumbers = v);
   void setShowIndentGuides(bool v) => _set(() => _showIndentGuides = v);
   void setShowBreadcrumbs(bool v) => _set(() => _showBreadcrumbs = v);
@@ -73,6 +84,7 @@ class EditorAppearance extends ChangeNotifier {
         'blameAuthor': _blameAuthor,
         'blameColors': _blameColors.name,
         'blameNames': _blameNames.name,
+        'markdownMode': _markdownMode.name,
       };
 
   /// 读入设置文件里的值;缺的或类型不对的项保持当前值。
@@ -93,6 +105,7 @@ class EditorAppearance extends ChangeNotifier {
     }
     _blameColors = BlameColorMode.values.firstWhere((m) => m.name == j['blameColors'], orElse: () => _blameColors);
     _blameNames = BlameNameMode.values.firstWhere((m) => m.name == j['blameNames'], orElse: () => _blameNames);
+    _markdownMode = MarkdownViewMode.values.firstWhere((m) => m.name == j['markdownMode'], orElse: () => _markdownMode);
     notifyListeners();
   }
 
