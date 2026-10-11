@@ -153,6 +153,9 @@ void main() {
     final splitter = find.byWidgetPredicate((w) => w is MouseRegion && w.cursor == SystemMouseCursors.resizeColumn);
     expect(splitter, findsNWidgets(2));
     final rightSplitter = tester.getTopLeft(splitter.at(1)).dx > 640 ? splitter.at(1) : splitter.at(0);
+    // 分隔线窄(3px),紧贴面板;不在编辑区右边的错误条和面板之间留一条宽带
+    expect(tester.getSize(rightSplitter).width, 3);
+    expect(tester.getTopRight(rightSplitter).dx, tester.getTopLeft(structure).dx);
     await tester.drag(rightSplitter, const Offset(-100, 0));
     await tester.pump();
     expect(tester.getSize(structure).width, 380);
