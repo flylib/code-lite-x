@@ -106,6 +106,7 @@ cargo build --release --offline -p code-lite-app
 * `lib/features/bottom_tools/`：底部工具箱（`bottom_tools_widget.dart`），整合真实 Git 分支控制台与交互终端；
 * `lib/features/pull_requests/`：左侧 Pull Requests 工具窗（列表/筛选/详情）、PR 并排差异标签（行内评审评论、右键菜单）与 Timeline 标签；
 * `lib/features/build_tools/`：左侧构建工具窗（Maven 等）。项目根有插件声明的标记文件（pom.xml）时活动条才出现按钮；模块树 → Lifecycle → 任务，双击在新终端标签里运行（有 mvnw 用 `./mvnw`，子模块带 `-f`）；
+* `lib/features/tool_window/`：侧边工具窗的位置与标题栏。`LayoutStore` 里每个 `SideTool`（项目 / Commit / PR / 结构 / Opening Projects / 构建）可以放在左侧或右侧（`ToolSide`），每侧再分上 / 下两块（`ToolSlot`），上下都开着时拆分显示（`side_split_view.dart`）；标题栏 ⋮ ▸ 移动到 ▸ 四个位置。右活动条（`RightStripeWidget`）只在右侧有工具窗时才占宽。位置存在设置文件的 `layout` 里；
 * `lib/features/projects/`：左侧「Opening Projects」工具窗（打开的项目列表，点击切换，× 真正关闭）；
 * `lib/features/search/`：全局搜索模态框（`global_search_modal.dart`，支持 `Cmd+Shift+F` 快速唤起）。
 

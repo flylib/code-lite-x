@@ -45,7 +45,7 @@ import 'features/title_bar/operation_buttons.dart';
 import 'features/title_bar/project_dialogs.dart';
 import 'features/title_bar/project_menu.dart';
 import 'features/title_bar/title_bar_widget.dart';
-import 'features/tool_window/left_split_view.dart';
+import 'features/tool_window/side_split_view.dart';
 import 'features/tool_window/tool_window_actions.dart';
 
 /// 应用根:建 store,挂 scope,之后不再持有可变 UI 状态。
@@ -221,79 +221,18 @@ class _Workbench extends StatelessWidget {
                         buildToolTitle: buildTools.hasProjects ? buildTools.title : null,
                         leftTool: layout.leftTool,
                         isLeftOpen: layout.isLeftOpen,
-                        visibleLeftTools: layout.visibleLeftTools,
+                        visibleTools: layout.visibleTools,
                         slotOf: layout.slotOf,
+                        sideOf: layout.sideOf,
                         bottomTab: layout.bottomTab,
                         isBottomOpen: layout.isBottomOpen,
-                        onSelectLeftTool: layout.selectLeftTool,
+                        onSelectTool: layout.selectTool,
                         onSelectBottomTab: layout.selectBottomTab,
                       ),
                     ),
 
                     // 左工具窗:layout 决定显示哪个(上下两块各一个时拆分显示),workspace 提供数据。
-                    ListenableBuilder(
-                      listenable: layout,
-                      builder: (context, _) {
-                        final top = layout.visibleTopTool;
-                        final bottom = layout.visibleBottomTool;
-                        if (top == null && bottom == null) return const SizedBox.shrink();
-                        Widget panelFor(LeftTool tool) => ToolWindowScope(
-                              key: ValueKey(tool),
-                              tool: tool,
-                              layout: layout,
-                              child: ListenableBuilder(
-                                listenable: workspace,
-                                builder: (context, _) => switch (tool) {
-                                  LeftTool.project => ProjectExplorerWidget(
-                                      treeData: workspace.tree,
-                                      activeFilePath: workspace.activeFile,
-                                      onSelectFile: workspace.openFile,
-                                      onLoadChildren: client.listDirectory,
-                                    ),
-                                  LeftTool.commit => CommitPanel(
-                                      key: ValueKey(workspace.rootPath),
-                                      client: client,
-                                      onOpenDiff: workspace.openDiff,
-                                      onOpenFile: workspace.openFile,
-                                      onCommitted: gitLog.refresh,
-                                      onFilesReverted: sessions.reloadFromDisk,
-                                    ),
-                                  LeftTool.pullRequests => PullRequestsPanel(
-                                      store: prs,
-                                      onOpenDiff: (number, path) {
-                                        prs.session(number).showFile(path);
-                                        workspace.openSpecial('$prDiffTabPrefix$number');
-                                      },
-                                      onOpenTimeline: (number) => workspace.openSpecial('$prTimelineTabPrefix$number'),
-                                    ),
-                                  LeftTool.structure => StructureWidget(
-                                      activeFile: workspace.activeFile,
-                                      outline: workspace.outline,
-                                      onSelectSymbol: (sym) => workspace.selectSymbol(sym['name'] as String?),
-                                    ),
-                                  LeftTool.openProjects => OpenProjectsPanel(
-                                      manager: manager,
-                                      home: io.homeDirectory(),
-                                      onSwitch: (p) => manager.activate(p),
-                                      onClose: (p) => _closeProject(context, manager, p),
-                                      onCloseOthers: (p) => _closeOtherProjects(context, manager, p),
-                                      onOpenFolder: () => _openFolder(context, manager),
-                                    ),
-                                  LeftTool.build => BuildToolsPanel(store: buildTools, onOpenFile: workspace.openFile),
-                                },
-                              ),
-                            );
-                        final panel = top != null && bottom != null
-                            ? LeftSplitView(layout: layout, top: panelFor(top), bottom: panelFor(bottom))
-                            : panelFor(top ?? bottom!);
-                        return Row(
-                          children: [
-                            SizedBox(width: layout.leftWidth, child: panel),
-                            _SideResizeHandle(layout: layout),
-                          ],
-                        );
-                      },
-                    ),
+                    _sideDock(ToolSide.left, layout, workspace, sessions),
 
                     // 中间:编辑区 + 底部工具窗。
                     Expanded(
@@ -324,6 +263,19 @@ class _Workbench extends StatelessWidget {
                         ],
                       ),
                     ),
+
+                    // 右工具窗与右活动条:只有把工具窗移到右侧才会出现。
+                    _sideDock(ToolSide.right, layout, workspace, sessions),
+                    ListenableBuilder(
+                      listenable: Listenable.merge([layout, buildTools]),
+                      builder: (context, _) => RightStripeWidget(
+                        buildToolTitle: buildTools.hasProjects ? buildTools.title : null,
+                        visibleTools: layout.visibleTools,
+                        sideOf: layout.sideOf,
+                        slotOf: layout.slotOf,
+                        onSelectTool: layout.selectTool,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -343,6 +295,71 @@ class _Workbench extends StatelessWidget {
         ),
       ),
       ),
+    );
+  }
+
+  /// [side] 一侧的工具窗区域:上下两块各开一个时拆分显示;没有开着的就不占地方。
+  /// layout 决定显示哪个,workspace 提供数据。
+  Widget _sideDock(ToolSide side, LayoutStore layout, WorkspaceStore workspace, EditorSessionManager sessions) {
+    return ListenableBuilder(
+      listenable: layout,
+      builder: (context, _) {
+        final top = layout.visibleTool(side, ToolSlot.top);
+        final bottom = layout.visibleTool(side, ToolSlot.bottom);
+        if (top == null && bottom == null) return const SizedBox.shrink();
+        Widget panelFor(SideTool tool) => ToolWindowScope(
+              key: ValueKey(tool),
+              tool: tool,
+              layout: layout,
+              child: ListenableBuilder(
+                listenable: workspace,
+                builder: (context, _) => switch (tool) {
+                          SideTool.project => ProjectExplorerWidget(
+                              treeData: workspace.tree,
+                              activeFilePath: workspace.activeFile,
+                              onSelectFile: workspace.openFile,
+                              onLoadChildren: client.listDirectory,
+                            ),
+                          SideTool.commit => CommitPanel(
+                              key: ValueKey(workspace.rootPath),
+                              client: client,
+                              onOpenDiff: workspace.openDiff,
+                              onOpenFile: workspace.openFile,
+                              onCommitted: gitLog.refresh,
+                              onFilesReverted: sessions.reloadFromDisk,
+                            ),
+                          SideTool.pullRequests => PullRequestsPanel(
+                              store: prs,
+                              onOpenDiff: (number, path) {
+                                prs.session(number).showFile(path);
+                                workspace.openSpecial('$prDiffTabPrefix$number');
+                              },
+                              onOpenTimeline: (number) => workspace.openSpecial('$prTimelineTabPrefix$number'),
+                            ),
+                          SideTool.structure => StructureWidget(
+                              activeFile: workspace.activeFile,
+                              outline: workspace.outline,
+                              onSelectSymbol: (sym) => workspace.selectSymbol(sym['name'] as String?),
+                            ),
+                          SideTool.openProjects => OpenProjectsPanel(
+                              manager: manager,
+                              home: io.homeDirectory(),
+                              onSwitch: (p) => manager.activate(p),
+                              onClose: (p) => _closeProject(context, manager, p),
+                              onCloseOthers: (p) => _closeOtherProjects(context, manager, p),
+                              onOpenFolder: () => _openFolder(context, manager),
+                            ),
+                          SideTool.build => BuildToolsPanel(store: buildTools, onOpenFile: workspace.openFile),
+                },
+              ),
+            );
+        final panel = top != null && bottom != null
+            ? SideSplitView(layout: layout, side: side, top: panelFor(top), bottom: panelFor(bottom))
+            : panelFor(top ?? bottom!);
+        final handle = _SideResizeHandle(layout: layout, side: side);
+        final sized = SizedBox(width: layout.widthOf(side), child: panel);
+        return Row(children: side == ToolSide.left ? [sized, handle] : [handle, sized]);
+      },
     );
   }
 
@@ -787,12 +804,13 @@ class _BottomResizeHandle extends StatelessWidget {
   }
 }
 
-/// 左侧工具窗与编辑区之间的分隔线:1px 线条,左右拖动调整工具窗宽度(与 IntelliJ 一致)。
-/// 命中区比线条宽,方便抓取;悬停 / 拖动时高亮。
+/// 侧边工具窗与编辑区之间的分隔线:1px 线条,左右拖动调整工具窗宽度(与 IntelliJ 一致)。
+/// 命中区比线条宽,方便抓取;悬停 / 拖动时高亮。右侧的工具窗在编辑区右边,线条贴着工具窗那一边,拖动方向相反。
 class _SideResizeHandle extends StatefulWidget {
-  const _SideResizeHandle({required this.layout});
+  const _SideResizeHandle({required this.layout, required this.side});
 
   final LayoutStore layout;
+  final ToolSide side;
 
   @override
   State<_SideResizeHandle> createState() => _SideResizeHandleState();
@@ -805,6 +823,8 @@ class _SideResizeHandleState extends State<_SideResizeHandle> {
   @override
   Widget build(BuildContext context) {
     final active = _hot || _dragging;
+    final left = widget.side == ToolSide.left;
+    final layout = widget.layout;
     return MouseRegion(
       cursor: SystemMouseCursors.resizeColumn,
       onEnter: (_) => setState(() => _hot = true),
@@ -815,14 +835,17 @@ class _SideResizeHandleState extends State<_SideResizeHandle> {
         onHorizontalDragEnd: (_) => setState(() => _dragging = false),
         onHorizontalDragCancel: () => setState(() => _dragging = false),
         onHorizontalDragUpdate: (d) {
-          // 编辑区至少留 300px(再扣掉左活动条)。
-          final max = MediaQuery.sizeOf(context).width - 300 - IntelliJMetrics.activityStripe;
-          widget.layout.resizeLeft(widget.layout.leftWidth + d.delta.dx, maxWidth: max);
+          // 编辑区至少留 300px(再扣掉活动条;右活动条有按钮才占宽;另一侧开着的话也扣掉它的宽度)。
+          final other = left ? ToolSide.right : ToolSide.left;
+          final stripes = IntelliJMetrics.activityStripe * (layout.hasToolsOn(ToolSide.right) ? 2 : 1);
+          final otherWidth = layout.isSideOpen(other) ? layout.widthOf(other) + 5 : 0;
+          final max = MediaQuery.sizeOf(context).width - 300 - stripes - otherWidth;
+          layout.resizeSide(widget.side, layout.widthOf(widget.side) + (left ? d.delta.dx : -d.delta.dx), maxWidth: max);
         },
         child: Container(
           width: 5,
           color: IntelliJTheme.editorBg,
-          alignment: Alignment.centerLeft,
+          alignment: left ? Alignment.centerLeft : Alignment.centerRight,
           child: Container(
             width: active ? 2 : 1,
             color: active ? IntelliJTheme.accentBlue : IntelliJTheme.borderSubtle,

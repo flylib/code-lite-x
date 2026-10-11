@@ -2,12 +2,26 @@ import 'package:flutter/foundation.dart';
 
 import '../../features/bottom_tools/bottom_tools_widget.dart';
 
-/// 左侧工具窗(活动条上半段选择的那一栏)。
-enum LeftTool { project, commit, pullRequests, structure, openProjects, build }
+/// 侧边工具窗(活动条上半段的那些按钮):可以放在左侧或右侧,每一侧再分上下两块。
+enum SideTool { project, commit, pullRequests, structure, openProjects, build }
 
-/// 左侧工具窗放在哪一块(IntelliJ 的 Move To ▸ Left Top / Left Bottom):
-/// 上下两块各开一个时,左栏上下拆分同时显示。
+/// 工具窗停靠在哪一侧(IntelliJ 的 Move To ▸ Left / Right)。
+enum ToolSide { left, right }
+
+/// 工具窗放在一侧的哪一块(Top / Bottom):上下两块各开一个时,这一侧上下拆分同时显示。
 enum ToolSlot { top, bottom }
+
+/// 一侧的状态:上下两块各自最近选中的工具窗、开没开、拆分比例和宽度。
+class _Dock {
+  _Dock({required this.width});
+
+  SideTool? top;
+  bool topOpen = false;
+  SideTool? bottom;
+  bool bottomOpen = false;
+  double split = 0.5;
+  double width;
+}
 
 /// 面板显隐与选中项。只放"哪个面板开着、选中了什么",
 /// 不放文件内容 —— 那些在 [WorkspaceStore] 与 EditorSessionManager 里。
@@ -15,75 +29,82 @@ enum ToolSlot { top, bottom }
 /// 拆成独立 store 的原因:敲一个字符不应该重建项目树和底部日志。
 /// 布局变化和编辑变化各自通知各自的订阅者。
 class LayoutStore extends ChangeNotifier {
-  LeftTool _leftTool = LeftTool.project;
   BottomToolTab _bottomTab = BottomToolTab.git;
-  bool _isLeftOpen = true;
   // 底部工具窗默认收起:打开 Git 窗口会立刻跑 git log,不该为用户还没要看的面板付这个代价。
   bool _isBottomOpen = false;
   double _bottomHeight = 300;
-  double _leftWidth = 250;
 
-  /// 放到左下方的工具窗;不在里面的都在左上方。
-  final Set<LeftTool> _bottomSlot = {};
-  LeftTool? _leftBottomTool;
-  bool _isLeftBottomOpen = false;
+  /// 左侧默认开着项目视图;右侧默认什么都没有。
+  final _Dock _left = _Dock(width: 250)
+    ..top = SideTool.project
+    ..topOpen = true;
+  final _Dock _right = _Dock(width: 280);
 
-  /// 上下拆分时上半块占的比例。
-  double _leftSplit = 0.5;
+  /// 不在默认位置(左上方)的工具窗放哪了。
+  final Map<SideTool, (ToolSide, ToolSlot)> _placed = {};
 
-  /// 左侧工具窗(项目 / Commit / 结构)共用一个宽度,拖动分隔线调整;切换工具窗时不跳变。
-  static const double minLeftWidth = 160;
+  /// 侧边工具窗(项目 / Commit / 结构 ……)每一侧共用一个宽度,拖动分隔线调整;切换工具窗时不跳变。
+  static const double minSideWidth = 160;
 
   /// 底部工具窗高度,拖动分隔条调整。Git Log 这类视图在 220 高度下只看得到几行。
   static const double minBottomHeight = 140;
 
   /// 上下拆分时每块至少占的比例。
-  static const double minLeftSplit = 0.15;
+  static const double minSplit = 0.15;
+
+  _Dock _dock(ToolSide side) => side == ToolSide.left ? _left : _right;
+  (ToolSide, ToolSlot) _placeOf(SideTool tool) => _placed[tool] ?? (ToolSide.left, ToolSlot.top);
 
   /// 左上方最近选中的工具窗([isLeftOpen] 为假时不显示)。
-  LeftTool get leftTool => _leftTool;
+  SideTool get leftTool => _left.top ?? SideTool.project;
   BottomToolTab get bottomTab => _bottomTab;
 
   /// 左上方那块开着。
-  bool get isLeftOpen => _isLeftOpen;
+  bool get isLeftOpen => _left.topOpen;
 
-  LeftTool? get leftBottomTool => _leftBottomTool;
-  bool get isLeftBottomOpen => _isLeftBottomOpen && _leftBottomTool != null;
-  double get leftSplit => _leftSplit;
+  ToolSide sideOf(SideTool tool) => _placeOf(tool).$1;
+  ToolSlot slotOf(SideTool tool) => _placeOf(tool).$2;
 
-  ToolSlot slotOf(LeftTool tool) => _bottomSlot.contains(tool) ? ToolSlot.bottom : ToolSlot.top;
+  /// [side] 一侧的 [slot] 那块正在显示的工具窗。
+  SideTool? visibleTool(ToolSide side, ToolSlot slot) {
+    final d = _dock(side);
+    final (tool, open) = slot == ToolSlot.top ? (d.top, d.topOpen) : (d.bottom, d.bottomOpen);
+    return open && tool != null && _placeOf(tool) == (side, slot) ? tool : null;
+  }
 
-  /// 左上方正在显示的工具窗。
-  LeftTool? get visibleTopTool => _isLeftOpen && slotOf(_leftTool) == ToolSlot.top ? _leftTool : null;
-
-  /// 左下方正在显示的工具窗。
-  LeftTool? get visibleBottomTool => isLeftBottomOpen && slotOf(_leftBottomTool!) == ToolSlot.bottom ? _leftBottomTool : null;
-
-  /// 正在显示的左侧工具窗(上下拆分时两个)。
-  Set<LeftTool> get visibleLeftTools => {
-        if (visibleTopTool case final t?) t,
-        if (visibleBottomTool case final t?) t,
+  /// 正在显示的侧边工具窗(每块各一个,最多四个)。
+  Set<SideTool> get visibleTools => {
+        for (final side in ToolSide.values)
+          for (final slot in ToolSlot.values)
+            if (visibleTool(side, slot) case final t?) t,
       };
 
-  bool isLeftToolVisible(LeftTool tool) => visibleTopTool == tool || visibleBottomTool == tool;
+  bool isToolVisible(SideTool tool) => visibleTools.contains(tool);
 
-  /// 左栏有东西显示(上、下任一块)。
-  bool get isAnyLeftOpen => visibleTopTool != null || visibleBottomTool != null;
+  /// [side] 一侧有东西显示(上、下任一块)。
+  bool isSideOpen(ToolSide side) => visibleTool(side, ToolSlot.top) != null || visibleTool(side, ToolSlot.bottom) != null;
+
+  /// [side] 一侧有没有被放了工具窗(右侧活动条只在有的时候才出现)。
+  bool hasToolsOn(ToolSide side) => SideTool.values.any((t) => sideOf(t) == side);
+
+  double splitOf(ToolSide side) => _dock(side).split;
+  double widthOf(ToolSide side) => _dock(side).width;
+
   bool get isBottomOpen => _isBottomOpen;
   double get bottomHeight => _bottomHeight;
-  double get leftWidth => _leftWidth;
 
   /// [maxWidth] 由调用方按窗口宽度给出,保证编辑区始终留有空间。
-  void resizeLeft(double width, {required double maxWidth}) {
-    final clamped = width.clamp(minLeftWidth, maxWidth < minLeftWidth ? minLeftWidth : maxWidth);
-    if (clamped == _leftWidth) return;
-    _leftWidth = clamped;
+  void resizeSide(ToolSide side, double width, {required double maxWidth}) {
+    final d = _dock(side);
+    final clamped = width.clamp(minSideWidth, maxWidth < minSideWidth ? minSideWidth : maxWidth);
+    if (clamped == d.width) return;
+    d.width = clamped;
     notifyListeners();
   }
 
   /// 再点一次当前工具会收起它所在的那块 —— 与 IntelliJ 的行为一致。
-  void selectLeftTool(LeftTool tool) {
-    if (isLeftToolVisible(tool)) {
+  void selectTool(SideTool tool) {
+    if (isToolVisible(tool)) {
       _hide(tool);
     } else {
       _show(tool);
@@ -91,73 +112,99 @@ class LayoutStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 打开左侧的某个工具窗;已经开着就保持开着(菜单项「Commit…」用,不像点图标那样会收起)。
-  void showLeftTool(LeftTool tool) {
-    if (isLeftToolVisible(tool)) return;
+  /// 打开某个工具窗;已经开着就保持开着(菜单项「Commit…」用,不像点图标那样会收起)。
+  void showTool(SideTool tool) {
+    if (isToolVisible(tool)) return;
     _show(tool);
     notifyListeners();
   }
 
   /// 收起这个工具窗(标题栏的「—」)。
-  void hideLeftTool(LeftTool tool) {
-    if (!isLeftToolVisible(tool)) return;
+  void hideTool(SideTool tool) {
+    if (!isToolVisible(tool)) return;
     _hide(tool);
     notifyListeners();
   }
 
-  /// 把工具窗移到左上方 / 左下方。开着的话在新位置接着显示(顶替那块原来的工具窗)。
-  void moveLeftTool(LeftTool tool, ToolSlot slot) {
-    if (slotOf(tool) == slot) return;
-    final wasVisible = isLeftToolVisible(tool);
+  /// 把工具窗移到 [side] 一侧的 [slot] 那块。开着的话在新位置接着显示(顶替那块原来的工具窗)。
+  void moveTool(SideTool tool, ToolSide side, ToolSlot slot) {
+    if (_placeOf(tool) == (side, slot)) return;
+    final wasVisible = isToolVisible(tool);
     if (wasVisible) _hide(tool);
-    slot == ToolSlot.bottom ? _bottomSlot.add(tool) : _bottomSlot.remove(tool);
+    if ((side, slot) == (ToolSide.left, ToolSlot.top)) {
+      _placed.remove(tool);
+    } else {
+      _placed[tool] = (side, slot);
+    }
     if (wasVisible) _show(tool);
     notifyListeners();
   }
 
-  /// 拖动上下两块之间的分隔条。
-  void resizeLeftSplit(double fraction) {
-    final clamped = fraction.clamp(minLeftSplit, 1 - minLeftSplit);
-    if (clamped == _leftSplit) return;
-    _leftSplit = clamped;
+  /// 拖动 [side] 一侧上下两块之间的分隔条。
+  void resizeSplit(ToolSide side, double fraction) {
+    final d = _dock(side);
+    final clamped = fraction.clamp(minSplit, 1 - minSplit);
+    if (clamped == d.split) return;
+    d.split = clamped;
     notifyListeners();
   }
 
-  void _show(LeftTool tool) {
-    if (slotOf(tool) == ToolSlot.bottom) {
-      _leftBottomTool = tool;
-      _isLeftBottomOpen = true;
+  void _show(SideTool tool) {
+    final (side, slot) = _placeOf(tool);
+    final d = _dock(side);
+    if (slot == ToolSlot.bottom) {
+      d.bottom = tool;
+      d.bottomOpen = true;
     } else {
-      _leftTool = tool;
-      _isLeftOpen = true;
+      d.top = tool;
+      d.topOpen = true;
     }
   }
 
-  void _hide(LeftTool tool) {
-    if (visibleTopTool == tool) _isLeftOpen = false;
-    if (visibleBottomTool == tool) _isLeftBottomOpen = false;
+  void _hide(SideTool tool) {
+    for (final side in ToolSide.values) {
+      final d = _dock(side);
+      if (visibleTool(side, ToolSlot.top) == tool) d.topOpen = false;
+      if (visibleTool(side, ToolSlot.bottom) == tool) d.bottomOpen = false;
+    }
   }
 
-  /// 要记住的布局(放在左下方的工具窗、拆分比例),存进设置文件。
-  Map<String, dynamic> toJson() => {
-        'leftBottomTools': [for (final t in LeftTool.values) if (_bottomSlot.contains(t)) t.name],
-        'leftSplit': (_leftSplit * 100).round() / 100,
-      };
+  /// 要记住的布局(工具窗放在哪一侧哪一块、拆分比例),存进设置文件。
+  Map<String, dynamic> toJson() {
+    List<String> placedAt(ToolSide side, ToolSlot slot) => [
+          for (final t in SideTool.values)
+            if (_placeOf(t) == (side, slot)) t.name,
+        ];
+    return {
+      // 左上方是默认位置,不用存
+      'leftBottomTools': placedAt(ToolSide.left, ToolSlot.bottom),
+      'leftSplit': (_left.split * 100).round() / 100,
+      'rightTopTools': placedAt(ToolSide.right, ToolSlot.top),
+      'rightBottomTools': placedAt(ToolSide.right, ToolSlot.bottom),
+      'rightSplit': (_right.split * 100).round() / 100,
+    };
+  }
 
   void applyJson(Map<String, dynamic> j) {
-    _bottomSlot
-      ..clear()
-      ..addAll([
-        for (final n in (j['leftBottomTools'] as List? ?? const []))
-          if (LeftTool.values.where((t) => t.name == n).firstOrNull case final t?) t,
-      ]);
-    final split = j['leftSplit'];
-    if (split is num) _leftSplit = split.toDouble().clamp(minLeftSplit, 1 - minLeftSplit);
-    // 默认打开的项目视图被移到了左下方:在下面打开它,上面空着
-    if (slotOf(_leftTool) == ToolSlot.bottom && _isLeftOpen) {
-      _isLeftOpen = false;
-      _leftBottomTool = _leftTool;
-      _isLeftBottomOpen = true;
+    _placed.clear();
+    void read(String key, ToolSide side, ToolSlot slot) {
+      for (final n in (j[key] as List? ?? const [])) {
+        if (SideTool.values.where((t) => t.name == n).firstOrNull case final t?) _placed[t] = (side, slot);
+      }
+    }
+
+    read('leftBottomTools', ToolSide.left, ToolSlot.bottom);
+    read('rightTopTools', ToolSide.right, ToolSlot.top);
+    read('rightBottomTools', ToolSide.right, ToolSlot.bottom);
+    for (final (key, dock) in [('leftSplit', _left), ('rightSplit', _right)]) {
+      final split = j[key];
+      if (split is num) dock.split = split.toDouble().clamp(minSplit, 1 - minSplit);
+    }
+    // 默认打开的项目视图被移走了:在新位置打开它,左上方空着
+    final open = _left.top;
+    if (open != null && _left.topOpen && _placeOf(open) != (ToolSide.left, ToolSlot.top)) {
+      _left.topOpen = false;
+      _show(open);
     }
     notifyListeners();
   }

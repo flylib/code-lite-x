@@ -9,11 +9,11 @@ Widget _stripe({bool notification = false}) => MaterialApp(
         body: Row(
           children: [
             ActivityStripeWidget(
-              leftTool: LeftTool.project,
+              leftTool: SideTool.project,
               isLeftOpen: true,
               bottomTab: BottomToolTab.terminal,
               isBottomOpen: false,
-              onSelectLeftTool: (_) {},
+              onSelectTool: (_) {},
               onSelectBottomTab: (_) {},
               hasNotification: notification,
             ),

@@ -6,7 +6,7 @@ import '../../core/theme/intellij_theme.dart';
 import '../bottom_tools/bottom_tools_widget.dart';
 import 'stripe_button.dart';
 
-export '../../core/state/layout_store.dart' show LeftTool, ToolSlot;
+export '../../core/state/layout_store.dart' show SideTool, ToolSide, ToolSlot;
 
 /// 左侧活动条。上半段切左侧工具窗,下半段切底部工具窗(IntelliJ 布局),最下面是调试和通知。设置在菜单里(⌘,)。
 ///
@@ -19,19 +19,20 @@ class ActivityStripeWidget extends StatelessWidget {
     required this.isLeftOpen,
     required this.bottomTab,
     required this.isBottomOpen,
-    required this.onSelectLeftTool,
+    required this.onSelectTool,
     required this.onSelectBottomTab,
     this.hasNotification = false,
     this.buildToolTitle,
-    this.visibleLeftTools,
+    this.visibleTools,
     this.slotOf,
+    this.sideOf,
   });
 
-  final LeftTool leftTool;
+  final SideTool leftTool;
   final bool isLeftOpen;
   final BottomToolTab bottomTab;
   final bool isBottomOpen;
-  final ValueChanged<LeftTool> onSelectLeftTool;
+  final ValueChanged<SideTool> onSelectTool;
   final ValueChanged<BottomToolTab> onSelectBottomTab;
 
   /// 通知按钮上的小黄点。
@@ -41,49 +42,22 @@ class ActivityStripeWidget extends StatelessWidget {
   final String? buildToolTitle;
 
   /// 正在显示的左侧工具窗(上下拆分时可能有两个);null 时按 [leftTool] / [isLeftOpen] 判断。
-  final Set<LeftTool>? visibleLeftTools;
+  final Set<SideTool>? visibleTools;
 
   /// 工具窗放在左上方还是左下方;放在左下方的按钮排在分隔线下面(IntelliJ 的做法)。null 时都在上方。
-  final ToolSlot Function(LeftTool tool)? slotOf;
+  final ToolSlot Function(SideTool tool)? slotOf;
 
-  bool _isVisible(LeftTool tool) => visibleLeftTools?.contains(tool) ?? (isLeftOpen && leftTool == tool);
+  /// 工具窗停靠在哪一侧;放到右侧的不在这条活动条上(在 [RightStripeWidget])。null 时都在左侧。
+  final ToolSide Function(SideTool tool)? sideOf;
+
+  bool _isVisible(SideTool tool) => visibleTools?.contains(tool) ?? (isLeftOpen && leftTool == tool);
 
   /// 某一块([slot])的左侧工具窗按钮,按钮之间留 6px。
-  List<Widget> _leftButtons(ToolSlot slot) {
-    final buttons = <Widget>[
-      for (final tool in LeftTool.values)
-        if ((slotOf?.call(tool) ?? ToolSlot.top) == slot)
-          if (_button(tool) case final b?) b,
-    ];
-    return [
-      for (var i = 0; i < buttons.length; i++) ...[if (i > 0) const SizedBox(height: 6), buttons[i]],
-    ];
-  }
-
-  Widget? _button(LeftTool tool) {
-    final active = _isVisible(tool);
-    void tap() => onSelectLeftTool(tool);
-    return switch (tool) {
-      LeftTool.project => StripeButton(icon: Icons.folder_outlined, tooltip: '项目 (⌘1)', isActive: active, onTap: tap),
-      LeftTool.commit => StripeButton(icon: Icons.task_alt, tooltip: 'Commit (⌘0)', isActive: active, onTap: tap),
-      LeftTool.pullRequests => StripeButton(
-          iconBuilder: (color, size) => PullRequestIcon(color: color, size: size),
-          tooltip: 'Pull Requests',
-          isActive: active,
-          onTap: tap,
-        ),
-      LeftTool.structure => StripeButton(icon: Icons.account_tree_outlined, tooltip: '结构 (⌘7)', isActive: active, onTap: tap),
-      LeftTool.openProjects => StripeButton(icon: Icons.layers_outlined, tooltip: 'Opening Projects', isActive: active, onTap: tap),
-      LeftTool.build => buildToolTitle == null
-          ? null
-          : StripeButton(
-              iconBuilder: (color, size) => BuildToolIcon(color: color, size: size),
-              tooltip: buildToolTitle!,
-              isActive: active,
-              onTap: tap,
-            ),
-    };
-  }
+  List<Widget> _leftButtons(ToolSlot slot) => spacedButtons([
+        for (final tool in SideTool.values)
+          if ((sideOf?.call(tool) ?? ToolSide.left) == ToolSide.left && (slotOf?.call(tool) ?? ToolSlot.top) == slot)
+            sideToolButton(tool, active: _isVisible(tool), onTap: () => onSelectTool(tool), buildToolTitle: buildToolTitle),
+      ]);
 
   @override
   Widget build(BuildContext context) {
@@ -142,6 +116,85 @@ class ActivityStripeWidget extends StatelessWidget {
             onTap: () {},
           ),
           // 设置在菜单里:CodeLiteX ▸ Settings…(⌘,)。
+        ],
+      ),
+    );
+  }
+}
+
+/// 侧边工具窗在活动条上的按钮;[SideTool.build] 在项目里没有构建工具时没有按钮(null)。
+Widget? sideToolButton(SideTool tool, {required bool active, required VoidCallback onTap, String? buildToolTitle}) {
+  return switch (tool) {
+    SideTool.project => StripeButton(icon: Icons.folder_outlined, tooltip: '项目 (⌘1)', isActive: active, onTap: onTap),
+    SideTool.commit => StripeButton(icon: Icons.task_alt, tooltip: 'Commit (⌘0)', isActive: active, onTap: onTap),
+    SideTool.pullRequests => StripeButton(
+        iconBuilder: (color, size) => PullRequestIcon(color: color, size: size),
+        tooltip: 'Pull Requests',
+        isActive: active,
+        onTap: onTap,
+      ),
+    SideTool.structure => StripeButton(icon: Icons.account_tree_outlined, tooltip: '结构 (⌘7)', isActive: active, onTap: onTap),
+    SideTool.openProjects => StripeButton(icon: Icons.layers_outlined, tooltip: 'Opening Projects', isActive: active, onTap: onTap),
+    SideTool.build => buildToolTitle == null
+        ? null
+        : StripeButton(
+            iconBuilder: (color, size) => BuildToolIcon(color: color, size: size),
+            tooltip: buildToolTitle,
+            isActive: active,
+            onTap: onTap,
+          ),
+  };
+}
+
+/// 按钮之间留 6px;null(没有按钮的工具窗)跳过。
+List<Widget> spacedButtons(Iterable<Widget?> buttons) {
+  final list = [for (final b in buttons) if (b != null) b];
+  return [
+    for (var i = 0; i < list.length; i++) ...[if (i > 0) const SizedBox(height: 6), list[i]],
+  ];
+}
+
+/// 右活动条:只放停靠在右侧的工具窗按钮,上方一组、分隔线、下方一组;右侧没有工具窗时整条不显示。
+class RightStripeWidget extends StatelessWidget {
+  const RightStripeWidget({
+    super.key,
+    required this.visibleTools,
+    required this.sideOf,
+    required this.slotOf,
+    required this.onSelectTool,
+    this.buildToolTitle,
+  });
+
+  final Set<SideTool> visibleTools;
+  final ToolSide Function(SideTool tool) sideOf;
+  final ToolSlot Function(SideTool tool) slotOf;
+  final ValueChanged<SideTool> onSelectTool;
+  final String? buildToolTitle;
+
+  List<Widget> _buttons(ToolSlot slot) => spacedButtons([
+        for (final tool in SideTool.values)
+          if (sideOf(tool) == ToolSide.right && slotOf(tool) == slot)
+            sideToolButton(tool, active: visibleTools.contains(tool), onTap: () => onSelectTool(tool), buildToolTitle: buildToolTitle),
+      ]);
+
+  @override
+  Widget build(BuildContext context) {
+    final upper = _buttons(ToolSlot.top);
+    final lower = _buttons(ToolSlot.bottom);
+    if (upper.isEmpty && lower.isEmpty) return const SizedBox.shrink();
+    return Container(
+      width: IntelliJMetrics.activityStripe,
+      decoration: const BoxDecoration(
+        color: IntelliJTheme.stripeBg,
+        border: Border(left: BorderSide(color: IntelliJTheme.borderSubtle)),
+      ),
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Column(
+        children: [
+          ...upper,
+          if (upper.isNotEmpty && lower.isNotEmpty)
+            Container(width: 20, height: 1, margin: const EdgeInsets.symmetric(vertical: 8), color: IntelliJTheme.border),
+          ...lower,
         ],
       ),
     );

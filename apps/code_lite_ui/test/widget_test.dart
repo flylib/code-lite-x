@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:code_lite_ui/features/title_bar/project_menu.dart';
 import 'package:code_lite_ui/app.dart';
+import 'package:code_lite_ui/features/activity_stripe/activity_stripe_widget.dart';
 
 void main() {
   testWidgets('CodeLiteApp basic layout renders correctly', (WidgetTester tester) async {
@@ -113,5 +114,55 @@ void main() {
     await tester.tap(find.byTooltip('项目 (⌘1)'));
     await tester.pump();
     expect(tester.getSize(panel).width, 160);
+  });
+
+  testWidgets('a tool window moved to the right side docks right of the editor, with its own stripe and resizable width', (WidgetTester tester) async {
+    // 拖动分隔线按窗口宽度算上限,所以要让 MediaQuery 也是 1280 宽(setSurfaceSize 只改渲染面)
+    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(const CodeLiteApp());
+    await tester.pump();
+    expect(find.byType(RightStripeWidget), findsOneWidget);
+    expect(tester.getSize(find.byType(RightStripeWidget)).width, 0, reason: '默认右侧没有工具窗,不占地方');
+
+    // 打开结构,再用 ⋮ ▸ 移动到 ▸ 右侧上方
+    await tester.tap(find.byTooltip('结构 (⌘7)'));
+    await tester.pump();
+    await tester.tap(find.byTooltip('选项'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('移动到'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('右侧上方'));
+    await tester.pumpAndSettle();
+
+    final structure = find.byType(StructureWidget);
+    expect(structure, findsOneWidget);
+    expect(tester.getTopLeft(structure).dx, greaterThan(640), reason: '在编辑区右边');
+    expect(tester.getTopRight(structure).dx, 1280 - 44, reason: '右活动条在最右');
+    expect(tester.getSize(structure).width, 280);
+    expect(find.byType(ProjectExplorerWidget), findsNothing, reason: '打开结构时顶替了左上方的项目视图,结构搬走后左边是空的');
+    await tester.tap(find.byTooltip('项目 (⌘1)'));
+    await tester.pump();
+    expect(find.byType(ProjectExplorerWidget), findsOneWidget, reason: '左右可以同时开着');
+    expect(structure, findsOneWidget);
+    expect(find.descendant(of: find.byType(RightStripeWidget), matching: find.byTooltip('结构 (⌘7)')), findsOneWidget);
+
+    // 拖右侧分隔线向左 = 变宽
+    final splitter = find.byWidgetPredicate((w) => w is MouseRegion && w.cursor == SystemMouseCursors.resizeColumn);
+    expect(splitter, findsNWidgets(2));
+    final rightSplitter = tester.getTopLeft(splitter.at(1)).dx > 640 ? splitter.at(1) : splitter.at(0);
+    await tester.drag(rightSplitter, const Offset(-100, 0));
+    await tester.pump();
+    expect(tester.getSize(structure).width, 380);
+    expect(tester.getSize(find.byType(ProjectExplorerWidget)).width, 250, reason: '左侧宽度不受影响');
+
+    // 点右活动条的按钮收起它,右活动条的按钮还在
+    await tester.tap(find.descendant(of: find.byType(RightStripeWidget), matching: find.byTooltip('结构 (⌘7)')));
+    await tester.pump();
+    expect(structure, findsNothing);
+    expect(find.descendant(of: find.byType(RightStripeWidget), matching: find.byTooltip('结构 (⌘7)')), findsOneWidget);
+    expect(splitter, findsOneWidget);
   });
 }

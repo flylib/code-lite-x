@@ -415,11 +415,11 @@ void main() {
       Widget stripe(String? title) => MaterialApp(
             home: Scaffold(
               body: ActivityStripeWidget(
-                leftTool: LeftTool.project,
+                leftTool: SideTool.project,
                 isLeftOpen: true,
                 bottomTab: BottomToolTab.git,
                 isBottomOpen: false,
-                onSelectLeftTool: (_) {},
+                onSelectTool: (_) {},
                 onSelectBottomTab: (_) {},
                 buildToolTitle: title,
               ),

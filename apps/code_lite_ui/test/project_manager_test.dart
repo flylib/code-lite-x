@@ -275,10 +275,10 @@ void main() {
   test('switching to a project without a build tool window closes the build panel instead of showing an empty one', () async {
     await manager.open(a);
     await manager.open(b);
-    layout.showLeftTool(LeftTool.build);
-    expect(layout.isLeftToolVisible(LeftTool.build), isTrue);
+    layout.showTool(SideTool.build);
+    expect(layout.isToolVisible(SideTool.build), isTrue);
     await manager.activate(manager.projects.first);
-    expect(layout.isLeftToolVisible(LeftTool.build), isFalse);
-    expect(layout.visibleTopTool, LeftTool.project);
+    expect(layout.isToolVisible(SideTool.build), isFalse);
+    expect(layout.visibleTool(ToolSide.left, ToolSlot.top), SideTool.project);
   });
 }

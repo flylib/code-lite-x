@@ -96,7 +96,7 @@ class ProjectContext {
       terminals: terminals,
       gitLog: GitLogStore(client),
       branches: branches,
-      branchActions: BranchActions(branches, showCommitWindow: () => layout.showLeftTool(LeftTool.commit)),
+      branchActions: BranchActions(branches, showCommitWindow: () => layout.showTool(SideTool.commit)),
       prs: PullRequestsStore(client),
       build: BuildToolsStore(
         plugins: services.plugins,
@@ -173,10 +173,10 @@ class ProjectContext {
   /// 窗口布局是共享的:切到别的项目后,开着的构建工具窗在新项目里没有对应内容,换回项目视图。
   void syncLayoutToProject() {
     if (build.hasProjects || build.loading) return;
-    if (!_layout.isLeftToolVisible(LeftTool.build)) return;
-    final wasTop = _layout.visibleTopTool == LeftTool.build;
-    _layout.hideLeftTool(LeftTool.build);
-    if (wasTop) _layout.showLeftTool(LeftTool.project);
+    if (!_layout.isToolVisible(SideTool.build)) return;
+    final wasLeftTop = _layout.visibleTool(ToolSide.left, ToolSlot.top) == SideTool.build;
+    _layout.hideTool(SideTool.build);
+    if (wasLeftTop) _layout.showTool(SideTool.project);
   }
 
   /// git 动了仓库(切分支 / 更新 / 合并 / 变基 ……,或者别处在终端里切了分支):
