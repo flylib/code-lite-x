@@ -19,7 +19,7 @@ class ToolWindowScope extends InheritedWidget {
 }
 
 /// 左侧工具窗标题栏右侧的按钮(IntelliJ 工具窗标题栏的样子):
-/// 「拆分到下方 / 移回上方」、⋮ 选项菜单(移动到 ▸ 左侧上方 / 左侧下方、隐藏)、「—」收起。
+/// ⋮ 选项菜单(移动到 ▸ 左侧上方 / 左侧下方、隐藏)、「—」收起。
 class ToolWindowActions extends StatelessWidget {
   const ToolWindowActions({super.key});
 
@@ -32,15 +32,10 @@ class ToolWindowActions extends StatelessWidget {
     return ListenableBuilder(
       listenable: layout,
       builder: (context, _) {
-        final atBottom = layout.slotOf(tool) == ToolSlot.bottom;
+        // 菜单里「移动到」的对勾要跟着位置变,所以仍然订阅布局
         return Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _HeaderButton(
-              icon: atBottom ? Icons.vertical_align_top : Icons.splitscreen_outlined,
-              tooltip: atBottom ? '移到左侧上方' : '拆分到左侧下方(与上方的工具窗同时显示)',
-              onTap: () => layout.moveLeftTool(tool, atBottom ? ToolSlot.top : ToolSlot.bottom),
-            ),
             _OptionsMenu(layout: layout, tool: tool),
             _HeaderButton(icon: Icons.remove, tooltip: '隐藏', onTap: () => layout.hideLeftTool(tool)),
           ],

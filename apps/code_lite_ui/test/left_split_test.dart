@@ -102,20 +102,34 @@ void main() {
           ),
         );
 
-    testWidgets('header buttons: split to bottom / back to top, options menu, hide', (tester) async {
+    testWidgets('header: only the ⋮ menu (Move To ▸ Left Top / Left Bottom) and hide; no separate split button', (tester) async {
       final layout = LayoutStore()..selectLeftTool(LeftTool.build);
       await tester.pumpWidget(header(layout, LeftTool.build));
+      expect(find.byTooltip('拆分到左侧下方(与上方的工具窗同时显示)'), findsNothing, reason: '独立的拆分按钮已去掉');
+      expect(find.byTooltip('选项'), findsOneWidget);
+      expect(find.byTooltip('隐藏'), findsOneWidget);
 
-      await tester.tap(find.byTooltip('拆分到左侧下方(与上方的工具窗同时显示)'));
-      await tester.pump();
+      // ⋮ ▸ 移动到 ▸ 左侧下方
+      Future<void> moveTo(String slot) async {
+        await tester.tap(find.byTooltip('选项'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('移动到'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text(slot));
+        await tester.pumpAndSettle();
+      }
+
+      await moveTo('左侧下方');
       expect(layout.visibleBottomTool, LeftTool.build);
-      expect(find.byTooltip('移到左侧上方'), findsOneWidget);
+      expect(layout.visibleTopTool, isNull);
 
-      // ⋮ ▸ 移动到 ▸ 左侧上方
+      // 再回到左侧上方;菜单里的对勾跟着位置走
       await tester.tap(find.byTooltip('选项'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('移动到'));
       await tester.pumpAndSettle();
+      final checks = find.byIcon(Icons.check);
+      expect(checks, findsOneWidget);
       await tester.tap(find.text('左侧上方'));
       await tester.pumpAndSettle();
       expect(layout.slotOf(LeftTool.build), ToolSlot.top);
