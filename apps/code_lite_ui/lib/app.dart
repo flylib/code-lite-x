@@ -847,7 +847,7 @@ class _SideResizeHandleState extends State<_SideResizeHandle> {
           final max = MediaQuery.sizeOf(context).width - 300 - stripes - otherWidth;
           layout.resizeSide(widget.side, layout.widthOf(widget.side) + (left ? d.delta.dx : -d.delta.dx), maxWidth: max);
         },
-        // 左边:面板 | 线 | 编辑区。右边:编辑区(自带 12px 的错误条)| 线 | 面板 —— 线贴着编辑区那一边,
+        // 左边:面板 | 线 | 编辑区。右边:编辑区(自带 8px 的错误条)| 线 | 面板 —— 线贴着编辑区那一边,
         // 空隙用面板的底色,别在错误条和面板之间再夹一条深色宽带;所以右边的命中区也窄一点。
         child: Container(
           width: left ? 5 : 3,

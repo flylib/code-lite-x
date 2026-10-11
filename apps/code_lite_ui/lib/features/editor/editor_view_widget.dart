@@ -1202,9 +1202,9 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
                 ],
               ),
               if (isPrimary) _buildMiniDiffOverlay(),
-              // 右上角的浮动按钮:让开右边 12px 的错误条
+              // 右上角的浮动按钮:让开右边的错误条
               if (widget.paneActionsBuilder?.call(filePath) case final actions?)
-                Positioned(top: 8, right: 20, child: actions),
+                Positioned(top: 8, right: errorStripeWidth + 8, child: actions),
             ],
           ),
           ),
@@ -1895,9 +1895,13 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
 
 
 
+  /// 编辑区最右边的错误条(IntelliJ 的 error stripe):错误 / 警告在整个文件里的位置。
+  /// 用户要求窄一点:8px,标记条两边各留 1px。
+  static const double errorStripeWidth = 8;
+
   Widget _buildRightErrorStripe(int totalLines, {required List<EditorDiagnostic> diagnostics}) {
     return Container(
-      width: 12,
+      width: errorStripeWidth,
       decoration: const BoxDecoration(
         color: Color(0xFF26282E),
         border: Border(left: BorderSide(color: IntelliJTheme.borderSubtle)),
@@ -1911,8 +1915,8 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
                 final topPos = totalLines > 0 ? (d.line / totalLines) * height : 0.0;
                 return Positioned(
                   top: topPos.clamp(0.0, height - 4),
-                  left: 2,
-                  right: 2,
+                  left: 1,
+                  right: 1,
                   child: Container(
                     height: 3,
                     decoration: BoxDecoration(
