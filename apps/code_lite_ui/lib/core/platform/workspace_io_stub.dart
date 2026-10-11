@@ -10,6 +10,10 @@ Future<bool> directoryExists(String path) async => false;
 
 Future<bool> fileExists(String path) async => false;
 
+Future<Map<String, dynamic>> loadOpenProjects() async => const {};
+
+Future<void> saveOpenProjects(Map<String, dynamic> state) async {}
+
 /// 读文件的原始字节(预览里的本地图片);读不了返回 null。
 Future<Uint8List?> readFileBytes(String path, {int maxBytes = 20 * 1024 * 1024}) async => null;
 

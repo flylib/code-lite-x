@@ -36,6 +36,25 @@ void main() {
     expect(find.text('Cargo'), findsNothing);
   });
 
+  testWidgets('the left stripe has an Opening Projects button that opens its panel (empty state with no project)', (WidgetTester tester) async {
+    await tester.binding.setSurfaceSize(const Size(1280, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(const CodeLiteApp());
+    await tester.pump();
+
+    expect(find.byTooltip('Opening Projects'), findsOneWidget);
+    expect(find.text('Opening Projects'), findsNothing, reason: '面板默认不显示');
+    await tester.tap(find.byTooltip('Opening Projects'));
+    await tester.pump();
+    expect(find.text('Opening Projects'), findsOneWidget);
+    expect(find.text('没有打开的项目'), findsOneWidget);
+    // 再点一次收起,和别的工具窗一样
+    await tester.tap(find.byTooltip('Opening Projects'));
+    await tester.pump();
+    expect(find.text('Opening Projects'), findsNothing);
+  });
+
   testWidgets('right activity stripe has no Cargo tool window any more', (WidgetTester tester) async {
     await tester.binding.setSurfaceSize(const Size(1280, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));

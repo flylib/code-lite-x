@@ -118,6 +118,33 @@ void main() {
     expect(find.text('Open…'), findsNothing);
   });
 
+  testWidgets('the popup lists every open project (the current one marked), and the recent list leaves the open ones out', (tester) async {
+    final calls = <String>[];
+    await tester.pumpWidget(host(ProjectChip(
+      projectPath: '/w/beta',
+      openProjects: const ['/w/alpha', '/w/beta', '/w/gamma'],
+      recent: const ['/w/beta', '/w/delta', '/w/alpha', '/w/epsilon'],
+      home: '/w',
+      onSwitch: (p) => calls.add('switch ${projectNameOf(p)}'),
+      onNewProject: () {},
+      onOpen: () {},
+      onClone: () {},
+    )));
+    await tester.tap(find.text('beta'));
+    await tester.pumpAndSettle();
+    expect(find.text('Open Projects'), findsOneWidget);
+    expect(find.text('Recent Projects'), findsOneWidget);
+    expect(find.text('alpha'), findsOneWidget);
+    expect(find.text('gamma'), findsOneWidget);
+    expect(find.text('delta'), findsOneWidget, reason: '只在最近列表里的');
+    expect(find.text('epsilon'), findsOneWidget);
+    expect(find.text('~/alpha'), findsOneWidget, reason: 'alpha 既在打开的里面也在最近里,只列一次(在打开的里)');
+
+    await tester.tap(find.text('gamma'));
+    await tester.pumpAndSettle();
+    expect(calls, ['switch gamma'], reason: '点已打开的项目就是切换');
+  });
+
   group('project search', () {
     const home = '/Users/dev';
     const admin = '/Users/dev/Worker/java/bcpoker_admin';

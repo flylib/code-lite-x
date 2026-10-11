@@ -9,13 +9,14 @@ import '../client/api_client.dart';
 import '../platform/paths.dart';
 import '../platform/workspace_io.dart' as io;
 import 'session_snapshot.dart';
+import 'dispose_safe.dart';
 
 /// 工作区级状态:文件树、当前文件、打开的标签、结构大纲、诊断。
 ///
 /// 缓冲区内容与光标不在这里 —— 那些归 EditorSessionManager 的
 /// CodeEditorController 管,每次按键只通知订阅了该 controller 的子树。
 /// 这个划分是为了让"敲字"和"换文件"走两条不同的通知路径。
-class WorkspaceStore extends ChangeNotifier {
+class WorkspaceStore extends ChangeNotifier with DisposeSafeNotifier {
   WorkspaceStore({
     required ApiClient client,
     required EditorSessionManager sessions,
@@ -228,7 +229,8 @@ class WorkspaceStore extends ChangeNotifier {
   }
 
   Future<void> _remember(String path) async {
-    _recentProjects = [path, ..._recentProjects.where((p) => p != path)].take(_maxRecent).toList();
+    // 同时打开多个项目时,别的项目的 WorkspaceStore 也在更新这份列表:以存储里最新的为准,不用本地可能过期的副本
+    _recentProjects = [path, ...(await _loadRecent()).where((p) => p != path)].take(_maxRecent).toList();
     await _saveRecent(_recentProjects);
   }
 

@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../core/client/api_client.dart';
 import 'commit_graph.dart';
+import '../../core/state/dispose_safe.dart';
 
 class GitRef {
   const GitRef(this.name, this.kind);
@@ -154,7 +155,7 @@ enum DateFilter {
 /// Git Log 工具窗的状态:分支、提交列表(含图)、筛选、选中提交的详情。
 ///
 /// 和终端一样放在面板之外:底部工具窗收起再打开时,筛选条件和选中项都还在。
-class GitLogStore extends ChangeNotifier {
+class GitLogStore extends ChangeNotifier with DisposeSafeNotifier {
   GitLogStore(this._client);
 
   final ApiClient _client;

@@ -46,19 +46,34 @@ class PluginTask {
 /// 以及把插件贡献的内容接入 IDE —— 着色规则注册进 [LanguageRegistry],
 /// 语言服务器经 [ApiClient.lspLaunchResolver] 交给 LspService 启动。
 class PluginManager extends ChangeNotifier {
+  /// [client]:单项目的快捷写法,等同于 `attach(client)`。同时打开多个项目时用 [attach] 逐个接入。
   PluginManager({
-    required this.client,
+    ApiClient? client,
     PluginHost? host,
     String catalogJson = builtinPluginCatalog,
     LanguageRegistry? registry,
   })  : host = host ?? PluginHost(),
         registry = registry ?? syntax.languages,
         catalog = _parseCatalog(catalogJson) {
-    client.lspLaunchResolver = launchFor;
+    if (client != null) attach(client);
     _seedBundled();
   }
 
-  final ApiClient client;
+  /// 接入的项目客户端(每个打开的项目一个):插件装好 / 停用时要让它们各自的语言服务器重启。
+  final List<ApiClient> _clients = [];
+
+  /// 接入一个项目的客户端:它启动语言服务器时来问插件怎么启动(带上这个项目的根目录,展开 `${dataDir}` 等变量)。
+  void attach(ApiClient client) {
+    if (_clients.contains(client)) return;
+    _clients.add(client);
+    client.lspLaunchResolver = (group) => launchFor(group, projectRoot: client.rootPath);
+  }
+
+  /// 项目关闭时摘掉它的客户端。
+  void detach(ApiClient client) {
+    if (_clients.remove(client)) client.lspLaunchResolver = null;
+  }
+
   final PluginHost host;
   final LanguageRegistry registry;
 
@@ -303,18 +318,20 @@ class PluginManager extends ChangeNotifier {
 
   Future<void> _reloadServers(PluginManifest m) async {
     for (final s in m.languageServers) {
-      await client.lspReloadServer(s.group);
+      for (final client in List.of(_clients)) {
+        await client.lspReloadServer(s.group);
+      }
     }
   }
 
   /// LspService 启动某分组的语言服务器时来问:有已启用的插件提供它,就按插件的方式启动。
-  LspLaunch? launchFor(String group) {
+  LspLaunch? launchFor(String group, {String? projectRoot}) {
     for (final p in _installed.values) {
       if (!p.enabled) continue;
       for (final s in p.manifest.languageServers) {
         if (s.group != group) continue;
         try {
-          String r(String t) => host.resolve(t, pluginId: p.manifest.id, projectRoot: client.rootPath);
+          String r(String t) => host.resolve(t, pluginId: p.manifest.id, projectRoot: projectRoot);
           return LspLaunch(
             [for (final a in s.command) r(a)],
             env: {for (final e in s.env.entries) e.key: r(e.value)},

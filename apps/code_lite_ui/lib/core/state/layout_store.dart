@@ -3,7 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../../features/bottom_tools/bottom_tools_widget.dart';
 
 /// 左侧工具窗(活动条上半段选择的那一栏)。
-enum LeftTool { project, commit, pullRequests, structure, build }
+enum LeftTool { project, commit, pullRequests, structure, openProjects, build }
 
 /// 左侧工具窗放在哪一块(IntelliJ 的 Move To ▸ Left Top / Left Bottom):
 /// 上下两块各开一个时,左栏上下拆分同时显示。

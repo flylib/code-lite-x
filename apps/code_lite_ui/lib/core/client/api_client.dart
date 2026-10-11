@@ -12,7 +12,10 @@ import '../ffi/codelite_bindings_stub.dart'
 /// 界面访问底层能力的统一门面。Git、文件、搜索、LSP、编辑历史都已是纯 Dart;
 /// 仍经由 Rust FFI 的只剩终端(PTY)。
 class ApiClient {
-  final CodeLiteBindings _ffi = CodeLiteBindings.instance;
+  final CodeLiteBindings _ffi;
+
+  /// 这个客户端自己拥有 [_ffi] 的 Rust 上下文:关闭时一并销毁(终端会话随之结束)。
+  final bool _ownsFfi;
 
   /// 当前工作区根目录,以及挂在它上面的 Git 与语言服务器;切换项目时随 [openWorkspace] 一起更新。
   String _root;
@@ -23,8 +26,12 @@ class ApiClient {
   final StreamController<LspDiagnosticsEvent> _lspEvents = StreamController.broadcast();
   final StreamController<String> _fileSaved = StreamController.broadcast();
 
-  ApiClient({String initialRoot = '.'})
-      : _root = initialRoot,
+  /// [ffi] 缺省用进程级单例(只有一个项目时那样就够了);同时打开多个项目时,
+  /// 每个客户端传 `CodeLiteBindings.create()`,各有各的终端上下文。
+  ApiClient({String initialRoot = '.', CodeLiteBindings? ffi, bool ownsFfi = false})
+      : _ffi = ffi ?? CodeLiteBindings.instance,
+        _ownsFfi = ownsFfi,
+        _root = initialRoot,
         _git = GitService(initialRoot),
         _github = GitHubService(initialRoot) {
     _lsp = LspService(initialRoot, launchResolver: _launchFor);
@@ -126,6 +133,7 @@ class ApiClient {
 
   /// 关掉所有语言服务器进程(应用退出时调用)。
   Future<void> dispose() async {
+    if (_ownsFfi) _ffi.dispose(); // 销毁 Rust 上下文:这个项目的终端会话都结束
     await _lspSub?.cancel();
     await _lsp.dispose();
     await _lspEvents.close();

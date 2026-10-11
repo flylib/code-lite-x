@@ -15,12 +15,16 @@ class CodeLiteBindings {
 
   static final CodeLiteBindings instance = CodeLiteBindings._();
 
+  factory CodeLiteBindings.create() => CodeLiteBindings._();
+
   /// web 上永远没有原生库。
   bool get isAvailable => false;
 
   bool initialize([String workspacePath = '.']) => false;
 
   bool reinitialize(String workspacePath) => false;
+
+  void dispose() {}
 
   Map<String, dynamic> terminalExec(String cmd, List<String> args) => {'status': 'error', 'error': 'Bindings unavailable'};
 

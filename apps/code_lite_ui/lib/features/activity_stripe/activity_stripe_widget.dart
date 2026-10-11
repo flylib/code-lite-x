@@ -73,6 +73,7 @@ class ActivityStripeWidget extends StatelessWidget {
           onTap: tap,
         ),
       LeftTool.structure => StripeButton(icon: Icons.account_tree_outlined, tooltip: '结构 (⌘7)', isActive: active, onTap: tap),
+      LeftTool.openProjects => StripeButton(icon: Icons.layers_outlined, tooltip: 'Opening Projects', isActive: active, onTap: tap),
       LeftTool.build => buildToolTitle == null
           ? null
           : StripeButton(

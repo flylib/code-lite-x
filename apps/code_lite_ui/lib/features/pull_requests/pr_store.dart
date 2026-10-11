@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../../core/client/api_client.dart';
 import '../../core/github/github_service.dart';
 import '../editor/editor_view_widget.dart' show prDiffTabPrefix, prTimelineTabPrefix;
+import '../../core/state/dispose_safe.dart';
 
 export '../editor/editor_view_widget.dart' show prDiffTabPrefix, prTimelineTabPrefix;
 
@@ -17,7 +18,7 @@ int? prNumberOfTab(String id) {
 /// 以及每个 PR 的详情会话([PrSession],差异标签与 Timeline 标签共用)。
 ///
 /// 放在工具窗之外:切到别的工具窗再切回来,列表、筛选和已打开的 PR 都还在。
-class PullRequestsStore extends ChangeNotifier {
+class PullRequestsStore extends ChangeNotifier with DisposeSafeNotifier {
   PullRequestsStore(ApiClient client) : _ghOf = (() => client.github);
 
   /// 测试用:直接给出 GitHubService(可注入假的 gh)。
@@ -189,7 +190,7 @@ class PullRequestsStore extends ChangeNotifier {
 }
 
 /// 一个 PR 的详情、改动文件、评审评论、已查看状态等。差异标签、Timeline 标签和工具窗详情页共用一份。
-class PrSession extends ChangeNotifier {
+class PrSession extends ChangeNotifier with DisposeSafeNotifier {
   PrSession(this.number, this._ghOf, this._viewerOf);
 
   final int number;

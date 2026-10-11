@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../../core/client/api_client.dart';
+import '../../core/state/dispose_safe.dart';
 
 class TerminalSession {
   TerminalSession(this.id, this.title);
@@ -14,7 +15,7 @@ class TerminalSession {
 /// 放在面板之外:底部工具窗收起时 widget 会被卸载,shell 不能跟着死。
 /// 真正的 shell 活在 Rust 的 CodeLiteContext 里,切换项目会销毁上下文 ——
 /// 那时 snapshot 会报会话不存在,视图调 [forget] 把它从列表里摘掉。
-class TerminalStore extends ChangeNotifier {
+class TerminalStore extends ChangeNotifier with DisposeSafeNotifier {
   TerminalStore(this._client);
 
   final ApiClient _client;

@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../core/build_tools/build_model.dart';
 import '../../core/plugins/plugin_manager.dart';
+import '../../core/state/dispose_safe.dart';
 
 /// 项目里检测到的一种构建工具(比如根目录有 pom.xml → Maven)及其模块树。
 class BuildProject {
@@ -23,7 +24,7 @@ class BuildProject {
 /// 读模块树,记住展开 / 选中 / 工具栏开关,拼命令交给终端运行。
 ///
 /// 放在面板之外:左侧工具窗切走时面板被卸载,展开状态和开关不该丢。
-class BuildToolsStore extends ChangeNotifier {
+class BuildToolsStore extends ChangeNotifier with DisposeSafeNotifier {
   BuildToolsStore({
     required this.plugins,
     required this.projectRoot,

@@ -6,6 +6,8 @@ import 'package:flutter/services.dart';
 
 import 'core/client/api_client.dart';
 import 'core/state/layout_store.dart';
+import 'core/state/project_context.dart';
+import 'core/state/project_manager.dart';
 import 'core/state/scopes.dart';
 import 'core/plugins/plugin_manager.dart';
 import 'core/state/settings_store.dart';
@@ -19,6 +21,7 @@ import 'features/build_tools/build_tools_store.dart';
 import 'features/commit/commit_panel.dart';
 import 'features/commit/diff_tab.dart';
 import 'features/editor/code_editor_controller.dart' show EditorPosition;
+import 'features/editor/editor_appearance.dart';
 import 'features/editor/editor_session_manager.dart';
 import 'features/editor/editor_view_widget.dart';
 import 'features/editor/open_in_browser.dart';
@@ -26,6 +29,7 @@ import 'features/git/branch_actions.dart';
 import 'features/git/branch_store.dart';
 import 'features/git/git_log_store.dart';
 import 'features/plugins/plugin_banner.dart';
+import 'features/projects/open_projects_panel.dart';
 import 'features/project_explorer/project_explorer_widget.dart';
 import 'features/pull_requests/pr_diff_tab.dart';
 import 'features/pull_requests/pr_panel.dart';
@@ -57,132 +61,48 @@ class CodeLiteApp extends StatefulWidget {
 }
 
 class _CodeLiteAppState extends State<CodeLiteApp> {
-  final ApiClient _client = ApiClient(initialRoot: io.noProjectRoot());
-  late final EditorSessionManager _sessions;
-  late final WorkspaceStore _workspace;
+  // 全局共享的:窗口布局、设置、插件、编辑器外观。每个打开的项目自己的状态在 ProjectContext 里。
   final LayoutStore _layout = LayoutStore();
-  late final TerminalStore _terminals = TerminalStore(_client);
-  late final GitLogStore _gitLog = GitLogStore(_client);
-  late final BranchStore _branches = BranchStore(_client);
-  late final BranchActions _branchActions = BranchActions(_branches, showCommitWindow: () => _layout.showLeftTool(LeftTool.commit));
-  late final PullRequestsStore _prs = PullRequestsStore(_client);
-  late final SettingsStore _settings = SettingsStore(sessions: _sessions, layout: _layout);
-  late final PluginManager _plugins = PluginManager(client: _client);
+  final EditorAppearance _appearance = EditorAppearance();
+  late final SettingsStore _settings = SettingsStore(appearance: _appearance, layout: _layout);
+  late final PluginManager _plugins = PluginManager();
   final BrowserService _browsers = BrowserService();
-  late final BuildToolsStore _build = BuildToolsStore(
-    plugins: _plugins,
-    projectRoot: () => _workspace.rootPath,
-    read: (path) async {
-      final res = await _client.fetchFile(path);
-      return res['status'] == 'ok' ? res['content'] as String? : null;
-    },
-    runner: (title, command) {
-      _terminals.run(title, command);
-      _layout.showBottomTab(BottomToolTab.terminal);
-    },
-    fileSaved: _client.onFileSaved,
-    windows: defaultTargetPlatform == TargetPlatform.windows,
-  );
-  String? _lastRoot;
+
+  /// 打开的项目:一个进程、多个项目同时留在内存里;切换只是换显示哪一份。
+  late final ProjectManager _projects = ProjectManager(layout: _layout, plugins: _plugins, settings: _settings);
 
   @override
   void initState() {
     super.initState();
-    _sessions = EditorSessionManager(client: _client);
-    _workspace = WorkspaceStore(client: _client, sessions: _sessions);
-    _workspace.addListener(_onWorkspaceChanged);
-    _branches.onChanged = _onRepoChanged;
-    _build.addListener(_onBuildToolsChanged);
     // 自动保存:应用失去焦点(切到终端 / 浏览器)时立刻把改动写盘,外部工具看到的就是最新内容。
     _lifecycle = AppLifecycleListener(
       onInactive: _onLeaveForeground,
       onHide: _onLeaveForeground,
-      onDetach: _workspace.saveSession,
+      onDetach: _onLeaveForeground,
     );
     _bootstrap();
   }
 
   late final AppLifecycleListener _lifecycle;
 
-  /// 离开前台(切走 / 隐藏 / 退出):文件写盘,同时记下标签、光标和滚动位置,下次打开项目时恢复。
-  void _onLeaveForeground() {
-    _sessions.saveAll();
-    _workspace.saveSession();
-  }
-
-  /// 光标和滚动位置不会通知任何人,定时看一眼(没变就不写盘),这样被强杀 / 崩溃也只丢几秒。
-  Timer? _sessionTimer;
+  /// 离开前台(切走 / 隐藏 / 退出):所有项目的改动写盘,同时记下标签、光标和滚动位置,下次打开项目时恢复。
+  void _onLeaveForeground() => _projects.saveAll();
 
   Future<void> _bootstrap() async {
-    // 先接入已装插件(着色规则、语言服务器启动方式),再打开上次的项目
+    // 先接入已装插件(着色规则、语言服务器启动方式),再恢复上次打开的项目
     _plugins.load();
     await _settings.load();
-    await _workspace.bootstrap();
-  }
-
-  /// 换了项目:Git Log 里还是旧仓库的数据,作废后在下次显示时重新加载。
-  void _onWorkspaceChanged() {
-    final root = _workspace.rootPath;
-    if (root == _lastRoot) return;
-    _lastRoot = root;
-    _gitLog.invalidate();
-    _prs.invalidate();
-    // 只在有项目时关注分支;没有项目(启动时、关闭项目后)不起任何 git 进程和定时器
-    _branches.reset();
-    _build.reload();
-    _sessionTimer?.cancel();
-    if (root != null) {
-      _branches.start();
-      _sessionTimer = Timer.periodic(const Duration(seconds: 5), (_) => _workspace.saveSession());
-    } else {
-      _branches.stop();
-      _sessionTimer = null;
-    }
-  }
-
-  /// 新项目里没有构建工具了:构建工具窗的按钮会消失,开着的窗口收起;它占着左上方的话换回项目视图。
-  void _onBuildToolsChanged() {
-    if (_build.hasProjects || _build.loading) return;
-    if (!_layout.isLeftToolVisible(LeftTool.build)) return;
-    final wasTop = _layout.visibleTopTool == LeftTool.build;
-    _layout.hideLeftTool(LeftTool.build);
-    if (wasTop) _layout.showLeftTool(LeftTool.project);
-  }
-
-  /// git 动了仓库(切分支 / 更新 / 合并 / 变基 ……,或者别处在终端里切了分支):
-  /// 日志窗要跟上;文件内容变了的话,文件树和没有未保存修改的标签也要。
-  void _onRepoChanged(bool worktreeChanged) {
-    if (_layout.isBottomOpen && _layout.bottomTab == BottomToolTab.git) {
-      _gitLog.refresh();
-    } else {
-      _gitLog.invalidate();
-    }
-    if (!worktreeChanged) return;
-    _workspace.load();
-    // 有未保存修改的标签不动:那是用户正在写的东西,不能被磁盘上的内容盖掉
-    _sessions.reloadFromDisk([
-      for (final path in _sessions.tabs.keys)
-        if (!_sessions.isTabDirty(path)) path,
-    ]);
+    await _projects.restore();
   }
 
   @override
   void dispose() {
-    _sessionTimer?.cancel();
     _lifecycle.dispose();
-    _workspace.removeListener(_onWorkspaceChanged);
-    _branches.dispose();
-    _gitLog.dispose();
-    _prs.dispose();
-    _settings.dispose(); // 先于 _sessions:它监听 sessions.appearance
-    _build.removeListener(_onBuildToolsChanged);
-    _build.dispose(); // 先于 _plugins:它监听插件的启用 / 停用
+    _projects.dispose(); // 先于设置 / 插件:各项目的状态要从它们那里摘掉自己
+    _settings.dispose();
     _plugins.dispose();
-    _terminals.dispose();
-    _client.dispose(); // 关掉语言服务器进程
     _layout.dispose();
-    _workspace.dispose();
-    _sessions.dispose();
+    _appearance.dispose();
     super.dispose();
   }
 
@@ -192,15 +112,25 @@ class _CodeLiteAppState extends State<CodeLiteApp> {
       title: 'CodeLiteX',
       debugShowCheckedModeBanner: false,
       theme: IntelliJTheme.darkTheme,
-      home: LayoutScope(
-        notifier: _layout,
-        child: WorkspaceScope(
-          notifier: _workspace,
-          child: SessionScope(
-            notifier: _sessions,
-            child: _Workbench(client: _client, terminals: _terminals, gitLog: _gitLog, branches: _branches, branchActions: _branchActions, prs: _prs, settings: _settings, plugins: _plugins, buildTools: _build, browsers: _browsers),
-          ),
-        ),
+      home: ListenableBuilder(
+        listenable: _projects,
+        builder: (context, _) {
+          final project = _projects.active;
+          // 换项目时整棵工作台重建:各面板的内部状态(文件树的滚动位置等)不会串到别的项目里
+          return KeyedSubtree(
+            key: ObjectKey(project),
+            child: LayoutScope(
+              notifier: _layout,
+              child: WorkspaceScope(
+                notifier: project.workspace,
+                child: SessionScope(
+                  notifier: project.sessions,
+                  child: _Workbench(project: project, manager: _projects, settings: _settings, plugins: _plugins, browsers: _browsers),
+                ),
+              ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -208,28 +138,27 @@ class _CodeLiteAppState extends State<CodeLiteApp> {
 
 class _Workbench extends StatelessWidget {
   const _Workbench({
-    required this.client,
-    required this.terminals,
-    required this.gitLog,
-    required this.branches,
-    required this.branchActions,
-    required this.prs,
+    required this.project,
+    required this.manager,
     required this.settings,
     required this.plugins,
-    required this.buildTools,
     required this.browsers,
   });
 
-  final ApiClient client;
-  final TerminalStore terminals;
-  final GitLogStore gitLog;
-  final BranchStore branches;
-  final BranchActions branchActions;
-  final PullRequestsStore prs;
+  /// 正在显示的项目的全部状态。
+  final ProjectContext project;
+  final ProjectManager manager;
   final SettingsStore settings;
   final PluginManager plugins;
-  final BuildToolsStore buildTools;
   final BrowserService browsers;
+
+  ApiClient get client => project.client;
+  TerminalStore get terminals => project.terminals;
+  GitLogStore get gitLog => project.gitLog;
+  BranchStore get branches => project.branches;
+  BranchActions get branchActions => project.branchActions;
+  PullRequestsStore get prs => project.prs;
+  BuildToolsStore get buildTools => project.build;
 
   @override
   Widget build(BuildContext context) {
@@ -240,6 +169,7 @@ class _Workbench extends StatelessWidget {
     return _AppMenuBar(
       settings: settings,
       plugins: plugins,
+      manager: manager,
       branches: branches,
       branchActions: branchActions,
       child: CallbackShortcuts(
@@ -258,9 +188,9 @@ class _Workbench extends StatelessWidget {
           backgroundColor: IntelliJTheme.editorBg,
           body: Column(
             children: [
-              // 标题栏订阅 workspace(当前文件、项目);分支那一块自己订阅 BranchStore。
+              // 标题栏订阅 workspace(当前文件、项目)和项目列表;分支那一块自己订阅 BranchStore。
               ListenableBuilder(
-                listenable: workspace,
+                listenable: Listenable.merge([workspace, manager]),
                 builder: (context, _) => TitleBarWidget(
                   activeFile: workspace.activeFile,
                   onUndo: workspace.undo,
@@ -268,12 +198,13 @@ class _Workbench extends StatelessWidget {
                   onSearch: () => _openSearch(context),
                   projectChip: ProjectChip(
                     projectPath: workspace.rootPath,
-                    recent: workspace.recentProjects,
+                    openProjects: [for (final p in manager.projects) p.path],
+                    recent: manager.recent,
                     home: io.homeDirectory(),
-                    onSwitch: (path) => _openRecent(context, workspace, path),
-                    onNewProject: () => _newProject(context, workspace),
-                    onOpen: () => _openFolder(context, workspace),
-                    onClone: () => _cloneRepository(context, workspace),
+                    onSwitch: (path) => _openProject(context, manager, path),
+                    onNewProject: () => _newProject(context, manager),
+                    onOpen: () => _openFolder(context, manager),
+                    onClone: () => _cloneRepository(context, manager),
                   ),
                   branchChip: BranchChip(store: branches, actions: branchActions),
                   operationButtons: OperationButtons(store: branches, actions: branchActions),
@@ -339,6 +270,14 @@ class _Workbench extends StatelessWidget {
                                       activeFile: workspace.activeFile,
                                       outline: workspace.outline,
                                       onSelectSymbol: (sym) => workspace.selectSymbol(sym['name'] as String?),
+                                    ),
+                                  LeftTool.openProjects => OpenProjectsPanel(
+                                      manager: manager,
+                                      home: io.homeDirectory(),
+                                      onSwitch: (p) => manager.activate(p),
+                                      onClose: (p) => _closeProject(context, manager, p),
+                                      onCloseOthers: (p) => _closeOtherProjects(context, manager, p),
+                                      onOpenFolder: () => _openFolder(context, manager),
                                     ),
                                   LeftTool.build => BuildToolsPanel(store: buildTools, onOpenFile: workspace.openFile),
                                 },
@@ -611,6 +550,7 @@ class _AppMenuBar extends StatelessWidget {
     required this.child,
     required this.settings,
     required this.plugins,
+    required this.manager,
     required this.branches,
     required this.branchActions,
   });
@@ -618,6 +558,7 @@ class _AppMenuBar extends StatelessWidget {
   final Widget child;
   final SettingsStore settings;
   final PluginManager plugins;
+  final ProjectManager manager;
   final BranchStore branches;
   final BranchActions branchActions;
 
@@ -627,7 +568,7 @@ class _AppMenuBar extends StatelessWidget {
     if (defaultTargetPlatform != TargetPlatform.macOS) return child;
     final workspace = context.workspaceRead;
     return ListenableBuilder(
-      listenable: Listenable.merge([workspace, branches]),
+      listenable: Listenable.merge([workspace, manager, branches]),
       child: child,
       builder: (context, child) => PlatformMenuBar(
         menus: <PlatformMenuItem>[
@@ -720,7 +661,7 @@ class _AppMenuBar extends StatelessWidget {
   }
 
   PlatformMenu _fileMenu(BuildContext context, WorkspaceStore workspace) {
-    final recent = workspace.recentProjects;
+    final recent = manager.recent;
     return PlatformMenu(
       label: 'File',
       menus: <PlatformMenuItem>[
@@ -742,7 +683,7 @@ class _AppMenuBar extends StatelessWidget {
             label: 'Open…',
             shortcut:
                 const SingleActivator(LogicalKeyboardKey.keyO, meta: true),
-            onSelected: () => _openFolder(context, workspace),
+            onSelected: () => _openFolder(context, manager),
           ),
           PlatformMenu(
             label: 'Recent Projects',
@@ -754,21 +695,21 @@ class _AppMenuBar extends StatelessWidget {
                   for (final path in recent)
                     PlatformMenuItem(
                       label: _recentLabel(path),
-                      onSelected: () => _openRecent(context, workspace, path),
+                      onSelected: () => _openProject(context, manager, path),
                     ),
               ]),
               if (recent.isNotEmpty)
                 PlatformMenuItemGroup(members: <PlatformMenuItem>[
                   PlatformMenuItem(
                       label: 'Clear Recent Projects',
-                      onSelected: workspace.clearRecentProjects),
+                      onSelected: manager.clearRecent),
                 ]),
             ],
           ),
           PlatformMenuItem(
             label: 'Close Project',
-            onSelected: workspace.hasProject
-                ? () => _closeProject(context, workspace)
+            onSelected: manager.activeProject != null
+                ? () => _closeProject(context, manager, manager.activeProject!)
                 : null,
           ),
         ]),
@@ -893,65 +834,63 @@ class _SideResizeHandleState extends State<_SideResizeHandle> {
 }
 
 // ---------------------------------------------------------------------------
-// 项目的打开 / 切换 / 新建 / 克隆:标题栏的项目弹窗和 File 菜单共用。
+// 项目的打开 / 切换 / 关闭 / 新建 / 克隆:标题栏的项目弹窗、Opening Projects 面板和 File 菜单共用。
+// 打开新项目不再关掉当前的 —— 它们都留在内存里,切换只是换显示哪一个;要关用 _closeProject。
 // ---------------------------------------------------------------------------
 
-/// 切换项目会丢弃未保存的标签,有脏标签时先确认。
-Future<bool> _confirmDiscard(
-    BuildContext context, WorkspaceStore workspace) async {
-  if (workspace.sessions.autosave) await workspace.sessions.saveAll();
-  if (!workspace.sessions.hasDirtyTabs) return true;
+/// 关闭项目会丢掉它没保存的标签,有脏标签时先问:保存 / 不保存 / 取消。
+Future<bool> _confirmClose(BuildContext context, OpenProject entry) async {
+  final ctx = entry.context;
+  if (ctx == null) return true; // 还没加载过:没有改动
+  if (ctx.sessions.autosave) await ctx.sessions.saveAll();
+  if (!ctx.hasDirtyTabs) return true;
   if (!context.mounted) return false;
-  final ok = await showDialog<bool>(
+  final choice = await showDialog<String>(
     context: context,
-    builder: (ctx) => AlertDialog(
-      title: const Text('有未保存的修改'),
-      content: const Text('继续将丢弃这些修改。'),
+    builder: (dialog) => AlertDialog(
+      title: Text('关闭 ${entry.name}'),
+      content: const Text('这个项目有未保存的修改。'),
       actions: [
-        TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('取消')),
-        TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('丢弃并继续')),
+        TextButton(onPressed: () => Navigator.pop(dialog, 'cancel'), child: const Text('取消')),
+        TextButton(onPressed: () => Navigator.pop(dialog, 'discard'), child: const Text('不保存')),
+        TextButton(onPressed: () => Navigator.pop(dialog, 'save'), child: const Text('保存并关闭')),
       ],
     ),
   );
-  return ok ?? false;
+  if (choice == 'save') await ctx.sessions.saveAll();
+  return choice == 'save' || choice == 'discard';
 }
 
-Future<void> _openFolder(
-    BuildContext context, WorkspaceStore workspace) async {
-  final path = await io.pickDirectory();
-  if (path == null || !context.mounted) return;
-  if (!await _confirmDiscard(context, workspace) || !context.mounted) return;
-  await _open(context, workspace, path);
+Future<void> _closeProject(BuildContext context, ProjectManager manager, OpenProject entry) async {
+  if (!await _confirmClose(context, entry)) return;
+  await manager.close(entry);
 }
 
-Future<void> _openRecent(
-    BuildContext context, WorkspaceStore workspace, String path) async {
-  if (!await _confirmDiscard(context, workspace) || !context.mounted) return;
-  await _open(context, workspace, path);
-}
-
-Future<void> _open(
-    BuildContext context, WorkspaceStore workspace, String path) async {
-  final ok = await workspace.openFolder(path);
-  if (!ok && context.mounted) {
-    ScaffoldMessenger.maybeOf(context)
-        ?.showSnackBar(SnackBar(content: Text('无法打开项目: $path')));
+Future<void> _closeOtherProjects(BuildContext context, ProjectManager manager, OpenProject keep) async {
+  for (final e in manager.projects) {
+    if (identical(e, keep)) continue;
+    if (!context.mounted || !await _confirmClose(context, e)) return; // 取消就停在这里,已经关掉的不管
+    await manager.close(e);
   }
 }
 
-Future<void> _closeProject(
-    BuildContext context, WorkspaceStore workspace) async {
-  if (!await _confirmDiscard(context, workspace)) return;
-  workspace.closeProject();
+Future<void> _openFolder(BuildContext context, ProjectManager manager) async {
+  final path = await io.pickDirectory();
+  if (path == null || !context.mounted) return;
+  await _openProject(context, manager, path);
+}
+
+/// 打开 [path] 并切过去;已经打开的只是切换。
+Future<void> _openProject(BuildContext context, ProjectManager manager, String path) async {
+  final ok = await manager.open(path);
+  if (!ok && context.mounted) {
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(content: Text('无法打开项目: $path')));
+  }
 }
 
 /// 新建 / 克隆默认放在当前项目的上一级;没有项目就放用户主目录。
-String _defaultProjectLocation(WorkspaceStore workspace) {
-  final root = workspace.rootPath;
+String _defaultProjectLocation(ProjectManager manager) {
+  final root = manager.active.path;
   if (root != null) {
     final i = root.lastIndexOf('/');
     if (i > 0) return root.substring(0, i);
@@ -959,16 +898,14 @@ String _defaultProjectLocation(WorkspaceStore workspace) {
   return io.homeDirectory() ?? '';
 }
 
-Future<void> _newProject(BuildContext context, WorkspaceStore workspace) async {
-  final path = await showNewProjectDialog(context, initialLocation: _defaultProjectLocation(workspace), home: io.homeDirectory());
+Future<void> _newProject(BuildContext context, ProjectManager manager) async {
+  final path = await showNewProjectDialog(context, initialLocation: _defaultProjectLocation(manager), home: io.homeDirectory());
   if (path == null || !context.mounted) return;
-  if (!await _confirmDiscard(context, workspace) || !context.mounted) return;
-  await _open(context, workspace, path);
+  await _openProject(context, manager, path);
 }
 
-Future<void> _cloneRepository(BuildContext context, WorkspaceStore workspace) async {
-  final path = await showCloneDialog(context, initialLocation: _defaultProjectLocation(workspace), home: io.homeDirectory());
+Future<void> _cloneRepository(BuildContext context, ProjectManager manager) async {
+  final path = await showCloneDialog(context, initialLocation: _defaultProjectLocation(manager), home: io.homeDirectory());
   if (path == null || !context.mounted) return;
-  if (!await _confirmDiscard(context, workspace) || !context.mounted) return;
-  await _open(context, workspace, path);
+  await _openProject(context, manager, path);
 }

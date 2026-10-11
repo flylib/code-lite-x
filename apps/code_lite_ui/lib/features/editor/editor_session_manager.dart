@@ -8,6 +8,7 @@ import 'code_editor_controller.dart';
 import 'editor_appearance.dart';
 import 'editor_view_widget.dart' show diffTabPrefix, isSpecialTabId;
 import 'lsp_overlay.dart';
+import '../../core/state/dispose_safe.dart';
 
 /// Holds independent buffer, viewport, cursor, and diagnostic state for an open editor tab.
 class EditorTabState {
@@ -61,7 +62,7 @@ enum SplitDirection {
 }
 
 /// Manages multiple tabs, independent viewports, split panes, and synchronization with Rust Core.
-class EditorSessionManager extends ChangeNotifier {
+class EditorSessionManager extends ChangeNotifier with DisposeSafeNotifier {
   final ApiClient client;
   final Map<String, EditorTabState> _tabs = {};
   final List<String> _tabOrder = [];
@@ -69,7 +70,10 @@ class EditorSessionManager extends ChangeNotifier {
   String? _secondaryActivePath;
   SplitDirection _splitDirection = SplitDirection.none;
 
-  EditorSessionManager({required this.client}) {
+  /// [appearance]:所有项目共用同一份外观设置(传进来);不传就自己建一份(单项目 / 测试)。
+  EditorSessionManager({required this.client, EditorAppearance? appearance})
+      : appearance = appearance ?? EditorAppearance(),
+        _ownsAppearance = appearance == null {
     _diagSub = client.lspDiagnostics.listen(_onDiagnostics);
   }
 
@@ -94,7 +98,10 @@ class EditorSessionManager extends ChangeNotifier {
   final Map<String, List<EditorDiagnostic>> _pendingDiagnostics = {};
 
   /// 编辑器外观(行号 / 缩进参考线 / 面包屑 / blame 显示项),所有标签与分屏共用。
-  final EditorAppearance appearance = EditorAppearance();
+  final EditorAppearance appearance;
+
+  /// 外观是自己建的才由自己释放;共用的那份归创建它的人。
+  final bool _ownsAppearance;
 
   /// 诊断变了就加一:状态栏和大纲只订阅这个,不随每次按键的会话通知重建。
   final ValueNotifier<int> diagnosticsRevision = ValueNotifier(0);
@@ -440,7 +447,7 @@ class EditorSessionManager extends ChangeNotifier {
       t.cancel();
     }
     diagnosticsRevision.dispose();
-    appearance.dispose();
+    if (_ownsAppearance) appearance.dispose();
     for (final tab in _tabs.values) {
       tab.dispose();
     }

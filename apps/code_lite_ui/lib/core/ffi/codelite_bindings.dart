@@ -94,6 +94,11 @@ class CodeLiteBindings {
   static final CodeLiteBindings instance = CodeLiteBindings._();
   CodeLiteBindings._();
 
+  /// 一个全新的绑定:自己的 Rust 上下文(终端会话活在里面)。
+  /// 每个打开的项目各用一个,互不影响 —— 单例 [instance] 只有一个上下文,
+  /// 多个项目共用它,切换一次就把别的项目的终端全杀了。
+  factory CodeLiteBindings.create() => CodeLiteBindings._();
+
   DynamicLibrary? _dylib;
   Pointer<Void>? _ctx;
   bool _initialized = false;

@@ -123,10 +123,14 @@ class ProjectChip extends StatelessWidget {
     required this.onOpen,
     required this.onClone,
     this.home,
+    this.openProjects = const [],
   });
 
   /// 当前项目目录;没打开项目时为 null。
   final String? projectPath;
+
+  /// 现在打开着的所有项目(一个进程、都在内存里);点一个是切换。空时只有当前项目。
+  final List<String> openProjects;
 
   /// 最近打开的项目(最新的在前,可能含当前这个)。
   final List<String> recent;
@@ -173,7 +177,8 @@ class ProjectChip extends StatelessWidget {
       width: 380,
       builder: (popup) => _ProjectPopup(
         current: projectPath,
-        recent: recent.where((p) => p != projectPath).toList(),
+        open: openProjects.isNotEmpty ? openProjects : [if (projectPath != null) projectPath!],
+        recent: recent.where((p) => p != projectPath && !openProjects.contains(p)).toList(),
         home: home,
         onPick: (action) {
           Navigator.pop(popup);
@@ -209,6 +214,7 @@ class _Entry {
 class _ProjectPopup extends StatefulWidget {
   const _ProjectPopup({
     required this.current,
+    required this.open,
     required this.recent,
     required this.home,
     required this.onPick,
@@ -219,6 +225,7 @@ class _ProjectPopup extends StatefulWidget {
   });
 
   final String? current;
+  final List<String> open;
   final List<String> recent;
   final String? home;
   final void Function(VoidCallback action) onPick;
@@ -269,11 +276,9 @@ class _ProjectPopupState extends State<_ProjectPopup> {
     ];
   }
 
-  List<_Entry> get _open {
-    final c = widget.current;
-    if (c == null || projectMatchScore(_query, c, home: widget.home) == null) return const [];
-    return [_Entry.project(c, isCurrent: true, run: () => widget.onSwitch(c))];
-  }
+  List<_Entry> get _open => [
+        for (final p in filterProjects(_query, widget.open, home: widget.home)) _Entry.project(p, isCurrent: p == widget.current, run: () => widget.onSwitch(p)),
+      ];
 
   List<_Entry> get _recent => [
         for (final p in filterProjects(_query, widget.recent, home: widget.home)) _Entry.project(p, isCurrent: false, run: () => widget.onSwitch(p)),

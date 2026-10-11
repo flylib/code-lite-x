@@ -11,16 +11,26 @@ import 'layout_store.dart';
 ///
 /// 外观开关仍由 [EditorAppearance] 持有(行号栏右键菜单也会改它),这里监听它的变化一起落盘。
 /// 工具窗的位置(哪些放在左下方、拆分比例)由 [LayoutStore] 持有,同样监听落盘。
+///
+/// 自动保存的开关和延迟是全局设置,但要作用到每个项目各自的 [EditorSessionManager]:
+/// 用 [bind] 把项目的会话管理器登记进来(新开的项目也会立刻套用当前值),改设置时对所有已登记的生效。
 class SettingsStore extends ChangeNotifier {
+  /// [appearance]:外观设置;不传时取 [sessions] 的,再没有就自己建一份。
+  /// [sessions] 是方便单项目用法(和测试)的快捷方式,等同于 `bind(sessions)`。
   SettingsStore({
-    required this.sessions,
+    EditorSessionManager? sessions,
+    EditorAppearance? appearance,
     this.layout,
     Future<Map<String, dynamic>> Function()? load,
     Future<void> Function(Map<String, dynamic>)? save,
-  })  : _load = load ?? io.loadSettings,
+  })  : appearance = appearance ?? sessions?.appearance ?? EditorAppearance(),
+        _autosave = sessions?.autosave ?? true,
+        _autosaveDelay = sessions?.autosaveDelay ?? EditorSessionManager.defaultAutosaveDelay,
+        _load = load ?? io.loadSettings,
         _save = save ?? io.saveSettings {
-    sessions.appearance.addListener(_persist);
+    this.appearance.addListener(_persist);
     layout?.addListener(_onLayoutChanged);
+    if (sessions != null) _bound.add(sessions);
   }
 
   final LayoutStore? layout;
@@ -32,8 +42,22 @@ class SettingsStore extends ChangeNotifier {
   final Future<Map<String, dynamic>> Function() _load;
   final Future<void> Function(Map<String, dynamic>) _save;
 
-  final EditorSessionManager sessions;
-  EditorAppearance get appearance => sessions.appearance;
+  final EditorAppearance appearance;
+
+  final List<EditorSessionManager> _bound = [];
+  bool _autosave;
+  Duration _autosaveDelay;
+
+  /// 登记一个项目的会话管理器:立刻套用当前的自动保存设置,之后改设置也会同步给它。
+  void bind(EditorSessionManager sessions) {
+    if (_bound.contains(sessions)) return;
+    _bound.add(sessions);
+    sessions
+      ..autosave = _autosave
+      ..autosaveDelay = _autosaveDelay;
+  }
+
+  void unbind(EditorSessionManager sessions) => _bound.remove(sessions);
 
   /// 可选的自动保存延迟(停止输入后多久写盘)。
   static const List<Duration> autosaveDelays = [
@@ -44,8 +68,8 @@ class SettingsStore extends ChangeNotifier {
     Duration(seconds: 5),
   ];
 
-  bool get autosave => sessions.autosave;
-  Duration get autosaveDelay => sessions.autosaveDelay;
+  bool get autosave => _autosave;
+  Duration get autosaveDelay => _autosaveDelay;
 
   bool _loading = false;
 
@@ -53,9 +77,14 @@ class SettingsStore extends ChangeNotifier {
     final j = await _load();
     _loading = true;
     final editor = j['editor'] is Map ? Map<String, dynamic>.from(j['editor'] as Map) : const <String, dynamic>{};
-    if (editor['autosave'] is bool) sessions.autosave = editor['autosave'] as bool;
+    if (editor['autosave'] is bool) _autosave = editor['autosave'] as bool;
     final ms = editor['autosaveDelayMs'];
-    if (ms is int && ms >= 100 && ms <= 60000) sessions.autosaveDelay = Duration(milliseconds: ms);
+    if (ms is int && ms >= 100 && ms <= 60000) _autosaveDelay = Duration(milliseconds: ms);
+    for (final s in _bound) {
+      s
+        ..autosave = _autosave
+        ..autosaveDelay = _autosaveDelay;
+    }
     if (editor['appearance'] is Map) appearance.applyJson(Map<String, dynamic>.from(editor['appearance'] as Map));
     if (j['layout'] is Map) layout?.applyJson(Map<String, dynamic>.from(j['layout'] as Map));
     _savedLayout = _layoutSignature();
@@ -64,16 +93,22 @@ class SettingsStore extends ChangeNotifier {
   }
 
   void setAutosave(bool value) {
-    if (sessions.autosave == value) return;
-    sessions.autosave = value;
-    // 刚打开自动保存:已有的未保存改动立即写掉。
-    if (value) sessions.saveAll();
+    if (_autosave == value) return;
+    _autosave = value;
+    for (final s in _bound) {
+      s.autosave = value;
+      // 刚打开自动保存:已有的未保存改动立即写掉。
+      if (value) s.saveAll();
+    }
     _changed();
   }
 
   void setAutosaveDelay(Duration value) {
-    if (sessions.autosaveDelay == value) return;
-    sessions.autosaveDelay = value;
+    if (_autosaveDelay == value) return;
+    _autosaveDelay = value;
+    for (final s in _bound) {
+      s.autosaveDelay = value;
+    }
     _changed();
   }
 
@@ -84,8 +119,8 @@ class SettingsStore extends ChangeNotifier {
 
   Map<String, dynamic> toJson() => {
         'editor': {
-          'autosave': sessions.autosave,
-          'autosaveDelayMs': sessions.autosaveDelay.inMilliseconds,
+          'autosave': _autosave,
+          'autosaveDelayMs': _autosaveDelay.inMilliseconds,
           'appearance': appearance.toJson(),
         },
         if (layout != null) 'layout': layout!.toJson(),
@@ -107,7 +142,7 @@ class SettingsStore extends ChangeNotifier {
 
   @override
   void dispose() {
-    sessions.appearance.removeListener(_persist);
+    appearance.removeListener(_persist);
     layout?.removeListener(_onLayoutChanged);
     super.dispose();
   }

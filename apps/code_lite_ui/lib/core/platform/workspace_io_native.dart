@@ -62,6 +62,36 @@ Future<Uint8List?> readFileBytes(String path, {int maxBytes = 20 * 1024 * 1024})
   }
 }
 
+File? get _openProjectsFile {
+  final home = Platform.environment['HOME'];
+  return home == null ? null : File('$home/.codelitex/open_projects.json');
+}
+
+/// 当前打开的项目(按列表顺序)和正在看的那个,`~/.codelitex/open_projects.json`。读不出来就当没有。
+Future<Map<String, dynamic>> loadOpenProjects() async {
+  try {
+    final f = _openProjectsFile;
+    if (f == null || !await f.exists()) return const {};
+    final decoded = jsonDecode(await f.readAsString());
+    return decoded is Map ? Map<String, dynamic>.from(decoded) : const {};
+  } catch (_) {
+    return const {};
+  }
+}
+
+Future<void> saveOpenProjects(Map<String, dynamic> state) async {
+  try {
+    final f = _openProjectsFile;
+    if (f == null) return;
+    await f.parent.create(recursive: true);
+    final tmp = File('${f.path}.tmp');
+    await tmp.writeAsString(jsonEncode(state));
+    await tmp.rename(f.path);
+  } catch (_) {
+    // 记不住打开了哪些项目只是少个便利,不打断用户
+  }
+}
+
 File? get _sessionsFile {
   final home = Platform.environment['HOME'];
   return home == null ? null : File('$home/.codelitex/sessions.json');
