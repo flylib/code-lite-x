@@ -23,6 +23,13 @@ class EditorTabState {
   /// 打开失败的原因;非空时这个标签只读,不允许保存。
   final String? loadError;
 
+  /// 磁盘上这个文件最后一次被我们读到 / 写入的内容。磁盘内容和它不一样,就是别处(别的编辑器、格式化工具、脚本、git)改了文件。
+  String? diskText;
+
+  /// 别处改了文件、而这里还有没保存的修改时,磁盘上的新内容:等用户选「载入磁盘版本」或「保留我的修改」,
+  /// 选之前不自动保存,免得把别处的改动盖掉。
+  String? diskConflict;
+
   EditorTabState({
     required this.filePath,
     required String initialContent,
@@ -273,7 +280,10 @@ class EditorSessionManager extends ChangeNotifier with DisposeSafeNotifier {
       loadError: loaded ? null : (fileRes['error'] as String? ?? 'unable to open file'),
       initialScroll: scroll,
     );
-    if (loaded) client.lspDidOpen(path, content);
+    if (loaded) {
+      tab.diskText = content;
+      client.lspDidOpen(path, content);
+    }
 
     // 文本就在 controller 里(Dart 是唯一的数据源),这里只需通知 LSP 和界面。
     // 按键不通知会话层的监听者(否则整个编辑区每敲一个字都重建一遍):
@@ -305,13 +315,69 @@ class EditorSessionManager extends ChangeNotifier with DisposeSafeNotifier {
       if (tab == null) continue;
       final res = await client.fetchFile(path);
       if (res['status'] == 'error') continue; // 文件已被删除:保留编辑器内容,交给用户处理
-      tab.controller.setText(res['content'] as String? ?? '');
+      final content = res['content'] as String? ?? '';
+      tab.diskText = content;
+      tab.diskConflict = null;
+      tab.controller.setText(content);
       // 直接整篇同步,不必再等防抖
       _pendingChanges.remove(path);
       _needFullSync.remove(path);
       client.lspDidChange(path, tab.controller.text);
     }
     notifyListeners();
+  }
+
+  /// 磁盘上的文件被别处改了:已打开的标签跟上(IntelliJ 的「同步文件」)。
+  /// 没有未保存修改的标签直接换成磁盘内容 —— 作为一次可撤销的编辑,⌘Z 能回到改之前;
+  /// 有未保存修改的不动,记成冲突([EditorTabState.diskConflict]),由用户选。
+  /// [paths] 为 null 时检查全部标签。文件被删了 / 读不了时保留编辑器里的内容。
+  Future<void> syncWithDisk([Iterable<String>? paths]) async {
+    var changed = false;
+    for (final path in (paths ?? _tabs.keys).toList()) {
+      final tab = _tabs[path];
+      if (tab == null || tab.loadError != null || tab.diskText == null) continue;
+      final res = await client.fetchFile(path);
+      if (res['status'] != 'ok' || _tabs[path] != tab) continue;
+      final disk = res['content'] as String? ?? '';
+      if (disk == tab.diskText) continue;
+      changed = true;
+      tab.diskText = disk;
+      if (disk == tab.controller.text) {
+        // 磁盘追上了这里的内容(比如别处保存了同样的修改)
+        tab.diskConflict = null;
+        if (tab.isDirty) tab.controller.markSaved();
+      } else if (tab.isDirty) {
+        tab.diskConflict = disk;
+      } else {
+        _loadExternal(tab, disk);
+      }
+    }
+    if (changed) notifyListeners();
+  }
+
+  void _loadExternal(EditorTabState tab, String disk) {
+    tab.diskText = disk;
+    tab.diskConflict = null;
+    tab.controller.replaceAllText(disk);
+    tab.controller.markSaved();
+  }
+
+  /// 冲突时选「载入磁盘版本」:换成磁盘上的内容,这里没保存的修改丢掉(⌘Z 能找回)。
+  void loadDiskVersion(String path) {
+    final tab = _tabs[path];
+    final disk = tab?.diskConflict;
+    if (tab == null || disk == null) return;
+    _loadExternal(tab, disk);
+    notifyListeners();
+  }
+
+  /// 冲突时选「保留我的修改」:用这里的内容覆盖磁盘上的。
+  Future<bool> keepMyChanges(String path) async {
+    final tab = _tabs[path];
+    if (tab == null || tab.diskConflict == null) return false;
+    tab.diskConflict = null;
+    notifyListeners();
+    return saveFile(path);
   }
 
   /// 打开(或切到)一个「Commit: 文件名」差异标签。它没有文本缓冲,只占标签栏的一个位置,
@@ -418,9 +484,27 @@ class EditorSessionManager extends ChangeNotifier with DisposeSafeNotifier {
     _saveTimers.remove(path)?.cancel();
     final tab = _tabs[path];
     if (tab == null || tab.loadError != null) return false;
+    // 别处改了文件、用户还没选怎么办:不写,免得把别处的改动盖掉
+    if (tab.diskConflict != null) return false;
     if (!tab.isDirty) return true;
 
+    // 写之前看一眼磁盘:被别处改过(文件监视还没来得及同步)就不覆盖,转成冲突
+    final before = tab.diskText;
+    if (before != null) {
+      final current = await client.fetchFile(path);
+      if (_tabs[path] != tab) return false;
+      final disk = current['status'] == 'ok' ? current['content'] as String? ?? '' : null;
+      if (disk != null && disk != before && disk != tab.controller.text) {
+        tab.diskText = disk;
+        tab.diskConflict = disk;
+        notifyListeners();
+        return false;
+      }
+    }
+
     final text = tab.controller.text;
+    // 先记下要写的内容:写盘触发的文件监视事件回来时,认得出这是自己写的
+    tab.diskText = text;
     final res = await client.saveFile(tab.filePath, text);
     if (res['status'] == 'ok') {
       // 保存期间可能又敲了字:只有磁盘内容仍等于当前文本时才算"未修改"。
@@ -428,6 +512,7 @@ class EditorSessionManager extends ChangeNotifier with DisposeSafeNotifier {
       notifyListeners();
       return true;
     }
+    tab.diskText = before;
     return false;
   }
 

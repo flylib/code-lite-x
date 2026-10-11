@@ -12,6 +12,7 @@ import '../../features/pull_requests/pr_store.dart';
 import '../../features/terminal/terminal_store.dart';
 import '../client/api_client.dart';
 import '../ffi/codelite_bindings_stub.dart' if (dart.library.ffi) '../ffi/codelite_bindings.dart';
+import '../platform/paths.dart';
 import '../platform/workspace_io.dart' as io;
 import '../plugins/plugin_manager.dart';
 import 'layout_store.dart';
@@ -138,6 +139,11 @@ class ProjectContext {
   Timer? _sessionTimer;
   bool _disposed = false;
 
+  /// 项目目录的文件监视:别处改了已打开的文件,标签跟着更新(不在前台的项目也照常)。
+  StreamSubscription<String>? _watch;
+  final Set<String> _changedFiles = {};
+  Timer? _watchDebounce;
+
   /// 打开 [projectPath]:读文件树、恢复上次的标签。失败(目录不存在 / 初始化失败)返回 false。
   Future<bool> open(String projectPath) => workspace.openFolder(projectPath);
 
@@ -152,14 +158,36 @@ class ProjectContext {
     branches.reset();
     build.reload();
     _sessionTimer?.cancel();
+    _watch?.cancel();
+    _watch = null;
     if (root != null) {
       branches.start();
+      _watch = io.watchFiles(root).listen(_onFileChanged);
       // 光标和滚动位置不会通知任何人,定时看一眼(没变就不写盘),这样被强杀 / 崩溃也只丢几秒
       _sessionTimer = Timer.periodic(const Duration(seconds: 5), (_) => workspace.saveSession());
     } else {
       branches.stop();
       _sessionTimer = null;
     }
+  }
+
+  /// 文件监视的事件很密(保存一次可能来好几个,构建时成片地来):攒 150ms,只挑已打开的文件去和磁盘对一下。
+  void _onFileChanged(String absolutePath) {
+    _changedFiles.add(absolutePath);
+    _watchDebounce?.cancel();
+    _watchDebounce = Timer(const Duration(milliseconds: 150), () {
+      final root = workspace.rootPath;
+      final changed = {..._changedFiles};
+      _changedFiles.clear();
+      if (root == null || _disposed) return;
+      // FSEvents 给的可能是解析过符号链接的路径(/private/var/… 对 /var/…),按结尾比
+      bool hit(String abs) => changed.any((c) => c == abs || c.endsWith(abs));
+      final paths = [
+        for (final path in sessions.tabs.keys)
+          if (hit(absoluteFilePath(root, path))) path,
+      ];
+      if (paths.isNotEmpty) sessions.syncWithDisk(paths);
+    });
   }
 
   /// 项目里没有构建工具了:构建工具窗的按钮会消失,开着的窗口收起;它占着左上方的话换回项目视图。
@@ -190,11 +218,8 @@ class ProjectContext {
     }
     if (!worktreeChanged) return;
     workspace.load();
-    // 有未保存修改的标签不动:那是用户正在写的东西,不能被磁盘上的内容盖掉
-    sessions.reloadFromDisk([
-      for (final path in sessions.tabs.keys)
-        if (!sessions.isTabDirty(path)) path,
-    ]);
+    // 有未保存修改的标签不动、记成冲突:那是用户正在写的东西,不能被磁盘上的内容盖掉
+    sessions.syncWithDisk();
   }
 
   /// 把没落盘的改动写掉,并记下标签、光标和滚动位置(离开前台、关闭项目前)。
@@ -208,6 +233,8 @@ class ProjectContext {
     if (_disposed) return;
     _disposed = true;
     _sessionTimer?.cancel();
+    _watchDebounce?.cancel();
+    await _watch?.cancel();
     workspace.removeListener(_onWorkspaceChanged);
     build.removeListener(_onBuildToolsChanged);
     branches.dispose();

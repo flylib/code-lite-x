@@ -23,6 +23,7 @@ import 'features/commit/commit_panel.dart';
 import 'features/commit/diff_tab.dart';
 import 'features/editor/code_editor_controller.dart' show EditorPosition;
 import 'features/editor/editor_appearance.dart';
+import 'features/editor/disk_conflict_banner.dart';
 import 'features/editor/editor_session_manager.dart';
 import 'features/editor/editor_view_widget.dart';
 import 'features/editor/open_in_browser.dart';
@@ -80,6 +81,8 @@ class _CodeLiteAppState extends State<CodeLiteApp> {
       onInactive: _onLeaveForeground,
       onHide: _onLeaveForeground,
       onDetach: _onLeaveForeground,
+      // 切回来时和磁盘对一遍(IntelliJ 的「激活窗口时同步文件」):在别处改过的文件,已打开的标签跟上
+      onResume: () => _projects.active.sessions.syncWithDisk(),
     );
     _bootstrap();
   }
@@ -489,7 +492,14 @@ class _EditorRegion extends StatelessWidget {
           onShowInHistory: (hash, path) => _showInHistory(context, hash, path),
           specialTabBuilder: (id) => _specialTab(context, id, workspace, sessions),
           specialTabTitle: _specialTitle,
-          bannerBuilder: (path) => PluginBanner(plugins: plugins, filePath: path),
+          bannerBuilder: (path) => Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              DiskConflictBanner(sessions: sessions, path: path),
+              PluginBanner(plugins: plugins, filePath: path),
+            ],
+          ),
           onOpenFile: workspace.openFile,
           paneActionsBuilder: (path) => isHtmlFile(path) && !sessions.isSpecialTab(path)
               ? OpenInBrowserBar(

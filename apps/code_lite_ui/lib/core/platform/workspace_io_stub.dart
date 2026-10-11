@@ -10,6 +10,8 @@ Future<bool> directoryExists(String path) async => false;
 
 Future<bool> fileExists(String path) async => false;
 
+Stream<String> watchFiles(String root) => const Stream.empty();
+
 Future<Map<String, dynamic>> loadOpenProjects() async => const {};
 
 Future<void> saveOpenProjects(Map<String, dynamic> state) async {}

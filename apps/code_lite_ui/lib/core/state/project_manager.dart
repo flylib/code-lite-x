@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../platform/workspace_io.dart' as io;
@@ -194,6 +196,8 @@ class ProjectManager extends ChangeNotifier {
     _active = entry;
     // 窗口布局是共享的:新项目里没有的工具窗(构建工具)要换回项目视图
     entry.context!.syncLayoutToProject();
+    // 文件监视一直开着;切过去时再和磁盘对一遍,兜住监视漏掉的
+    unawaited(entry.context!.sessions.syncWithDisk());
     _notify();
     await _persist();
     return true;

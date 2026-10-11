@@ -51,6 +51,19 @@ Future<bool> directoryExists(String path) => Directory(path).exists();
 
 Future<bool> fileExists(String path) => File(path).exists();
 
+/// 递归监视 [root] 下的文件变化(macOS 是 FSEvents),给出变了的文件的绝对路径。
+/// 改名(编辑器的原子保存:写临时文件再改名过去)给目标路径。监视不了时是空流。
+Stream<String> watchFiles(String root) {
+  try {
+    return Directory(root)
+        .watch(recursive: true)
+        .map((e) => e is FileSystemMoveEvent ? (e.destination ?? e.path) : e.path)
+        .handleError((Object _) {});
+  } catch (_) {
+    return const Stream.empty();
+  }
+}
+
 /// 读文件的原始字节(预览里的本地图片);超过 [maxBytes] 或读不了返回 null。
 Future<Uint8List?> readFileBytes(String path, {int maxBytes = 20 * 1024 * 1024}) async {
   try {
