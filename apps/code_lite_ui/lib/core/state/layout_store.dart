@@ -34,14 +34,15 @@ class LayoutStore extends ChangeNotifier {
   bool _isBottomOpen = false;
   double _bottomHeight = 300;
 
-  /// 左侧默认开着项目视图;右侧默认什么都没有。
+  /// 左侧默认开着项目视图;右侧默认收着。
   final _Dock _left = _Dock(width: 250)
     ..top = SideTool.project
     ..topOpen = true;
-  final _Dock _right = _Dock(width: 280);
+  final _Dock _right = _Dock(width: 300);
 
-  /// 不在默认位置(左上方)的工具窗放哪了。
-  final Map<SideTool, (ToolSide, ToolSlot)> _placed = {};
+  /// 不在左上方的工具窗放哪了。默认和 IntelliJ 一样:构建工具窗(Maven)在右侧。
+  final Map<SideTool, (ToolSide, ToolSlot)> _placed = {..._defaultPlaced};
+  static const Map<SideTool, (ToolSide, ToolSlot)> _defaultPlaced = {SideTool.build: (ToolSide.right, ToolSlot.top)};
 
   /// 侧边工具窗(项目 / Commit / 结构 ……)每一侧共用一个宽度,拖动分隔线调整;切换工具窗时不跳变。
   static const double minSideWidth = 160;
@@ -176,7 +177,7 @@ class LayoutStore extends ChangeNotifier {
             if (_placeOf(t) == (side, slot)) t.name,
         ];
     return {
-      // 左上方是默认位置,不用存
+      // 不在这三个列表里的就在左上方
       'leftBottomTools': placedAt(ToolSide.left, ToolSlot.bottom),
       'leftSplit': (_left.split * 100).round() / 100,
       'rightTopTools': placedAt(ToolSide.right, ToolSlot.top),
@@ -186,7 +187,10 @@ class LayoutStore extends ChangeNotifier {
   }
 
   void applyJson(Map<String, dynamic> j) {
+    // 没存过位置(老版本 / 新装)就用默认位置;存过就完全按存的来
+    const keys = ['leftBottomTools', 'rightTopTools', 'rightBottomTools'];
     _placed.clear();
+    if (!keys.any(j.containsKey)) _placed.addAll(_defaultPlaced);
     void read(String key, ToolSide side, ToolSlot slot) {
       for (final n in (j[key] as List? ?? const [])) {
         if (SideTool.values.where((t) => t.name == n).firstOrNull case final t?) _placed[t] = (side, slot);

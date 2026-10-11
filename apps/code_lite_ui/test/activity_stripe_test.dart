@@ -1,10 +1,11 @@
 import 'package:code_lite_ui/features/activity_stripe/activity_stripe_widget.dart';
+import 'package:code_lite_ui/features/activity_stripe/stripe_button.dart';
 import 'package:code_lite_ui/features/bottom_tools/bottom_tools_widget.dart';
 import 'package:code_lite_ui/features/title_bar/title_bar_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-Widget _stripe({bool notification = false}) => MaterialApp(
+Widget _stripe() => MaterialApp(
       home: Scaffold(
         body: Row(
           children: [
@@ -15,7 +16,6 @@ Widget _stripe({bool notification = false}) => MaterialApp(
               isBottomOpen: false,
               onSelectTool: (_) {},
               onSelectBottomTab: (_) {},
-              hasNotification: notification,
             ),
           ],
         ),
@@ -23,21 +23,49 @@ Widget _stripe({bool notification = false}) => MaterialApp(
     );
 
 void main() {
-  testWidgets('debug and notifications sit at the bottom of the left stripe, below Git', (tester) async {
+  testWidgets('debug sits at the bottom of the left stripe, below Git; notifications moved to the right stripe', (tester) async {
     tester.view.physicalSize = const Size(800, 560);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
 
     await tester.pumpWidget(_stripe());
-    expect(tester.takeException(), isNull, reason: '矮窗口下八个按钮也放得下');
+    expect(tester.takeException(), isNull, reason: '矮窗口下按钮也放得下');
 
     double top(String tooltip) => tester.getTopLeft(find.byTooltip(tooltip)).dy;
     expect(find.byTooltip('Debug (Shift+F9)'), findsOneWidget);
-    expect(find.byTooltip('通知'), findsOneWidget);
+    expect(find.byTooltip('通知'), findsNothing, reason: '通知在右活动条(IntelliJ 的位置)');
     expect(top('Git 提交与日志'), lessThan(top('Debug (Shift+F9)')));
-    expect(top('Debug (Shift+F9)'), lessThan(top('通知')));
-    // the bell is the lowest button, close to the bottom edge of the stripe
-    expect(tester.getBottomLeft(find.byTooltip('通知')).dy, greaterThan(560 - 60));
+    expect(tester.getBottomLeft(find.byTooltip('Debug (Shift+F9)')).dy, greaterThan(560 - 60));
+  });
+
+  testWidgets('right stripe: bell on top, then right-docked tools, a divider, then the bottom-slot ones', (tester) async {
+    final place = {
+      SideTool.build: (ToolSide.right, ToolSlot.top),
+      SideTool.structure: (ToolSide.right, ToolSlot.bottom),
+    };
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: Row(
+          children: [
+            const Spacer(),
+            RightStripeWidget(
+              visibleTools: const {SideTool.build},
+              sideOf: (t) => place[t]?.$1 ?? ToolSide.left,
+              slotOf: (t) => place[t]?.$2 ?? ToolSlot.top,
+              onSelectTool: (_) {},
+              buildToolTitle: 'Maven',
+              hasNotification: true,
+            ),
+          ],
+        ),
+      ),
+    ));
+    double top(String tooltip) => tester.getTopLeft(find.byTooltip(tooltip)).dy;
+    expect(top('通知'), lessThan(top('Maven')));
+    expect(top('Maven'), lessThan(top('结构 (⌘7)')));
+    expect(find.byTooltip('项目 (⌘1)'), findsNothing, reason: '左侧的工具窗不在右活动条');
+    final active = {for (final b in tester.widgetList<StripeButton>(find.byType(StripeButton))) if (b.isActive) b.tooltip};
+    expect(active, {'Maven'});
   });
 
   testWidgets('the title bar shows the project and branch chips left of the file name', (tester) async {

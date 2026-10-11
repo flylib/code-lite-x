@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:code_lite_ui/features/title_bar/project_menu.dart';
 import 'package:code_lite_ui/app.dart';
+import 'package:code_lite_ui/features/bottom_tools/bottom_tools_widget.dart';
 import 'package:code_lite_ui/features/activity_stripe/activity_stripe_widget.dart';
 
 void main() {
@@ -64,7 +65,7 @@ void main() {
     await tester.pump();
 
     expect(find.byTooltip('Cargo'), findsNothing);
-    expect(find.byTooltip('通知'), findsOneWidget);
+    expect(find.descendant(of: find.byType(RightStripeWidget), matching: find.byTooltip('通知')), findsOneWidget, reason: '通知在右活动条顶上');
   });
 
   testWidgets('left activity stripe collapses the project panel on re-tap', (WidgetTester tester) async {
@@ -124,8 +125,8 @@ void main() {
 
     await tester.pumpWidget(const CodeLiteApp());
     await tester.pump();
-    expect(find.byType(RightStripeWidget), findsOneWidget);
-    expect(tester.getSize(find.byType(RightStripeWidget)).width, 0, reason: '默认右侧没有工具窗,不占地方');
+    expect(tester.getSize(find.byType(RightStripeWidget)).width, 44, reason: '右活动条始终显示(IntelliJ 的右侧栏)');
+    expect(find.descendant(of: find.byType(RightStripeWidget), matching: find.byTooltip('通知')), findsOneWidget);
 
     // 打开结构,再用 ⋮ ▸ 移动到 ▸ 右侧上方
     await tester.tap(find.byTooltip('结构 (⌘7)'));
@@ -141,7 +142,7 @@ void main() {
     expect(structure, findsOneWidget);
     expect(tester.getTopLeft(structure).dx, greaterThan(640), reason: '在编辑区右边');
     expect(tester.getTopRight(structure).dx, 1280 - 44, reason: '右活动条在最右');
-    expect(tester.getSize(structure).width, 280);
+    expect(tester.getSize(structure).width, 300);
     expect(find.byType(ProjectExplorerWidget), findsNothing, reason: '打开结构时顶替了左上方的项目视图,结构搬走后左边是空的');
     await tester.tap(find.byTooltip('项目 (⌘1)'));
     await tester.pump();
@@ -158,8 +159,18 @@ void main() {
     expect(tester.getTopRight(rightSplitter).dx, tester.getTopLeft(structure).dx);
     await tester.drag(rightSplitter, const Offset(-100, 0));
     await tester.pump();
-    expect(tester.getSize(structure).width, 380);
+    expect(tester.getSize(structure).width, 400);
     expect(tester.getSize(find.byType(ProjectExplorerWidget)).width, 250, reason: '左侧宽度不受影响');
+
+    // 底部工具窗横跨两条活动条之间的整个宽度,右侧工具窗停在它上面(IntelliJ 的布局)
+    await tester.tap(find.byTooltip('终端 (⌥F12)'));
+    await tester.pump();
+    final bottom = find.byType(BottomToolsWidget);
+    expect(tester.getTopLeft(bottom).dx, 44);
+    expect(tester.getTopRight(bottom).dx, 1280 - 44);
+    expect(tester.getBottomLeft(structure).dy, lessThan(tester.getTopLeft(bottom).dy));
+    await tester.tap(find.byTooltip('终端 (⌥F12)'));
+    await tester.pump();
 
     // 点右活动条的按钮收起它,右活动条的按钮还在
     await tester.tap(find.descendant(of: find.byType(RightStripeWidget), matching: find.byTooltip('结构 (⌘7)')));

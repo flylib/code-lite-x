@@ -8,7 +8,7 @@ import 'stripe_button.dart';
 
 export '../../core/state/layout_store.dart' show SideTool, ToolSide, ToolSlot;
 
-/// 左侧活动条。上半段切左侧工具窗,下半段切底部工具窗(IntelliJ 布局),最下面是调试和通知。设置在菜单里(⌘,)。
+/// 左侧活动条。上半段切左侧工具窗,下半段切底部工具窗(IntelliJ 布局),最下面是调试。通知在右活动条顶上。设置在菜单里(⌘,)。
 ///
 /// 之前左侧工具窗和底部工具窗的按钮混在一个 enum 里,选中态语义也混着;
 /// 现在两组各自独立 —— 与 IntelliJ 一致,也和 design/Main.dc.html 对得上。
@@ -21,7 +21,6 @@ class ActivityStripeWidget extends StatelessWidget {
     required this.isBottomOpen,
     required this.onSelectTool,
     required this.onSelectBottomTab,
-    this.hasNotification = false,
     this.buildToolTitle,
     this.visibleTools,
     this.slotOf,
@@ -34,9 +33,6 @@ class ActivityStripeWidget extends StatelessWidget {
   final bool isBottomOpen;
   final ValueChanged<SideTool> onSelectTool;
   final ValueChanged<BottomToolTab> onSelectBottomTab;
-
-  /// 通知按钮上的小黄点。
-  final bool hasNotification;
 
   /// 项目里检测到了构建工具(Maven……)时为它的名字,活动条多出构建工具窗的按钮;null 时不显示。
   final String? buildToolTitle;
@@ -100,19 +96,11 @@ class ActivityStripeWidget extends StatelessWidget {
             onTap: () => onSelectBottomTab(BottomToolTab.git),
           ),
           const SizedBox(height: 6),
-          // 调试和通知放在最下面(原先在标题栏右上角和右侧活动条)。
+          // 调试放在最下面(原先在标题栏右上角)。
           StripeButton(
             icon: Icons.bug_report_outlined,
             tooltip: 'Debug (Shift+F9)',
             isActive: false,
-            onTap: () {},
-          ),
-          const SizedBox(height: 6),
-          StripeButton(
-            icon: Icons.notifications_none_outlined,
-            tooltip: '通知',
-            isActive: false,
-            badgeColor: hasNotification ? IntelliJTheme.accentYellow : null,
             onTap: () {},
           ),
           // 设置在菜单里:CodeLiteX ▸ Settings…(⌘,)。
@@ -154,7 +142,8 @@ List<Widget> spacedButtons(Iterable<Widget?> buttons) {
   ];
 }
 
-/// 右活动条:只放停靠在右侧的工具窗按钮,上方一组、分隔线、下方一组;右侧没有工具窗时整条不显示。
+/// 右活动条(IntelliJ 的右侧栏):始终在窗口最右边。顶上是通知,下面是停靠在右侧的工具窗按钮,
+/// 上方一组、分隔线、下方一组。
 class RightStripeWidget extends StatelessWidget {
   const RightStripeWidget({
     super.key,
@@ -163,6 +152,7 @@ class RightStripeWidget extends StatelessWidget {
     required this.slotOf,
     required this.onSelectTool,
     this.buildToolTitle,
+    this.hasNotification = false,
   });
 
   final Set<SideTool> visibleTools;
@@ -170,6 +160,9 @@ class RightStripeWidget extends StatelessWidget {
   final ToolSlot Function(SideTool tool) slotOf;
   final ValueChanged<SideTool> onSelectTool;
   final String? buildToolTitle;
+
+  /// 通知按钮上的小黄点。
+  final bool hasNotification;
 
   List<Widget> _buttons(ToolSlot slot) => spacedButtons([
         for (final tool in SideTool.values)
@@ -181,7 +174,6 @@ class RightStripeWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     final upper = _buttons(ToolSlot.top);
     final lower = _buttons(ToolSlot.bottom);
-    if (upper.isEmpty && lower.isEmpty) return const SizedBox.shrink();
     return Container(
       width: IntelliJMetrics.activityStripe,
       decoration: const BoxDecoration(
@@ -191,10 +183,18 @@ class RightStripeWidget extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Column(
         children: [
-          ...upper,
-          if (upper.isNotEmpty && lower.isNotEmpty)
+          StripeButton(
+            icon: Icons.notifications_none_outlined,
+            tooltip: '通知',
+            isActive: false,
+            badgeColor: hasNotification ? IntelliJTheme.accentYellow : null,
+            onTap: () {},
+          ),
+          if (upper.isNotEmpty) ...[const SizedBox(height: 6), ...upper],
+          if (lower.isNotEmpty) ...[
             Container(width: 20, height: 1, margin: const EdgeInsets.symmetric(vertical: 8), color: IntelliJTheme.border),
-          ...lower,
+            ...lower,
+          ],
         ],
       ),
     );

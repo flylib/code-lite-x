@@ -231,14 +231,20 @@ class _Workbench extends StatelessWidget {
                       ),
                     ),
 
-                    // 左工具窗:layout 决定显示哪个(上下两块各一个时拆分显示),workspace 提供数据。
-                    _sideDock(ToolSide.left, layout, workspace, sessions),
-
-                    // 中间:编辑区 + 底部工具窗。
+                    // 两条活动条之间:上面是 左工具窗 | 编辑区 | 右工具窗,下面是横跨整个宽度的底部工具窗(IntelliJ 的布局)。
                     Expanded(
                       child: Column(
                         children: [
-                          Expanded(child: _EditorRegion(client: client, gitLog: gitLog, prs: prs, plugins: plugins, browsers: browsers)),
+                          Expanded(
+                            child: Row(
+                              children: [
+                                // 侧边工具窗:layout 决定显示哪个(上下两块各一个时拆分显示),workspace 提供数据。
+                                _sideDock(ToolSide.left, layout, workspace, sessions),
+                                Expanded(child: _EditorRegion(client: client, gitLog: gitLog, prs: prs, plugins: plugins, browsers: browsers)),
+                                _sideDock(ToolSide.right, layout, workspace, sessions),
+                              ],
+                            ),
+                          ),
                           ListenableBuilder(
                             listenable: layout,
                             builder: (context, _) {
@@ -246,16 +252,16 @@ class _Workbench extends StatelessWidget {
                               return Column(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                    _BottomResizeHandle(layout: layout),
-                                    BottomToolsWidget(
-                                      activeTab: layout.bottomTab,
-                                      onSelectTab: layout.selectBottomTab,
-                                      client: client,
-                                      terminals: terminals,
-                                      gitLog: gitLog,
-                                      repoName: workspace.projectName,
-                                      height: layout.bottomHeight,
-                                    ),
+                                  _BottomResizeHandle(layout: layout),
+                                  BottomToolsWidget(
+                                    activeTab: layout.bottomTab,
+                                    onSelectTab: layout.selectBottomTab,
+                                    client: client,
+                                    terminals: terminals,
+                                    gitLog: gitLog,
+                                    repoName: workspace.projectName,
+                                    height: layout.bottomHeight,
+                                  ),
                                 ],
                               );
                             },
@@ -264,8 +270,7 @@ class _Workbench extends StatelessWidget {
                       ),
                     ),
 
-                    // 右工具窗与右活动条:只有把工具窗移到右侧才会出现。
-                    _sideDock(ToolSide.right, layout, workspace, sessions),
+                    // 右活动条:始终显示(顶上是通知),停靠在右侧的工具窗按钮在下面。
                     ListenableBuilder(
                       listenable: Listenable.merge([layout, buildTools]),
                       builder: (context, _) => RightStripeWidget(
@@ -835,9 +840,9 @@ class _SideResizeHandleState extends State<_SideResizeHandle> {
         onHorizontalDragEnd: (_) => setState(() => _dragging = false),
         onHorizontalDragCancel: () => setState(() => _dragging = false),
         onHorizontalDragUpdate: (d) {
-          // 编辑区至少留 300px(再扣掉活动条;右活动条有按钮才占宽;另一侧开着的话也扣掉它的宽度)。
+          // 编辑区至少留 300px(再扣掉左右两条活动条;另一侧开着的话也扣掉它的宽度)。
           final other = left ? ToolSide.right : ToolSide.left;
-          final stripes = IntelliJMetrics.activityStripe * (layout.hasToolsOn(ToolSide.right) ? 2 : 1);
+          const stripes = IntelliJMetrics.activityStripe * 2;
           final otherWidth = layout.isSideOpen(other) ? layout.widthOf(other) + 5 : 0;
           final max = MediaQuery.sizeOf(context).width - 300 - stripes - otherWidth;
           layout.resizeSide(widget.side, layout.widthOf(widget.side) + (left ? d.delta.dx : -d.delta.dx), maxWidth: max);

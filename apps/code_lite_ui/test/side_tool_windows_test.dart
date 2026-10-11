@@ -17,28 +17,28 @@ void main() {
       final l = LayoutStore();
       expect(l.visibleTools, {SideTool.project});
 
-      l.selectTool(SideTool.build);
-      expect(l.visibleTools, {SideTool.build});
-      l.moveTool(SideTool.build, ToolSide.left, ToolSlot.bottom);
-      expect(l.slotOf(SideTool.build), ToolSlot.bottom);
+      l.selectTool(SideTool.commit);
+      expect(l.visibleTools, {SideTool.commit});
+      l.moveTool(SideTool.commit, ToolSide.left, ToolSlot.bottom);
+      expect(l.slotOf(SideTool.commit), ToolSlot.bottom);
       expect(l.visibleTool(ToolSide.left, ToolSlot.top), isNull, reason: '它原来占着上方,移走后上方空着');
-      expect(l.visibleTool(ToolSide.left, ToolSlot.bottom), SideTool.build);
+      expect(l.visibleTool(ToolSide.left, ToolSlot.bottom), SideTool.commit);
 
       l.selectTool(SideTool.project);
       expect(l.visibleTool(ToolSide.left, ToolSlot.top), SideTool.project);
-      expect(l.visibleTool(ToolSide.left, ToolSlot.bottom), SideTool.build, reason: '上下同时显示');
+      expect(l.visibleTool(ToolSide.left, ToolSlot.bottom), SideTool.commit, reason: '上下同时显示');
 
-      l.selectTool(SideTool.build); // 再点一次只收起下方
+      l.selectTool(SideTool.commit); // 再点一次只收起下方
       expect(l.visibleTools, {SideTool.project});
-      l.showTool(SideTool.build);
+      l.showTool(SideTool.commit);
       l.hideTool(SideTool.project);
-      expect(l.visibleTools, {SideTool.build});
+      expect(l.visibleTools, {SideTool.commit});
       expect(l.isSideOpen(ToolSide.left), isTrue);
 
       // 移回上方:顶替上方的工具窗
       l.selectTool(SideTool.structure);
-      l.moveTool(SideTool.build, ToolSide.left, ToolSlot.top);
-      expect(l.visibleTool(ToolSide.left, ToolSlot.top), SideTool.build);
+      l.moveTool(SideTool.commit, ToolSide.left, ToolSlot.top);
+      expect(l.visibleTool(ToolSide.left, ToolSlot.top), SideTool.commit);
       expect(l.visibleTool(ToolSide.left, ToolSlot.bottom), isNull);
 
       l.resizeSplit(ToolSide.left, 0.01);
@@ -63,8 +63,8 @@ void main() {
 
     test('right side: a tool moved there shows on the right and leaves the left alone; each side splits on its own', () {
       final l = LayoutStore();
-      expect(l.hasToolsOn(ToolSide.right), isFalse);
-      expect(l.isSideOpen(ToolSide.right), isFalse);
+      expect(l.sideOf(SideTool.build), ToolSide.right, reason: '和 IntelliJ 一样,Maven 默认在右侧');
+      expect(l.isSideOpen(ToolSide.right), isFalse, reason: '右侧默认收着');
 
       l.selectTool(SideTool.structure);
       expect(l.visibleTool(ToolSide.left, ToolSlot.top), SideTool.structure);
@@ -180,8 +180,8 @@ void main() {
         );
 
     testWidgets('header: only the ⋮ menu (Move To ▸ Left Top / Left Bottom) and hide; no separate split button', (tester) async {
-      final layout = LayoutStore()..selectTool(SideTool.build);
-      await tester.pumpWidget(header(layout, SideTool.build));
+      final layout = LayoutStore()..selectTool(SideTool.commit);
+      await tester.pumpWidget(header(layout, SideTool.commit));
       expect(find.byTooltip('拆分到左侧下方(与上方的工具窗同时显示)'), findsNothing, reason: '独立的拆分按钮已去掉');
       expect(find.byTooltip('选项'), findsOneWidget);
       expect(find.byTooltip('隐藏'), findsOneWidget);
@@ -197,7 +197,7 @@ void main() {
       }
 
       await moveTo('左侧下方');
-      expect(layout.visibleTool(ToolSide.left, ToolSlot.bottom), SideTool.build);
+      expect(layout.visibleTool(ToolSide.left, ToolSlot.bottom), SideTool.commit);
       expect(layout.visibleTool(ToolSide.left, ToolSlot.top), isNull);
 
       // 再回到左侧上方;菜单里的对勾跟着位置走
@@ -209,17 +209,17 @@ void main() {
       expect(checks, findsOneWidget);
       await tester.tap(find.text('左侧上方'));
       await tester.pumpAndSettle();
-      expect(layout.slotOf(SideTool.build), ToolSlot.top);
-      expect(layout.visibleTool(ToolSide.left, ToolSlot.top), SideTool.build);
+      expect(layout.slotOf(SideTool.commit), ToolSlot.top);
+      expect(layout.visibleTool(ToolSide.left, ToolSlot.top), SideTool.commit);
 
       await tester.tap(find.byTooltip('隐藏'));
       await tester.pump();
-      expect(layout.isToolVisible(SideTool.build), isFalse);
+      expect(layout.isToolVisible(SideTool.commit), isFalse);
     });
 
     testWidgets('header menu: move to the right side, check mark follows', (tester) async {
-      final layout = LayoutStore()..selectTool(SideTool.build);
-      await tester.pumpWidget(header(layout, SideTool.build));
+      final layout = LayoutStore()..selectTool(SideTool.commit);
+      await tester.pumpWidget(header(layout, SideTool.commit));
       await tester.tap(find.byTooltip('选项'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('移动到'));
@@ -228,12 +228,12 @@ void main() {
       expect(find.text('右侧下方'), findsOneWidget);
       await tester.tap(find.text('右侧下方'));
       await tester.pumpAndSettle();
-      expect(layout.sideOf(SideTool.build), ToolSide.right);
-      expect(layout.visibleTool(ToolSide.right, ToolSlot.bottom), SideTool.build);
+      expect(layout.sideOf(SideTool.commit), ToolSide.right);
+      expect(layout.visibleTool(ToolSide.right, ToolSlot.bottom), SideTool.commit);
       expect(layout.visibleTool(ToolSide.left, ToolSlot.top), isNull);
     });
 
-    testWidgets('right stripe: only right-docked tools, hidden when there are none; left stripe leaves them out', (tester) async {
+    testWidgets('right stripe: always shown with the bell on top; only right-docked tools; left stripe leaves them out', (tester) async {
       final layout = LayoutStore();
       Widget stripes() => MaterialApp(
             home: Scaffold(
@@ -265,8 +265,8 @@ void main() {
             ),
           );
       await tester.pumpWidget(stripes());
-      expect(find.byType(RightStripeWidget), findsOneWidget);
-      expect(tester.getSize(find.byType(RightStripeWidget)), Size.zero, reason: '右侧没有工具窗时不占地方');
+      expect(tester.getSize(find.byType(RightStripeWidget)).width, greaterThan(0), reason: '右活动条始终显示');
+      expect(find.descendant(of: find.byType(RightStripeWidget), matching: find.byTooltip('通知')), findsOneWidget);
 
       layout.moveTool(SideTool.structure, ToolSide.right, ToolSlot.top);
       await tester.pump();
@@ -274,7 +274,6 @@ void main() {
       final left = find.descendant(of: find.byType(ActivityStripeWidget), matching: find.byTooltip('结构 (⌘7)'));
       expect(right, findsOneWidget);
       expect(left, findsNothing, reason: '放到右边的按钮不再出现在左活动条');
-      expect(tester.getSize(find.byType(RightStripeWidget)).width, greaterThan(0));
 
       // 点右边的按钮打开 / 收起它
       await tester.tap(right);
