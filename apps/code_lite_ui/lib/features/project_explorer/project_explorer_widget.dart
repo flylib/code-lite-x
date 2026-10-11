@@ -103,12 +103,10 @@ class _ProjectExplorerWidgetState extends State<ProjectExplorerWidget> {
       child: Column(
         children: [
           // Tool window header
+          // IntelliJ 新 UI:标题栏和内容同一块底色,没有分隔线
           Container(
-            height: 34,
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            decoration: const BoxDecoration(
-              border: Border(bottom: BorderSide(color: IntelliJTheme.borderSubtle)),
-            ),
+            height: 40,
+            padding: const EdgeInsets.only(left: 12, right: 6),
             // 侧栏可拖窄到 160px:标题可省略,按钮用 InkWell 不占 Material 默认的大点击区。
             child: Row(
               children: [
@@ -117,7 +115,7 @@ class _ProjectExplorerWidgetState extends State<ProjectExplorerWidget> {
                     'Project',
                     overflow: TextOverflow.ellipsis,
                     maxLines: 1,
-                    style: TextStyle(color: IntelliJTheme.textHigh, fontSize: 12, fontWeight: FontWeight.w600),
+                    style: TextStyle(color: IntelliJTheme.textHigh, fontSize: 13, fontWeight: FontWeight.w600),
                   ),
                 ),
                 const SizedBox(width: 4),

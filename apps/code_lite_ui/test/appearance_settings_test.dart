@@ -37,7 +37,14 @@ void main() {
     expect(b.colorSchemeId, 'monokai');
     final c = EditorAppearance()..applyJson({'fontSize': 'big', 'colorScheme': 'nope'});
     expect(c.fontSize, 12);
-    expect(c.colorSchemeId, 'darcula');
+    expect(c.colorSchemeId, 'islands', reason: '默认是 Islands Dark');
+
+    // 旧版设置文件里的 darcula 只是当时的默认值:换成新默认;新版存下的 darcula 是用户选的,保留
+    expect((EditorAppearance()..applyJson({'colorScheme': 'darcula'})).colorSchemeId, 'islands');
+    expect((EditorAppearance()..applyJson({'colorScheme': 'darcula', 'schemeVersion': 2})).colorSchemeId, 'darcula');
+    expect((EditorAppearance()..applyJson({'colorScheme': 'monokai'})).colorSchemeId, 'monokai');
+    expect(EditorAppearance().toJson()['schemeVersion'], 2);
+    expect(islandsDarkScheme.background, const Color(0xFF181A1C), reason: '代码区背景就是岛的底色');
   });
 
   test('every scheme defines colors for the main token kinds; Darcula matches the old colors', () {

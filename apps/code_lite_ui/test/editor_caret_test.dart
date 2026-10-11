@@ -1,6 +1,7 @@
 import 'package:code_lite_ui/features/editor/code_editor_controller.dart';
 import 'package:code_lite_ui/features/editor/editor_view_widget.dart';
 import 'package:flutter/gestures.dart';
+import 'package:code_lite_ui/features/editor/syntax/color_schemes.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -47,7 +48,7 @@ void main() {
       p.localToGlobal(p.getOffsetForCaret(TextPosition(offset: col), Rect.zero) + Offset(0, p.size.height / 2));
 
   Rect caretRect(WidgetTester tester) => tester.getRect(find.byWidgetPredicate(
-        (w) => w is Container && w.color == const Color(0xFF589DF6) && w.constraints?.maxWidth == 2,
+        (w) => w is Container && w.color == islandsDarkScheme.caret && w.constraints?.maxWidth == 2,
       ));
 
   for (final (line, lineIndex, col) in [

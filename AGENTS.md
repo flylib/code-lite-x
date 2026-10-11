@@ -59,6 +59,11 @@ CodeLiteX 是一款高性能的原生跨平台代码编辑器，内置 Git 管�
 - Markdown 有 Editor / Editor+Preview / Preview 三种模式。能接开源库就接开源库（现用 `flutter_markdown_plus` + `markdown`）；两栏同步滚动不能卡。
 - HTML 文件：编辑器右上角列出本机装了的浏览器，点哪个就用哪个打开。
 
+**整体外观（分支 `feat/islands-ui`）**
+- 完整复刻 IntelliJ 新 UI 的「Islands Dark」：标题栏、活动条、状态栏和岛之间的缝是窗口底色 `#24282C`；编辑区、侧边工具窗、底部工具窗是一块块 8px 圆角的岛 `#181A1C`，岛之间留 5px 缝（缝就是拖动调整大小的地方）。颜色是从用户给的 IntelliJ 截图逐像素取的，见 `IntelliJTheme` / `IntelliJMetrics`、`core/theme/island.dart`。
+- 标题栏：左边红绿灯、项目、分支，左侧带项目颜色的光晕；右边 Current File ▾、运行、调试、⋮，再隔开是搜索和设置。没有搜索框、没有文件路径、没有撤销 / 重做按钮（⌘Z 照常）。
+- 编辑器标签是圆角块，选中的是蓝灰底 `#25334E`，没有下划线；× 只在选中或悬停时出现。活动条选中的按钮是实心灰色圆角块。代码区默认配色 Islands Dark（Markdown 标题是粉色 `#C77DBB`）。
+
 **工具窗与布局**
 - 工具窗标题栏只放 ⋮（移动到 / 隐藏）和 —；不要单独的「拆分」按钮。
 - 侧边工具窗可以放在左侧或右侧，每侧分上 / 下两块。

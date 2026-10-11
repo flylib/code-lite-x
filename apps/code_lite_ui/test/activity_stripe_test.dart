@@ -68,13 +68,16 @@ void main() {
     expect(active, {'Maven'});
   });
 
-  testWidgets('the title bar shows the project and branch chips left of the file name', (tester) async {
+  testWidgets('title bar (IntelliJ Islands): project and branch on the left; run config, run / debug, search and settings on the right', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 100));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    var searched = 0, settings = 0;
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(
         body: TitleBarWidget(
-          activeFile: 'src/main.rs',
-          onUndo: () {},
-          onRedo: () {},
+          accent: const Color(0xFF4C8FD6),
+          onSearch: () => searched++,
+          onSettings: () => settings++,
           projectChip: const Text('PROJECT-CHIP'),
           branchChip: const Text('BRANCH-CHIP'),
         ),
@@ -82,19 +85,17 @@ void main() {
     ));
     final project = tester.getTopLeft(find.text('PROJECT-CHIP')).dx;
     final branch = tester.getTopLeft(find.text('BRANCH-CHIP')).dx;
-    final file = tester.getTopLeft(find.text('src/main.rs')).dx;
+    final run = tester.getTopLeft(find.text('Current File')).dx;
     expect(project, lessThan(branch));
-    expect(branch, lessThan(file));
-    expect(find.text('main'), findsNothing, reason: '不再有写死的 main');
-  });
+    expect(branch, lessThan(run));
+    expect(run, greaterThan(600), reason: '运行配置在右半边');
+    expect(find.text('Search...'), findsNothing, reason: '没有搜索框,右边是搜索图标');
+    expect(find.byTooltip('运行 (⇧F10)'), findsOneWidget);
+    expect(find.byTooltip('Debug (⇧F9)'), findsOneWidget);
+    expect(tester.getTopLeft(find.byTooltip('搜索 (⇧⌘F)')).dx, greaterThan(tester.getTopLeft(find.byTooltip('Debug (⇧F9)')).dx));
 
-  testWidgets('the title bar no longer has a Debug button, Run stays', (tester) async {
-    await tester.pumpWidget(MaterialApp(
-      home: Scaffold(
-        body: TitleBarWidget(activeFile: '', onUndo: () {}, onRedo: () {}, onSearch: () {}),
-      ),
-    ));
-    expect(find.byTooltip('Debug (Shift+F9)'), findsNothing);
-    expect(find.byTooltip('Run (Shift+F10)'), findsOneWidget);
+    await tester.tap(find.byTooltip('搜索 (⇧⌘F)'));
+    await tester.tap(find.byTooltip('设置 (⌘,)'));
+    expect((searched, settings), (1, 1));
   });
 }

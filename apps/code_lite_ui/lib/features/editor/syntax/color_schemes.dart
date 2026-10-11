@@ -3,7 +3,7 @@ import 'package:flutter/painting.dart';
 import 'tokenizer.dart';
 
 /// 编辑区配色:代码区背景、默认文字、行号、选区、光标、缩进参考线,以及每类 token 的样式。
-/// IDE 外框(标签栏、工具窗)仍是 Darcula;这里只换代码区。
+/// IDE 外框(标签栏、工具窗)是 Islands Dark;这里只换代码区。
 class EditorColorScheme {
   EditorColorScheme({
     required this.id,
@@ -31,6 +31,8 @@ class EditorColorScheme {
     Color? link,
     Color? entity,
     Color? codeSpan,
+    Color? heading,
+    Color? listMarker,
     bool italicComments = true,
     bool italicTypes = false,
   }) : _styles = {
@@ -51,12 +53,13 @@ class EditorColorScheme {
           TokenKind.tag: TextStyle(color: tag),
           TokenKind.attribute: TextStyle(color: attribute),
           TokenKind.entity: TextStyle(color: entity ?? constant),
-          TokenKind.heading: TextStyle(color: keyword, fontWeight: FontWeight.bold),
+          // 给了单独的标题色(Islands Dark 的粉色)就不加粗,和 IntelliJ 一样
+          TokenKind.heading: TextStyle(color: heading ?? keyword, fontWeight: heading == null ? FontWeight.bold : null),
           TokenKind.bold: const TextStyle(fontWeight: FontWeight.bold),
           TokenKind.italic: const TextStyle(fontStyle: FontStyle.italic),
           TokenKind.link: TextStyle(color: link ?? function),
           TokenKind.codeSpan: TextStyle(color: codeSpan ?? string),
-          TokenKind.listMarker: TextStyle(color: keyword),
+          TokenKind.listMarker: TextStyle(color: listMarker ?? keyword),
           TokenKind.key: TextStyle(color: keyword),
           TokenKind.section: TextStyle(color: keyword),
         };
@@ -103,7 +106,39 @@ final EditorColorScheme darculaScheme = EditorColorScheme(
   codeSpan: const Color(0xFFA5C261),
 );
 
+/// IntelliJ 新 UI「Islands Dark」(默认):背景就是岛的底色,颜色取自用户给的 IntelliJ 截图与 IntelliJ 新 UI 的 Dark 方案。
+final EditorColorScheme islandsDarkScheme = EditorColorScheme(
+  id: 'islands',
+  name: 'Islands Dark',
+  background: const Color(0xFF181A1C),
+  foreground: const Color(0xFFBCBEC4),
+  lineNumber: const Color(0xFF515355),
+  selection: const Color(0xFF2A3B41),
+  caret: const Color(0xFFCED0D6),
+  indentGuide: const Color(0xFF2B2D30),
+  keyword: const Color(0xFFCF8E6D),
+  string: const Color(0xFF6AAB73),
+  number: const Color(0xFF2AACB8),
+  comment: const Color(0xFF7A7E85),
+  docComment: const Color(0xFF5F826B),
+  function: const Color(0xFF56A8F5),
+  type: const Color(0xFFBCBEC4),
+  annotation: const Color(0xFFB3AE60),
+  constant: const Color(0xFFC77DBB),
+  variable: const Color(0xFFBCBEC4),
+  field: const Color(0xFFC77DBB),
+  builtin: const Color(0xFFCF8E6D),
+  tag: const Color(0xFFD5B778),
+  attribute: const Color(0xFFBABABA),
+  link: const Color(0xFF6CA3D9),
+  entity: const Color(0xFF6AAB73),
+  codeSpan: const Color(0xFF6AAB73),
+  heading: const Color(0xFFC77DBB),
+  listMarker: const Color(0xFFC77DBB),
+);
+
 final List<EditorColorScheme> builtinColorSchemes = [
+  islandsDarkScheme,
   darculaScheme,
   EditorColorScheme(
     id: 'one-dark',
@@ -245,4 +280,4 @@ final List<EditorColorScheme> builtinColorSchemes = [
 ];
 
 EditorColorScheme colorSchemeById(String id) =>
-    builtinColorSchemes.firstWhere((s) => s.id == id, orElse: () => darculaScheme);
+    builtinColorSchemes.firstWhere((s) => s.id == id, orElse: () => islandsDarkScheme);

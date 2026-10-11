@@ -71,46 +71,47 @@ class _TerminalHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final sessions = store.sessions;
+    // IntelliJ 新 UI:标题栏和内容同一块底色,没有分隔线;会话是一个个圆角标签
     return Container(
-      height: 30,
-      padding: const EdgeInsets.only(left: 10, right: 4),
-      decoration: const BoxDecoration(
-        color: IntelliJTheme.panelBg,
-        border: Border(bottom: BorderSide(color: IntelliJTheme.borderSubtle)),
-      ),
+      height: 40,
+      padding: const EdgeInsets.only(left: 12, right: 6),
+      color: IntelliJTheme.panelBg,
       child: Row(
         children: [
           const Text(
             'Terminal',
-            style: TextStyle(color: IntelliJTheme.textHigh, fontSize: 12, fontWeight: FontWeight.w600),
+            style: TextStyle(color: IntelliJTheme.textHigh, fontSize: 13, fontWeight: FontWeight.w600),
           ),
-          const SizedBox(width: 10),
-          Flexible(
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  for (var i = 0; i < sessions.length; i++)
-                    _SessionTab(
-                      title: sessions[i].title,
-                      isActive: i == store.activeIndex,
-                      onTap: () => store.select(i),
-                      onClose: () {
-                        store.close(sessions[i].id);
-                        if (store.sessions.isEmpty) onHide();
-                      },
+          const SizedBox(width: 16),
+          // 会话标签和「+」占满中间,「—」贴右边(之前 Flexible + Spacer 平分空间,「—」跑到了中间)
+          Expanded(
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    for (var i = 0; i < sessions.length; i++)
+                      _SessionTab(
+                        title: sessions[i].title,
+                        isActive: i == store.activeIndex,
+                        onTap: () => store.select(i),
+                        onClose: () {
+                          store.close(sessions[i].id);
+                          if (store.sessions.isEmpty) onHide();
+                        },
+                      ),
+                    _HeaderIcon(
+                      icon: Icons.add,
+                      tooltip: '新建会话',
+                      // 尺寸由视图在下一次布局时修正,这里给个常见默认值即可。
+                      onTap: store.isAvailable ? () => store.open(24, 100) : null,
                     ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
-          _HeaderIcon(
-            icon: Icons.add,
-            tooltip: '新建会话',
-            // 尺寸由视图在下一次布局时修正,这里给个常见默认值即可。
-            onTap: store.isAvailable ? () => store.open(24, 100) : null,
-          ),
-          const Spacer(),
           _HeaderIcon(icon: Icons.remove, tooltip: '隐藏', onTap: onHide),
         ],
       ),
@@ -137,16 +138,13 @@ class _SessionTab extends StatelessWidget {
       padding: const EdgeInsets.only(right: 4),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(4),
+        borderRadius: BorderRadius.circular(6),
         child: Container(
-          height: 22,
-          padding: const EdgeInsets.only(left: 8, right: 4),
+          height: 28,
+          padding: const EdgeInsets.only(left: 10, right: 6),
           decoration: BoxDecoration(
-            color: isActive ? IntelliJTheme.accentBlue.withValues(alpha: 0.18) : null,
-            borderRadius: BorderRadius.circular(4),
-            border: Border.all(
-              color: isActive ? IntelliJTheme.accentBlue.withValues(alpha: 0.6) : Colors.transparent,
-            ),
+            color: isActive ? IntelliJTheme.chipBg : null,
+            borderRadius: BorderRadius.circular(6),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -155,8 +153,8 @@ class _SessionTab extends StatelessWidget {
                 title,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  color: isActive ? IntelliJTheme.textHigh : IntelliJTheme.textSecondary,
-                  fontSize: 12,
+                  color: isActive ? IntelliJTheme.textHigh : IntelliJTheme.textTab,
+                  fontSize: 13,
                 ),
               ),
               const SizedBox(width: 4),

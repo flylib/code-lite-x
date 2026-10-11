@@ -851,8 +851,8 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
             width: 26,
             height: 24,
             alignment: Alignment.center,
-            decoration: active ? BoxDecoration(color: IntelliJTheme.hoverBg, borderRadius: BorderRadius.circular(5)) : null,
-            child: Icon(icon, size: 16, color: active ? IntelliJTheme.textHigh : IntelliJTheme.textMuted),
+            decoration: active ? BoxDecoration(color: const Color(0xFF2F3236), borderRadius: BorderRadius.circular(5)) : null,
+            child: Icon(icon, size: 16, color: active ? IntelliJTheme.textHigh : IntelliJTheme.icon),
           ),
         ),
       );
@@ -876,9 +876,9 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
   Widget _buildTabBar() {
     EditorViewWidget.debugTabBarBuilds++;
     return Container(
-      height: 34,
+      height: IntelliJMetrics.tabStrip,
+      padding: const EdgeInsets.only(left: 6),
       decoration: const BoxDecoration(
-        color: IntelliJTheme.tabInactiveBg,
         border: Border(bottom: BorderSide(color: IntelliJTheme.borderSubtle)),
       ),
       child: Row(
@@ -910,55 +910,62 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
                 return ReorderableDelayedDragStartListener(
                   key: ValueKey('tab_$path'),
                   index: index,
-                  child: InkWell(
-                    onTap: () => widget.onSelectTab(path),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10),
-                      decoration: BoxDecoration(
-                        color: isActive ? IntelliJTheme.tabActiveBg : IntelliJTheme.tabInactiveBg,
-                        border: Border(
-                          bottom: BorderSide(
-                            color: isActive ? IntelliJTheme.accentBlue : Colors.transparent,
-                            width: 2,
+                  // 标签是一个个圆角块(IntelliJ 新 UI):选中的是蓝灰底,没有下划线;× 只在选中或悬停时出现
+                  child: _HoverBuilder(
+                    builder: (hovered) => Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 1, vertical: 4),
+                      child: InkWell(
+                        onTap: () => widget.onSelectTab(path),
+                        borderRadius: BorderRadius.circular(6),
+                        hoverColor: isActive ? Colors.transparent : IntelliJTheme.hoverBg,
+                        child: Container(
+                          padding: const EdgeInsets.only(left: 10, right: 6),
+                          decoration: BoxDecoration(
+                            color: isActive ? IntelliJTheme.tabActiveBg : null,
+                            borderRadius: BorderRadius.circular(6),
                           ),
-                          right: const BorderSide(color: IntelliJTheme.borderSubtle, width: 0.5),
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (isDiffTab)
-                            const Icon(Icons.compare_arrows, size: 14, color: IntelliJTheme.accentBlue)
-                          else if (isPrTimeline)
-                            const PullRequestIcon(color: Color(0xFF5FB865), size: 14)
-                          else
-                            _buildFileTypeIcon(path),
-                          const SizedBox(width: 6),
-                          Text(
-                            fileName,
-                            style: TextStyle(
-                              color: isActive ? IntelliJTheme.textHigh : IntelliJTheme.textMuted,
-                              fontSize: 12,
-                              fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
-                            ),
-                          ),
-                          if (isDirty) ...[
-                            const SizedBox(width: 5),
-                            Container(
-                              width: 6,
-                              height: 6,
-                              decoration: const BoxDecoration(
-                                color: Color(0xFF6CB4F8),
-                                shape: BoxShape.circle,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (isDiffTab)
+                                const Icon(Icons.compare_arrows, size: 14, color: IntelliJTheme.accentBlue)
+                              else if (isPrTimeline)
+                                const PullRequestIcon(color: Color(0xFF5FB865), size: 14)
+                              else
+                                _buildFileTypeIcon(path),
+                              const SizedBox(width: 6),
+                              Text(
+                                fileName,
+                                style: TextStyle(
+                                  color: isActive ? IntelliJTheme.textHigh : IntelliJTheme.textTab,
+                                  fontSize: 13,
+                                ),
                               ),
-                            ),
-                          ],
-                          const SizedBox(width: 8),
-                          InkWell(
-                            onTap: () => widget.onCloseTab(path),
-                            child: const Icon(Icons.close, size: 12, color: IntelliJTheme.textMuted),
+                              if (isDirty) ...[
+                                const SizedBox(width: 5),
+                                Container(
+                                  width: 6,
+                                  height: 6,
+                                  decoration: const BoxDecoration(
+                                    color: Color(0xFF6CB4F8),
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                              ],
+                              const SizedBox(width: 4),
+                              SizedBox(
+                                width: 16,
+                                child: isActive || hovered
+                                    ? InkWell(
+                                        onTap: () => widget.onCloseTab(path),
+                                        borderRadius: BorderRadius.circular(3),
+                                        child: const Icon(Icons.close, size: 12, color: IntelliJTheme.textSecondary),
+                                      )
+                                    : null,
+                              ),
+                            ],
                           ),
-                        ],
+                        ),
                       ),
                     ),
                   ),
@@ -986,7 +993,7 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
                       size: 14,
                       color: widget.splitDirection == SplitDirection.horizontal
                           ? IntelliJTheme.accentBlue
-                          : IntelliJTheme.textMuted,
+                          : IntelliJTheme.icon,
                     ),
                   ),
                 ),
@@ -1006,7 +1013,7 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
                       size: 14,
                       color: widget.splitDirection == SplitDirection.vertical
                           ? IntelliJTheme.accentBlue
-                          : IntelliJTheme.textMuted,
+                          : IntelliJTheme.icon,
                     ),
                   ),
                 ),
@@ -1021,7 +1028,7 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
                       child: Icon(
                         Icons.close_fullscreen,
                         size: 13,
-                        color: IntelliJTheme.textMuted,
+                        color: IntelliJTheme.icon,
                       ),
                     ),
                   ),
@@ -1231,11 +1238,11 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
   }) {
     final segments = filePath.split('/').where((s) => s.isNotEmpty).toList();
 
+    // 和编辑区同一块底色(岛),只留底部一条细线
     return Container(
       height: 24,
       padding: const EdgeInsets.symmetric(horizontal: 12),
       decoration: const BoxDecoration(
-        color: IntelliJTheme.subHeaderBg,
         border: Border(bottom: BorderSide(color: IntelliJTheme.borderSubtle)),
       ),
       child: Row(
@@ -1900,12 +1907,9 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
   static const double errorStripeWidth = 8;
 
   Widget _buildRightErrorStripe(int totalLines, {required List<EditorDiagnostic> diagnostics}) {
-    return Container(
+    // 没有底色和边线:标记直接画在岛上(IntelliJ 新 UI)
+    return SizedBox(
       width: errorStripeWidth,
-      decoration: const BoxDecoration(
-        color: Color(0xFF26282E),
-        border: Border(left: BorderSide(color: IntelliJTheme.borderSubtle)),
-      ),
       child: LayoutBuilder(
         builder: (context, constraints) {
           final height = constraints.maxHeight;
@@ -1944,5 +1948,28 @@ class _BlameSession {
     timer?.cancel();
     final l = listener;
     if (l != null) controller.removeTextListener(l);
+  }
+}
+
+/// 给子树一个「鼠标是否在上面」的状态(编辑器标签的 × 只在悬停时出现)。
+class _HoverBuilder extends StatefulWidget {
+  const _HoverBuilder({required this.builder});
+
+  final Widget Function(bool hovered) builder;
+
+  @override
+  State<_HoverBuilder> createState() => _HoverBuilderState();
+}
+
+class _HoverBuilderState extends State<_HoverBuilder> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: widget.builder(_hovered),
+    );
   }
 }

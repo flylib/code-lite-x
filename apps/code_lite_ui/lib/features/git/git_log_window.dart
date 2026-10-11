@@ -118,25 +118,21 @@ class _Header extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // IntelliJ 新 UI:标题栏和内容同一块底色;选中的标签是圆角块(同终端的会话标签)
     return Container(
-      height: 32,
-      padding: const EdgeInsets.only(left: 12, right: 4),
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: IntelliJTheme.borderSubtle)),
-      ),
+      height: 40,
+      padding: const EdgeInsets.only(left: 12, right: 6),
       child: Row(
         children: [
-          const Text('Git', style: TextStyle(color: IntelliJTheme.textHigh, fontSize: 12, fontWeight: FontWeight.w600)),
-          const SizedBox(width: 18),
-          // 目前只有 Log 一个标签;下划线标出选中态,和 IntelliJ 一致。
+          const Text('Git', style: TextStyle(color: IntelliJTheme.textHigh, fontSize: 13, fontWeight: FontWeight.w600)),
+          const SizedBox(width: 16),
+          // 目前只有 Log 一个标签
           Container(
-            height: 32,
-            padding: const EdgeInsets.symmetric(horizontal: 6),
-            decoration: const BoxDecoration(
-              border: Border(bottom: BorderSide(color: IntelliJTheme.accentBlue, width: 2)),
-            ),
+            height: 28,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            decoration: BoxDecoration(color: IntelliJTheme.chipBg, borderRadius: BorderRadius.circular(6)),
             alignment: Alignment.center,
-            child: const Text('Log', style: TextStyle(color: IntelliJTheme.textHigh, fontSize: 12)),
+            child: const Text('Log', style: TextStyle(color: IntelliJTheme.textHigh, fontSize: 13)),
           ),
           const Spacer(),
           GitIconButton(icon: Icons.more_vert, tooltip: '刷新', onTap: onRefresh),

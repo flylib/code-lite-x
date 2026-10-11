@@ -60,22 +60,14 @@ class ActivityStripeWidget extends StatelessWidget {
     final lower = _leftButtons(ToolSlot.bottom);
     return Container(
       width: IntelliJMetrics.activityStripe,
-      decoration: const BoxDecoration(
-        color: IntelliJTheme.stripeBg,
-        border: Border(right: BorderSide(color: IntelliJTheme.borderSubtle)),
-      ),
-      padding: const EdgeInsets.symmetric(vertical: 8),
+      color: IntelliJTheme.stripeBg,
+      padding: const EdgeInsets.only(top: 6, bottom: 4),
       child: Column(
         children: [
           ..._leftButtons(ToolSlot.top),
           // 放到左下方的工具窗:分隔线下面
           if (lower.isNotEmpty) ...[
-            Container(
-              width: 20,
-              height: 1,
-              margin: const EdgeInsets.symmetric(vertical: 8),
-              color: IntelliJTheme.border,
-            ),
+            Container(width: 18, height: 1, margin: const EdgeInsets.symmetric(vertical: 6), color: IntelliJTheme.border),
             ...lower,
           ],
 
@@ -88,14 +80,14 @@ class ActivityStripeWidget extends StatelessWidget {
             isActive: isBottomOpen && bottomTab == BottomToolTab.terminal,
             onTap: () => onSelectBottomTab(BottomToolTab.terminal),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: _gap),
           StripeButton(
             iconBuilder: (color, size) => GitBranchIcon(color: color, size: size),
             tooltip: 'Git 提交与日志',
             isActive: isBottomOpen && bottomTab == BottomToolTab.git,
             onTap: () => onSelectBottomTab(BottomToolTab.git),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: _gap),
           // 调试放在最下面(原先在标题栏右上角)。
           StripeButton(
             icon: Icons.bug_report_outlined,
@@ -134,11 +126,14 @@ Widget? sideToolButton(SideTool tool, {required bool active, required VoidCallba
   };
 }
 
-/// 按钮之间留 6px;null(没有按钮的工具窗)跳过。
+/// 活动条按钮之间的间距(截图里按钮中心相距 40px)。
+const double _gap = 10;
+
+/// 按钮之间留 [_gap];null(没有按钮的工具窗)跳过。
 List<Widget> spacedButtons(Iterable<Widget?> buttons) {
   final list = [for (final b in buttons) if (b != null) b];
   return [
-    for (var i = 0; i < list.length; i++) ...[if (i > 0) const SizedBox(height: 6), list[i]],
+    for (var i = 0; i < list.length; i++) ...[if (i > 0) const SizedBox(height: _gap), list[i]],
   ];
 }
 
@@ -176,11 +171,8 @@ class RightStripeWidget extends StatelessWidget {
     final lower = _buttons(ToolSlot.bottom);
     return Container(
       width: IntelliJMetrics.activityStripe,
-      decoration: const BoxDecoration(
-        color: IntelliJTheme.stripeBg,
-        border: Border(left: BorderSide(color: IntelliJTheme.borderSubtle)),
-      ),
-      padding: const EdgeInsets.symmetric(vertical: 8),
+      color: IntelliJTheme.stripeBg,
+      padding: const EdgeInsets.only(top: 6, bottom: 4),
       child: Column(
         children: [
           StripeButton(
@@ -190,9 +182,9 @@ class RightStripeWidget extends StatelessWidget {
             badgeColor: hasNotification ? IntelliJTheme.accentYellow : null,
             onTap: () {},
           ),
-          if (upper.isNotEmpty) ...[const SizedBox(height: 6), ...upper],
+          if (upper.isNotEmpty) ...[const SizedBox(height: _gap), ...upper],
           if (lower.isNotEmpty) ...[
-            Container(width: 20, height: 1, margin: const EdgeInsets.symmetric(vertical: 8), color: IntelliJTheme.border),
+            Container(width: 18, height: 1, margin: const EdgeInsets.symmetric(vertical: 6), color: IntelliJTheme.border),
             ...lower,
           ],
         ],

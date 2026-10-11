@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../../core/client/api_client.dart';
-import '../../core/theme/intellij_theme.dart';
 import '../git/git_log_store.dart';
 import '../git/git_log_window.dart';
 import '../terminal/terminal_store.dart';
@@ -10,7 +9,7 @@ import '../terminal/terminal_view.dart';
 enum BottomToolTab { git, terminal }
 
 /// 底部工具窗:Git(Log)与终端。两者都有 IntelliJ 式的独立标题栏,
-/// 所以这里只负责按选中项切换、给出高度和顶部分隔线。
+/// 所以这里只负责按选中项切换、给出高度(外面套着一块岛)。
 class BottomToolsWidget extends StatelessWidget {
   const BottomToolsWidget({
     super.key,
@@ -43,11 +42,8 @@ class BottomToolsWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return SizedBox(
       height: height,
-      decoration: const BoxDecoration(
-        border: Border(top: BorderSide(color: IntelliJTheme.borderSubtle)),
-      ),
       child: switch (activeTab) {
         BottomToolTab.git => GitLogWindow(
             store: gitLog,

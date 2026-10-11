@@ -2,11 +2,24 @@ import 'package:flutter/material.dart';
 import '../../core/platform/window_chrome.dart';
 import '../../core/theme/intellij_theme.dart';
 
+/// 标题栏(IntelliJ 新 UI / Islands):左边红绿灯、项目、分支;右边运行配置、运行 / 调试、搜索、设置。
+/// 底色是窗口底色,左侧带一片当前项目颜色的光晕(IntelliJ 按项目给标题栏上色)。
 class TitleBarWidget extends StatelessWidget {
-  final String activeFile;
-  final VoidCallback onUndo;
-  final VoidCallback onRedo;
+  const TitleBarWidget({
+    super.key,
+    this.onSearch,
+    this.onSettings,
+    this.accent,
+    this.projectChip,
+    this.branchChip,
+    this.operationButtons,
+  });
+
   final VoidCallback? onSearch;
+  final VoidCallback? onSettings;
+
+  /// 当前项目的颜色(和项目徽标同一个);null 时没有光晕。
+  final Color? accent;
 
   /// 项目名(点开是新建 / 打开 / 克隆和最近项目)与当前分支(点开是 Git 操作);由应用组装。
   final Widget? projectChip;
@@ -15,71 +28,52 @@ class TitleBarWidget extends StatelessWidget {
   /// 分支名右边的按钮:合并 / 变基有冲突时的「查看冲突」和「放弃」。
   final Widget? operationButtons;
 
-  const TitleBarWidget({
-    super.key,
-    required this.activeFile,
-    required this.onUndo,
-    required this.onRedo,
-    this.onSearch,
-    this.projectChip,
-    this.branchChip,
-    this.operationButtons,
-  });
-
   @override
   Widget build(BuildContext context) {
     return _TitleBarDragRegion(child: _bar());
   }
 
+  /// 项目颜色从左边淡出到窗口底色。截图里蓝色项目在徽标后面是 #344163,到 1/3 宽处已经看不出来。
+  Gradient? _glow() {
+    final c = accent;
+    if (c == null) return null;
+    Color mix(double a) => Color.alphaBlend(c.withValues(alpha: a), IntelliJTheme.frameBg);
+    return LinearGradient(
+      colors: [mix(0.30), mix(0.24), mix(0.08), IntelliJTheme.frameBg],
+      stops: const [0, 0.14, 0.26, 0.4],
+    );
+  }
+
   Widget _bar() {
     return Container(
-      height: 40,
-      decoration: const BoxDecoration(
-        color: IntelliJTheme.headerBg,
-        border: Border(bottom: BorderSide(color: IntelliJTheme.borderSubtle)),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 12),
+      height: IntelliJMetrics.titleBar,
+      decoration: BoxDecoration(color: IntelliJTheme.frameBg, gradient: _glow()),
+      padding: const EdgeInsets.only(left: 12, right: 8),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          // Left: 给系统红绿灯留位置 & Project / Branch Badges
-          Flexible(
+          // 左:给系统红绿灯留位置,然后是项目和分支
+          Expanded(
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: Row(
                 children: [
                   _trafficLightsSpace(),
                   if (projectChip != null) projectChip!,
-                  if (branchChip != null) ...[const SizedBox(width: 4), branchChip!],
+                  if (branchChip != null) ...[const SizedBox(width: 10), branchChip!],
                   if (operationButtons != null) operationButtons!,
-                  const SizedBox(width: 12),
-                  _buildBreadcrumb(),
                 ],
               ),
             ),
           ),
-
           const SizedBox(width: 8),
-
-          // Center: Search Everywhere Input
-          _buildSearchEverywhere(),
-
-          const SizedBox(width: 8),
-
-          // Right: Controls & Run
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _buildIconBtn(Icons.undo, onUndo, 'Undo (Cmd+Z)'),
-              _buildIconBtn(Icons.redo, onRedo, 'Redo (Cmd+Shift+Z)'),
-              const SizedBox(width: 8),
-              Container(width: 1, height: 16, color: IntelliJTheme.border),
-              const SizedBox(width: 8),
-              _buildRunTarget(),
-              const SizedBox(width: 4),
-              _buildActionBtn(Icons.play_arrow, IntelliJTheme.gitGreen, 'Run (Shift+F10)'),
-            ],
-          ),
+          // 右:运行配置与运行 / 调试 / 更多,隔开一点是搜索和设置
+          _buildRunTarget(),
+          _iconBtn(Icons.play_arrow_outlined, '运行 (⇧F10)', null, dim: true),
+          _iconBtn(Icons.bug_report_outlined, 'Debug (⇧F9)', null, dim: true),
+          _iconBtn(Icons.more_vert, '更多', null),
+          const SizedBox(width: 18),
+          _iconBtn(Icons.search, '搜索 (⇧⌘F)', onSearch),
+          _iconBtn(Icons.settings_outlined, '设置 (⌘,)', onSettings),
         ],
       ),
     );
@@ -95,82 +89,45 @@ class TitleBarWidget extends StatelessWidget {
     );
   }
 
-  Widget _buildBreadcrumb() {
-    return Text(
-      activeFile,
-      style: const TextStyle(color: IntelliJTheme.textMuted, fontSize: 11),
-      overflow: TextOverflow.ellipsis,
-    );
-  }
-
-  Widget _buildSearchEverywhere() {
-    return InkWell(
-      onTap: onSearch,
-      borderRadius: BorderRadius.circular(6),
-      child: Container(
-        width: 180,
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
-          color: IntelliJTheme.panelBg,
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: IntelliJTheme.border),
-        ),
-        child: const Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.search, size: 14, color: IntelliJTheme.textMuted),
-                SizedBox(width: 4),
-                Text('Search...', style: TextStyle(color: IntelliJTheme.textMuted, fontSize: 11)),
-              ],
-            ),
-            Text('⇧ ⇧', style: TextStyle(color: IntelliJTheme.textMuted, fontSize: 9)),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildRunTarget() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: IntelliJTheme.panelBg,
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: IntelliJTheme.border),
+    return Tooltip(
+      message: '运行配置',
+      waitDuration: const Duration(milliseconds: 400),
+      child: InkWell(
+        onTap: () {},
+        borderRadius: BorderRadius.circular(6),
+        hoverColor: IntelliJTheme.hoverBg,
+        child: const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('Current File', style: TextStyle(color: IntelliJTheme.textHigh, fontSize: 13)),
+              SizedBox(width: 4),
+              Icon(Icons.keyboard_arrow_down, size: 15, color: IntelliJTheme.textSecondary),
+            ],
+          ),
+        ),
       ),
-      child: const Row(
-        children: [
-          Icon(Icons.circle, size: 6, color: IntelliJTheme.gitGreen),
-          SizedBox(width: 4),
-          Text('code-lite-desktop', style: TextStyle(color: IntelliJTheme.textHigh, fontSize: 11)),
-        ],
+    );
+  }
+
+  Widget _iconBtn(IconData icon, String tooltip, VoidCallback? onTap, {bool dim = false}) {
+    return Tooltip(
+      message: tooltip,
+      waitDuration: const Duration(milliseconds: 400),
+      child: InkWell(
+        onTap: onTap ?? () {},
+        borderRadius: BorderRadius.circular(6),
+        hoverColor: IntelliJTheme.hoverBg,
+        child: SizedBox(
+          width: 30,
+          height: 30,
+          child: Icon(icon, size: 18, color: dim ? IntelliJTheme.textMuted : IntelliJTheme.icon),
+        ),
       ),
     );
   }
-
-  Widget _buildActionBtn(IconData icon, Color color, String tooltip) {
-    return IconButton(
-      icon: Icon(icon, size: 16, color: color),
-      tooltip: tooltip,
-      onPressed: () {},
-      splashRadius: 14,
-      constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-    );
-  }
-
-  Widget _buildIconBtn(IconData icon, VoidCallback onPressed, String tooltip) {
-    return IconButton(
-      icon: Icon(icon, size: 16, color: IntelliJTheme.textPrimary),
-      tooltip: tooltip,
-      onPressed: onPressed,
-      splashRadius: 14,
-      constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-    );
-  }
-
 }
 
 /// 标题栏就是窗口的标题栏:按着空白处拖动窗口,双击缩放。

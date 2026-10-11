@@ -125,7 +125,7 @@ void main() {
 
     await tester.pumpWidget(const CodeLiteApp());
     await tester.pump();
-    expect(tester.getSize(find.byType(RightStripeWidget)).width, 44, reason: '右活动条始终显示(IntelliJ 的右侧栏)');
+    expect(tester.getSize(find.byType(RightStripeWidget)).width, 40, reason: '右活动条始终显示(IntelliJ 的右侧栏)');
     expect(find.descendant(of: find.byType(RightStripeWidget), matching: find.byTooltip('通知')), findsOneWidget);
 
     // 打开结构,再用 ⋮ ▸ 移动到 ▸ 右侧上方
@@ -141,7 +141,7 @@ void main() {
     final structure = find.byType(StructureWidget);
     expect(structure, findsOneWidget);
     expect(tester.getTopLeft(structure).dx, greaterThan(640), reason: '在编辑区右边');
-    expect(tester.getTopRight(structure).dx, 1280 - 44, reason: '右活动条在最右');
+    expect(tester.getTopRight(structure).dx, 1280 - 40 - 2, reason: '右活动条在最右,中间隔一条 2px 的缝');
     expect(tester.getSize(structure).width, 300);
     expect(find.byType(ProjectExplorerWidget), findsNothing, reason: '打开结构时顶替了左上方的项目视图,结构搬走后左边是空的');
     await tester.tap(find.byTooltip('项目 (⌘1)'));
@@ -154,8 +154,8 @@ void main() {
     final splitter = find.byWidgetPredicate((w) => w is MouseRegion && w.cursor == SystemMouseCursors.resizeColumn);
     expect(splitter, findsNWidgets(2));
     final rightSplitter = tester.getTopLeft(splitter.at(1)).dx > 640 ? splitter.at(1) : splitter.at(0);
-    // 分隔线窄(3px),紧贴面板;不在编辑区右边的错误条和面板之间留一条宽带
-    expect(tester.getSize(rightSplitter).width, 3);
+    // 岛与岛之间的缝就是分隔线(5px),紧贴面板
+    expect(tester.getSize(rightSplitter).width, 5);
     expect(tester.getTopRight(rightSplitter).dx, tester.getTopLeft(structure).dx);
     await tester.drag(rightSplitter, const Offset(-100, 0));
     await tester.pump();
@@ -166,8 +166,8 @@ void main() {
     await tester.tap(find.byTooltip('终端 (⌥F12)'));
     await tester.pump();
     final bottom = find.byType(BottomToolsWidget);
-    expect(tester.getTopLeft(bottom).dx, 44);
-    expect(tester.getTopRight(bottom).dx, 1280 - 44);
+    expect(tester.getTopLeft(bottom).dx, 40);
+    expect(tester.getTopRight(bottom).dx, 1280 - 40 - 2);
     expect(tester.getBottomLeft(structure).dy, lessThan(tester.getTopLeft(bottom).dy));
     await tester.tap(find.byTooltip('终端 (⌥F12)'));
     await tester.pump();

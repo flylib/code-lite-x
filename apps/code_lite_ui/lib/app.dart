@@ -14,6 +14,7 @@ import 'core/state/settings_store.dart';
 import 'core/platform/workspace_io.dart' as io;
 import 'core/state/workspace_store.dart';
 import 'core/theme/intellij_theme.dart';
+import 'core/theme/island.dart';
 import 'features/activity_stripe/activity_stripe_widget.dart';
 import 'features/bottom_tools/bottom_tools_widget.dart';
 import 'features/build_tools/build_tools_panel.dart';
@@ -185,17 +186,16 @@ class _Workbench extends StatelessWidget {
       child: Focus(
         autofocus: true,
         child: Scaffold(
-          backgroundColor: IntelliJTheme.editorBg,
+          backgroundColor: IntelliJTheme.frameBg,
           body: Column(
             children: [
               // 标题栏订阅 workspace(当前文件、项目)和项目列表;分支那一块自己订阅 BranchStore。
               ListenableBuilder(
                 listenable: Listenable.merge([workspace, manager]),
                 builder: (context, _) => TitleBarWidget(
-                  activeFile: workspace.activeFile,
-                  onUndo: workspace.undo,
-                  onRedo: workspace.redo,
+                  accent: workspace.rootPath == null ? null : projectColor(workspace.projectName),
                   onSearch: () => _openSearch(context),
+                  onSettings: () => showSettingsDialog(context, settings, plugins: plugins),
                   projectChip: ProjectChip(
                     projectPath: workspace.rootPath,
                     openProjects: [for (final p in manager.projects) p.path],
@@ -231,42 +231,48 @@ class _Workbench extends StatelessWidget {
                       ),
                     ),
 
-                    // 两条活动条之间:上面是 左工具窗 | 编辑区 | 右工具窗,下面是横跨整个宽度的底部工具窗(IntelliJ 的布局)。
+                    // 两条活动条之间:一块块圆角的「岛」(IntelliJ 的 Islands 布局),岛之间的缝可以拖动调整大小。
+                    // 上面是 左工具窗 | 编辑区 | 右工具窗,下面是横跨整个宽度的底部工具窗。
                     Expanded(
-                      child: Column(
-                        children: [
-                          Expanded(
-                            child: Row(
-                              children: [
-                                // 侧边工具窗:layout 决定显示哪个(上下两块各一个时拆分显示),workspace 提供数据。
-                                _sideDock(ToolSide.left, layout, workspace, sessions),
-                                Expanded(child: _EditorRegion(client: client, gitLog: gitLog, prs: prs, plugins: plugins, browsers: browsers)),
-                                _sideDock(ToolSide.right, layout, workspace, sessions),
-                              ],
-                            ),
-                          ),
-                          ListenableBuilder(
-                            listenable: layout,
-                            builder: (context, _) {
-                              if (!layout.isBottomOpen) return const SizedBox.shrink();
-                              return Column(
-                                mainAxisSize: MainAxisSize.min,
+                      child: Padding(
+                        padding: const EdgeInsets.only(top: 2, right: 2),
+                        child: Column(
+                          children: [
+                            Expanded(
+                              child: Row(
                                 children: [
-                                  _BottomResizeHandle(layout: layout),
-                                  BottomToolsWidget(
-                                    activeTab: layout.bottomTab,
-                                    onSelectTab: layout.selectBottomTab,
-                                    client: client,
-                                    terminals: terminals,
-                                    gitLog: gitLog,
-                                    repoName: workspace.projectName,
-                                    height: layout.bottomHeight,
-                                  ),
+                                  // 侧边工具窗:layout 决定显示哪个(上下两块各一个时拆分显示),workspace 提供数据。
+                                  _sideDock(ToolSide.left, layout, workspace, sessions),
+                                  Expanded(child: Island(child: _EditorRegion(client: client, gitLog: gitLog, prs: prs, plugins: plugins, browsers: browsers))),
+                                  _sideDock(ToolSide.right, layout, workspace, sessions),
                                 ],
-                              );
-                            },
-                          ),
-                        ],
+                              ),
+                            ),
+                            ListenableBuilder(
+                              listenable: layout,
+                              builder: (context, _) {
+                                if (!layout.isBottomOpen) return const SizedBox.shrink();
+                                return Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    _BottomResizeHandle(layout: layout),
+                                    Island(
+                                      child: BottomToolsWidget(
+                                        activeTab: layout.bottomTab,
+                                        onSelectTab: layout.selectBottomTab,
+                                        client: client,
+                                        terminals: terminals,
+                                        gitLog: gitLog,
+                                        repoName: workspace.projectName,
+                                        height: layout.bottomHeight,
+                                      ),
+                                    ),
+                                  ],
+                                );
+                              },
+                            ),
+                          ],
+                        ),
                       ),
                     ),
 
@@ -316,7 +322,8 @@ class _Workbench extends StatelessWidget {
               key: ValueKey(tool),
               tool: tool,
               layout: layout,
-              child: ListenableBuilder(
+              child: Island(
+                child: ListenableBuilder(
                 listenable: workspace,
                 builder: (context, _) => switch (tool) {
                           SideTool.project => ProjectExplorerWidget(
@@ -356,6 +363,7 @@ class _Workbench extends StatelessWidget {
                             ),
                           SideTool.build => BuildToolsPanel(store: buildTools, onOpenFile: workspace.openFile),
                 },
+              ),
               ),
             );
         final panel = top != null && bottom != null
@@ -803,14 +811,14 @@ class _BottomResizeHandle extends StatelessWidget {
           final max = MediaQuery.sizeOf(context).height - 160 - IntelliJMetrics.titleBar;
           layout.resizeBottom(layout.bottomHeight - d.delta.dy, maxHeight: max);
         },
-        child: const SizedBox(height: 4, width: double.infinity),
+        child: const SizedBox(height: IntelliJMetrics.islandGap, width: double.infinity),
       ),
     );
   }
 }
 
-/// 侧边工具窗与编辑区之间的分隔线:1px 线条,左右拖动调整工具窗宽度(与 IntelliJ 一致)。
-/// 命中区比线条宽,方便抓取;悬停 / 拖动时高亮。右侧的工具窗在编辑区右边,线条贴着工具窗那一边,拖动方向相反。
+/// 侧边工具窗与编辑区之间的缝(岛与岛之间),左右拖动调整工具窗宽度。
+/// 平时就是一条窗口底色的缝;悬停 / 拖动时中间亮一条蓝线。右侧的工具窗在编辑区右边,拖动方向相反。
 class _SideResizeHandle extends StatefulWidget {
   const _SideResizeHandle({required this.layout, required this.side});
 
@@ -843,20 +851,14 @@ class _SideResizeHandleState extends State<_SideResizeHandle> {
           // 编辑区至少留 300px(再扣掉左右两条活动条;另一侧开着的话也扣掉它的宽度)。
           final other = left ? ToolSide.right : ToolSide.left;
           const stripes = IntelliJMetrics.activityStripe * 2;
-          final otherWidth = layout.isSideOpen(other) ? layout.widthOf(other) + 5 : 0;
+          final otherWidth = layout.isSideOpen(other) ? layout.widthOf(other) + IntelliJMetrics.islandGap : 0;
           final max = MediaQuery.sizeOf(context).width - 300 - stripes - otherWidth;
           layout.resizeSide(widget.side, layout.widthOf(widget.side) + (left ? d.delta.dx : -d.delta.dx), maxWidth: max);
         },
-        // 左边:面板 | 线 | 编辑区。右边:编辑区(自带 8px 的错误条)| 线 | 面板 —— 线贴着编辑区那一边,
-        // 空隙用面板的底色,别在错误条和面板之间再夹一条深色宽带;所以右边的命中区也窄一点。
         child: Container(
-          width: left ? 5 : 3,
-          color: left ? IntelliJTheme.editorBg : IntelliJTheme.panelBg,
-          alignment: Alignment.centerLeft,
-          child: Container(
-            width: active ? 2 : 1,
-            color: active ? IntelliJTheme.accentBlue : IntelliJTheme.borderSubtle,
-          ),
+          width: IntelliJMetrics.islandGap,
+          alignment: Alignment.center,
+          child: active ? Container(width: 2, color: IntelliJTheme.accentBlue) : null,
         ),
       ),
     );

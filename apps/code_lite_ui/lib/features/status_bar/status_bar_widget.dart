@@ -38,15 +38,22 @@ class StatusBarWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       height: IntelliJMetrics.statusBar,
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      decoration: const BoxDecoration(
-        color: IntelliJTheme.headerBg,
-        border: Border(top: BorderSide(color: IntelliJTheme.borderSubtle)),
-      ),
-      child: Row(
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      color: IntelliJTheme.frameBg,
+      // 右边那组(诊断、行列号、编码、资源占用)最多占 3/4 宽:窗口很窄时它在自己的格子里横向滚动,不会撑爆状态栏
+      child: LayoutBuilder(
+        builder: (context, constraints) => Row(
         children: [
           Expanded(child: _buildBreadcrumb()),
           const SizedBox(width: 12),
+          ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: constraints.maxWidth * 0.75),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              reverse: true,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
           _buildDiagnostics(),
           _buildCaretPosition(),
           // 语法引擎识别出的文件类型(按扩展名 / 文件名 / #! 首行)
@@ -58,7 +65,12 @@ class StatusBarWidget extends StatelessWidget {
           const SizedBox(width: 4),
           // 当前分支已在标题栏显示;这里改为 IDE 的内存 / CPU 占用
           const ResourceIndicator(),
+                ],
+              ),
+            ),
+          ),
         ],
+      ),
       ),
     );
   }
@@ -67,7 +79,7 @@ class StatusBarWidget extends StatelessWidget {
     if (activeFile.isEmpty) {
       return const Text(
         '打开一个文件开始编辑',
-        style: TextStyle(color: IntelliJTheme.textMuted, fontSize: 10),
+        style: TextStyle(color: IntelliJTheme.textStatus, fontSize: 12.5),
       );
     }
 
@@ -77,28 +89,31 @@ class StatusBarWidget extends StatelessWidget {
 
     return Row(
       children: [
-        const Icon(Icons.description_outlined, size: 12, color: IntelliJTheme.textMuted),
+        const Icon(Icons.description_outlined, size: 14, color: IntelliJTheme.textStatus),
         const SizedBox(width: 5),
         if (dir.isNotEmpty) ...[
           Flexible(
             child: Text(
               dir,
-              style: const TextStyle(color: IntelliJTheme.textMuted, fontSize: 10),
+              style: const TextStyle(color: IntelliJTheme.textStatus, fontSize: 12.5),
               overflow: TextOverflow.ellipsis,
             ),
           ),
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: 3),
-            child: Icon(Icons.chevron_right, size: 12, color: IntelliJTheme.textGutter),
+            child: Icon(Icons.chevron_right, size: 14, color: IntelliJTheme.textStatus),
           ),
         ],
-        Text(
-          fileName,
-          style: const TextStyle(color: IntelliJTheme.textPrimary, fontSize: 10),
+        Flexible(
+          child: Text(
+            fileName,
+            style: const TextStyle(color: Color(0xFFC9CCD1), fontSize: 12.5),
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
         if (isSaving) ...[
           const SizedBox(width: 8),
-          const Text('保存中…', style: TextStyle(color: IntelliJTheme.textMuted, fontSize: 10)),
+          const Text('保存中…', style: TextStyle(color: IntelliJTheme.textStatus, fontSize: 12.5)),
         ],
       ],
     );
@@ -156,7 +171,7 @@ class _StatusText extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 6),
       child: Text(
         label,
-        style: const TextStyle(color: IntelliJTheme.textMuted, fontSize: 10, fontFamily: 'monospace'),
+        style: const TextStyle(color: IntelliJTheme.textStatus, fontSize: 12.5),
       ),
     );
   }
@@ -187,7 +202,7 @@ class _StatusChip extends StatelessWidget {
             label,
             style: TextStyle(
               color: color,
-              fontSize: 10,
+              fontSize: 12.5,
               fontWeight: emphasize ? FontWeight.w600 : FontWeight.normal,
             ),
           ),
@@ -301,9 +316,9 @@ class _ResourceIndicatorState extends State<ResourceIndicator> {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.memory, size: 12, color: IntelliJTheme.textMuted),
+              const Icon(Icons.memory, size: 14, color: IntelliJTheme.textStatus),
               const SizedBox(width: 4),
-              Text(label, key: const ValueKey('resource-usage'), style: const TextStyle(color: IntelliJTheme.textMuted, fontSize: 10)),
+              Text(label, key: const ValueKey('resource-usage'), style: const TextStyle(color: IntelliJTheme.textStatus, fontSize: 12.5)),
             ],
           ),
         ),

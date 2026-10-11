@@ -2,9 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/intellij_theme.dart';
 
-/// 活动条上的单个按钮。选中态是淡蓝底 + 蓝图标 + 左侧 2px 指示条,
-/// 取自 design/ 的稿子(IntelliJ New UI 的做法);此前是实心蓝底 + 白图标,
-/// 在暗色主题里过重。
+/// 活动条上的单个按钮。选中态是实心灰色圆角块 + 亮图标(IntelliJ 新 UI / Islands 的做法),
+/// 没选中是浅灰图标、悬停时淡灰底。
 class StripeButton extends StatefulWidget {
   const StripeButton({
     super.key,
@@ -35,7 +34,7 @@ class _StripeButtonState extends State<StripeButton> {
   @override
   Widget build(BuildContext context) {
     final active = widget.isActive;
-    final iconColor = active ? IntelliJTheme.accentBlue : IntelliJTheme.textMuted;
+    final iconColor = active ? IntelliJTheme.textHigh : IntelliJTheme.icon;
 
     return Tooltip(
       message: widget.tooltip,
@@ -51,27 +50,14 @@ class _StripeButtonState extends State<StripeButton> {
             child: Stack(
               alignment: Alignment.center,
               children: [
-                if (active)
-                  Positioned(
-                    left: 0,
-                    top: 8,
-                    bottom: 8,
-                    child: Container(
-                      width: 2,
-                      decoration: BoxDecoration(
-                        color: IntelliJTheme.accentBlue,
-                        borderRadius: BorderRadius.circular(1),
-                      ),
-                    ),
-                  ),
                 Container(
                   width: IntelliJMetrics.stripeItem,
                   height: IntelliJMetrics.stripeItem,
                   decoration: BoxDecoration(
                     color: active
-                        ? IntelliJTheme.selectionBg
+                        ? IntelliJTheme.stripeActiveBg
                         : (_hovered ? IntelliJTheme.hoverBg : Colors.transparent),
-                    borderRadius: BorderRadius.circular(6),
+                    borderRadius: BorderRadius.circular(7),
                   ),
                   child: Center(
                     child: widget.iconBuilder?.call(iconColor, IntelliJMetrics.stripeIcon) ??

@@ -19,8 +19,11 @@ class EditorAppearance extends ChangeNotifier {
   static const double maxFontSize = 28;
   double _fontSize = defaultFontSize;
 
-  /// 代码配色方案 id(见 [builtinColorSchemes])。
-  String _colorSchemeId = 'darcula';
+  /// 代码配色方案 id(见 [builtinColorSchemes])。默认 Islands Dark,和 IDE 外框一致。
+  String _colorSchemeId = 'islands';
+
+  /// 设置文件里配色字段的版本。版本 2 起默认是 Islands Dark;更早的文件里的 darcula 只是当时的默认值,读入时换成新默认。
+  static const int _schemeVersion = 2;
 
   bool _showLineNumbers = true;
   bool _showIndentGuides = true;
@@ -76,6 +79,7 @@ class EditorAppearance extends ChangeNotifier {
   Map<String, dynamic> toJson() => {
         'fontSize': _fontSize,
         'colorScheme': _colorSchemeId,
+        'schemeVersion': _schemeVersion,
         'lineNumbers': _showLineNumbers,
         'indentGuides': _showIndentGuides,
         'breadcrumbs': _showBreadcrumbs,
@@ -93,7 +97,8 @@ class EditorAppearance extends ChangeNotifier {
     final size = j['fontSize'];
     if (size is num && size >= minFontSize && size <= maxFontSize) _fontSize = size.toDouble().roundToDouble();
     final scheme = j['colorScheme'];
-    if (scheme is String && builtinColorSchemes.any((s) => s.id == scheme)) _colorSchemeId = scheme;
+    final oldDefault = scheme == 'darcula' && j['schemeVersion'] == null;
+    if (scheme is String && !oldDefault && builtinColorSchemes.any((s) => s.id == scheme)) _colorSchemeId = scheme;
     _showLineNumbers = b('lineNumbers', _showLineNumbers);
     _showIndentGuides = b('indentGuides', _showIndentGuides);
     _showBreadcrumbs = b('breadcrumbs', _showBreadcrumbs);

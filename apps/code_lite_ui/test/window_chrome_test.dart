@@ -32,9 +32,6 @@ void main() {
           body: Align(
             alignment: Alignment.topLeft,
             child: TitleBarWidget(
-              activeFile: '',
-              onUndo: () {},
-              onRedo: () {},
               onSearch: onSearch,
               projectChip: const SizedBox(key: ValueKey('chip'), width: 40, height: 20),
             ),
@@ -143,15 +140,15 @@ void main() {
     var searches = 0;
     await onMac(tester, () async {
       await tester.pumpWidget(bar(onSearch: () => searches++));
-      await tester.tap(find.text('Search...'));
+      await tester.tap(find.byTooltip('搜索 (⇧⌘F)'));
       await tester.pump(); // 没有等双击超时:单击立刻生效,不被标题栏的双击识别器拖慢
       expect(searches, 1);
       expect(calls, isEmpty);
 
       // 快速连点按钮不能当成双击标题栏:点在按钮上的不算空白
-      await tester.tap(find.text('Search...'));
+      await tester.tap(find.byTooltip('搜索 (⇧⌘F)'));
       await tester.pump(const Duration(milliseconds: 50));
-      await tester.tap(find.text('Search...'));
+      await tester.tap(find.byTooltip('搜索 (⇧⌘F)'));
       await tester.pumpAndSettle();
       expect(searches, 3);
       expect(calls, isEmpty, reason: '没有触发缩放');
