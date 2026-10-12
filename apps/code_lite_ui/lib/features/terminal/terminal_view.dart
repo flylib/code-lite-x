@@ -655,20 +655,38 @@ class _TerminalViewState extends State<TerminalView> implements TextInputClient 
   @override
   void didChangeInputControl(TextInputControl? oldControl, TextInputControl? newControl) {}
 
-  // --- 鼠标滚轮:翻回滚缓冲 -----------------------------------------------------
+  // --- 滚动:翻回滚缓冲(鼠标滚轮 + 触控板) -----------------------------------------
 
+  /// 还不够一行的滚动量(像素)。触控板一次只滚几个像素,不攒起来的话每次都四舍五入成 0,怎么滚都不动。
+  double _scrollRemainder = 0;
+
+  /// 鼠标滚轮。
   void _onPointerSignal(PointerSignalEvent event) {
-    if (event is! PointerScrollEvent) return;
+    if (event is PointerScrollEvent) _scrollBy(event.scrollDelta.dy);
+  }
+
+  /// macOS 触控板的双指滚动不是滚轮事件,是 pan/zoom 手势:手指往下 = 往上翻(看更早的输出)。
+  void _onPanZoomUpdate(PointerPanZoomUpdateEvent event) => _scrollBy(-event.localPanDelta.dy);
+
+  /// [dy] 像素,正数往下(往新的输出走),负数往上翻历史。
+  void _scrollBy(double dy) {
     // 全屏程序(vim/less)自己管滚动,备用屏没有回滚缓冲。
     if (_screen.altScreen) return;
     final m = _CellMetrics.of(context);
-    final lines = (event.scrollDelta.dy / m.height).round();
+    _scrollRemainder += dy;
+    final lines = _scrollRemainder ~/ m.height;
     if (lines == 0) return;
+    _scrollRemainder -= lines * m.height;
     final next = math.max<int>(0, _scrollback - lines);
-    if (next == _scrollback) return;
+    if (next == _scrollback) {
+      _scrollRemainder = 0; // 到底了 / 到顶了:不要攒着,反方向一滚就要动
+      return;
+    }
     _scrollback = next;
     _seq = -1;
     _poll();
+    // 翻过头时 vt100 会夹到最早一行:按实际偏移校正,往回滚才不会先空转
+    if (_scrollback < next) _scrollRemainder = 0;
   }
 
   @override
@@ -681,6 +699,7 @@ class _TerminalViewState extends State<TerminalView> implements TextInputClient 
         _syncSize(rows, cols);
         return Listener(
           onPointerSignal: _onPointerSignal,
+          onPointerPanZoomUpdate: _onPanZoomUpdate,
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
             onTap: _focus.requestFocus,

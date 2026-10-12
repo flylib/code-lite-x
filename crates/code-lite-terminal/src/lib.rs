@@ -357,4 +357,23 @@ mod tests {
         let after = runs.iter().find(|r| r.t.ends_with('x')).unwrap();
         assert_eq!(after.c as usize + after.t.chars().count() - 1, wide.c as usize + 2);
     }
+
+    #[test]
+    fn scrollback_further_than_one_screen_shows_older_lines() {
+        // 屏幕 5 行,写 50 行(底部一屏是 47..50 和光标所在的空行):往上翻 30 行(远超一屏)顶上是第 17 行,翻过头夹到最早
+        let mut p = vt100::Parser::new(5, 20, 100);
+        for i in 1..=50 {
+            p.process(format!("line {i}\r\n").as_bytes());
+        }
+        let text = |p: &vt100::Parser| -> Vec<String> {
+            (0..5)
+                .map(|r| row_runs(p.screen(), r, 20).iter().map(|x| x.t.clone()).collect::<String>().trim().to_string())
+                .collect()
+        };
+        p.screen_mut().set_scrollback(30);
+        assert_eq!(p.screen().scrollback(), 30);
+        assert_eq!(text(&p)[0], "line 17");
+        p.screen_mut().set_scrollback(10_000);
+        assert_eq!(text(&p)[0], "line 1");
+    }
 }
