@@ -58,7 +58,7 @@ CodeLiteX 是一款高性能的原生跨平台代码编辑器，内置 Git 管�
 - 文件在别处被改了（别的编辑器、格式化工具、脚本、git）：已打开的标签自动跟上。没保存修改的直接换成磁盘内容（可 ⌘Z 撤回）；有没保存修改的不覆盖任何一边，编辑区上方出提示条让用户选「载入磁盘版本 / 保留我的修改」，选之前不自动保存。靠项目目录的文件监视 + 切回窗口 / 切换项目时再对一遍 + 每次保存前先看一眼磁盘（`EditorSessionManager.syncWithDisk`）。
 - 每个项目都恢复上次的状态：打开的标签、光标、滚动位置。从文件树打开的标签存的是绝对路径，也要恢复。
 - Markdown 有 Editor / Editor+Preview / Preview 三种模式。能接开源库就接开源库（现用 `flutter_markdown_plus` + `markdown`）；两栏同步滚动不能卡。
-- HTML 文件：编辑器右上角列出本机装了的浏览器，点哪个就用哪个打开。
+- HTML 文件：编辑器右上角列出本机装了的浏览器，点哪个就用哪个打开。打开方式同 IntelliJ：经内置服务器按 `http://localhost:63342/<项目名>/<相对路径>` 打开，不用 file://。**每个项目一个服务器**，第一次用时启动，项目关闭时随之关闭（`ProjectContext.browserUrlFor`、`core/platform/web_server_native.dart`）；63342 被占了（别的项目或 IntelliJ）就往后找空端口；只听本机、只认 Host 为 localhost 的请求。
 
 **整体外观（分支 `feat/islands-ui`）**
 - 完整复刻 IntelliJ 新 UI 的「Islands Dark」：标题栏、活动条、状态栏和岛之间的缝是窗口底色 `#24282C`；编辑区、侧边工具窗、底部工具窗是一块块 8px 圆角的岛 `#181A1C`，岛之间留 5px 缝（缝就是拖动调整大小的地方）。颜色是从用户给的 IntelliJ 截图逐像素取的，见 `IntelliJTheme` / `IntelliJMetrics`、`core/theme/island.dart`。

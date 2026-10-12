@@ -13,6 +13,7 @@ import '../../features/terminal/terminal_store.dart';
 import '../client/api_client.dart';
 import '../ffi/codelite_bindings_stub.dart' if (dart.library.ffi) '../ffi/codelite_bindings.dart';
 import '../platform/paths.dart';
+import '../platform/web_server.dart';
 import '../platform/workspace_io.dart' as io;
 import '../plugins/plugin_manager.dart';
 import 'layout_store.dart';
@@ -139,6 +140,16 @@ class ProjectContext {
   Timer? _sessionTimer;
   bool _disposed = false;
 
+  /// 这个项目的静态文件服务器(浏览器里打开 HTML 用):第一次用时才启动,项目关闭时随之关闭。
+  BuiltInWebServer? _webServer;
+
+  /// [file] 在浏览器里的地址 `http://localhost:63342/<项目名>/<路径>`;没有项目、文件不在项目里或服务器起不来时为 null。
+  Future<String?> browserUrlFor(String file) async {
+    final root = path;
+    if (root == null || _disposed) return null;
+    return (_webServer ??= BuiltInWebServer(root: root)).urlFor(file);
+  }
+
   /// 项目目录的文件监视:别处改了已打开的文件,标签跟着更新(不在前台的项目也照常)。
   StreamSubscription<String>? _watch;
   final Set<String> _changedFiles = {};
@@ -235,6 +246,7 @@ class ProjectContext {
     _sessionTimer?.cancel();
     _watchDebounce?.cancel();
     await _watch?.cancel();
+    await _webServer?.close(); // 端口随项目一起释放
     workspace.removeListener(_onWorkspaceChanged);
     build.removeListener(_onBuildToolsChanged);
     branches.dispose();

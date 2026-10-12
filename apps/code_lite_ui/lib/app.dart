@@ -68,7 +68,11 @@ class _CodeLiteAppState extends State<CodeLiteApp> {
   final EditorAppearance _appearance = EditorAppearance();
   late final SettingsStore _settings = SettingsStore(appearance: _appearance, layout: _layout);
   late final PluginManager _plugins = PluginManager();
-  final BrowserService _browsers = BrowserService();
+  /// HTML 在浏览器里按 http://localhost:63342/<项目名>/<路径> 打开(同 IntelliJ):
+  /// 地址由文件所在项目自己的服务器给出,那个服务器随项目关闭而关闭。
+  late final BrowserService _browsers = BrowserService(
+    urlFor: (root, file) async => _projects.find(root)?.context?.browserUrlFor(file),
+  );
 
   /// 打开的项目:一个进程、多个项目同时留在内存里;切换只是换显示哪一份。
   late final ProjectManager _projects = ProjectManager(layout: _layout, plugins: _plugins, settings: _settings);
@@ -505,6 +509,7 @@ class _EditorRegion extends StatelessWidget {
               ? OpenInBrowserBar(
                   service: browsers,
                   file: absoluteFilePath(client.rootPath, path),
+                  projectRoot: workspace.rootPath,
                   // 浏览器读的是磁盘:没落盘的改动先存下来
                   beforeOpen: () => workspace.saveFile(path),
                 )

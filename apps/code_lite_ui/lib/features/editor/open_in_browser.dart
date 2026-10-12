@@ -20,9 +20,14 @@ class BrowserService {
     Future<List<browsers.BrowserApp>> Function()? detect,
     Future<String?> Function(browsers.BrowserApp, String)? open,
     Future<Uint8List?> Function(browsers.BrowserApp)? icon,
+    this.urlFor,
   })  : _detect = detect ?? browsers.detectBrowsers,
         _open = open ?? browsers.openInBrowser,
         _icon = icon ?? browsers.browserIcon;
+
+  /// 文件在内置服务器上的地址(`http://localhost:63342/<项目名>/<相对路径>`,同 IntelliJ);
+  /// 给不出(文件不在项目里、服务器起不来)时为 null,按文件打开。
+  final Future<String?> Function(String projectRoot, String file)? urlFor;
 
   final Future<List<browsers.BrowserApp>> Function() _detect;
   final Future<String?> Function(browsers.BrowserApp, String) _open;
@@ -35,19 +40,25 @@ class BrowserService {
 
   Future<Uint8List?> iconOf(browsers.BrowserApp b) => _icons[b.id] ??= _icon(b);
 
-  /// 用 [b] 打开 [file](绝对路径)。成功返回 null,失败返回原因。
-  Future<String?> open(browsers.BrowserApp b, String file) => _open(b, file);
+  /// 用 [b] 打开 [file](绝对路径)。有内置服务器时打开它的 http 地址,否则直接打开文件。成功返回 null,失败返回原因。
+  Future<String?> open(browsers.BrowserApp b, String file, {String? projectRoot}) async {
+    final url = projectRoot == null ? null : await urlFor?.call(projectRoot, file);
+    return _open(b, url ?? file);
+  }
 }
 
 /// 编辑器右上角的浏览器图标(IntelliJ 打开 HTML 文件时的那排):点哪个就用哪个浏览器打开当前文件。
 /// 一个浏览器都没找到时什么也不显示。
 class OpenInBrowserBar extends StatelessWidget {
-  const OpenInBrowserBar({super.key, required this.service, required this.file, this.beforeOpen});
+  const OpenInBrowserBar({super.key, required this.service, required this.file, this.projectRoot, this.beforeOpen});
 
   final BrowserService service;
 
   /// 要打开的文件(绝对路径)。
   final String file;
+
+  /// 文件所在的项目:经内置服务器按 http 地址打开;为 null 时按文件打开。
+  final String? projectRoot;
 
   /// 打开之前先做的事,通常是把编辑器里没落盘的改动存下来,浏览器才看得到最新内容。
   final Future<void> Function()? beforeOpen;
@@ -55,7 +66,7 @@ class OpenInBrowserBar extends StatelessWidget {
   Future<void> _open(BuildContext context, browsers.BrowserApp b) async {
     final messenger = ScaffoldMessenger.maybeOf(context);
     await beforeOpen?.call();
-    final error = await service.open(b, file);
+    final error = await service.open(b, file, projectRoot: projectRoot);
     if (error != null && error.isNotEmpty) {
       messenger?.showSnackBar(SnackBar(content: Text('无法用 ${b.name} 打开:$error')));
     }
