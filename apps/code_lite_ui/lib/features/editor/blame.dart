@@ -92,7 +92,13 @@ class BlameData {
   }
 }
 
-String _date(DateTime t) => '${t.year}/${t.month}/${t.day}';
+/// 注释栏里的日期:今天的提交显示 Today(同 IntelliJ),其它按 年/月/日。按本地时间的日历日算。
+String blameDate(DateTime t, {DateTime? now}) {
+  final n = now ?? DateTime.now();
+  final l = t.toLocal();
+  if (l.year == n.year && l.month == n.month && l.day == n.day) return 'Today';
+  return '${l.year}/${l.month}/${l.day}';
+}
 
 String _name(BlameCommit c, BlameNameMode mode) {
   final parts = c.author.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
@@ -106,11 +112,11 @@ String _name(BlameCommit c, BlameNameMode mode) {
 }
 
 /// 注释栏一行显示的文字(未提交的行留空,与 IntelliJ 一致)。
-String blameLabel(BlameCommit? c, EditorAppearance a) {
+String blameLabel(BlameCommit? c, EditorAppearance a, {DateTime? now}) {
   if (c == null || c.isUncommitted) return '';
   return [
     if (a.blameRevision) c.short,
-    if (a.blameDate) _date(c.time),
+    if (a.blameDate) blameDate(c.time, now: now),
     if (a.blameAuthor) _name(c, a.blameNames),
   ].join('  ');
 }
