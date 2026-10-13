@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import '../../features/editor/editor_appearance.dart';
 import '../../features/editor/editor_session_manager.dart';
 import '../platform/workspace_io.dart' as io;
+import '../keymap/keymap.dart';
 import 'layout_store.dart';
 
 /// 应用设置:自动保存与编辑器外观,存在 `~/.codelitex/settings.json`,启动时读回。
@@ -21,6 +22,7 @@ class SettingsStore extends ChangeNotifier {
     EditorSessionManager? sessions,
     EditorAppearance? appearance,
     this.layout,
+    this.keymap,
     Future<Map<String, dynamic>> Function()? load,
     Future<void> Function(Map<String, dynamic>)? save,
   })  : appearance = appearance ?? sessions?.appearance ?? EditorAppearance(),
@@ -30,10 +32,14 @@ class SettingsStore extends ChangeNotifier {
         _save = save ?? io.saveSettings {
     this.appearance.addListener(_persist);
     layout?.addListener(_onLayoutChanged);
+    keymap?.addListener(_persist);
     if (sessions != null) _bound.add(sessions);
   }
 
   final LayoutStore? layout;
+
+  /// 快捷键(只存改过的)。
+  final KeymapStore? keymap;
 
   /// 上次写盘时的布局;布局的通知很频繁(选工具窗、拖宽度),只有要记住的部分变了才写。
   String _savedLayout = '';
@@ -87,6 +93,7 @@ class SettingsStore extends ChangeNotifier {
     }
     if (editor['appearance'] is Map) appearance.applyJson(Map<String, dynamic>.from(editor['appearance'] as Map));
     if (j['layout'] is Map) layout?.applyJson(Map<String, dynamic>.from(j['layout'] as Map));
+    if (j['keymap'] is Map) keymap?.applyJson(Map<String, dynamic>.from(j['keymap'] as Map));
     _savedLayout = _layoutSignature();
     _loading = false;
     notifyListeners();
@@ -124,6 +131,7 @@ class SettingsStore extends ChangeNotifier {
           'appearance': appearance.toJson(),
         },
         if (layout != null) 'layout': layout!.toJson(),
+        if (keymap != null) 'keymap': keymap!.toJson(),
       };
 
   String _layoutSignature() => layout == null ? '' : jsonEncode(layout!.toJson());
@@ -144,6 +152,7 @@ class SettingsStore extends ChangeNotifier {
   void dispose() {
     appearance.removeListener(_persist);
     layout?.removeListener(_onLayoutChanged);
+    keymap?.removeListener(_persist);
     super.dispose();
   }
 }

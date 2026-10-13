@@ -270,8 +270,8 @@ void main() {
 
       layout.moveTool(SideTool.structure, ToolSide.right, ToolSlot.top);
       await tester.pump();
-      final right = find.descendant(of: find.byType(RightStripeWidget), matching: find.byTooltip('结构 (⌘7)'));
-      final left = find.descendant(of: find.byType(ActivityStripeWidget), matching: find.byTooltip('结构 (⌘7)'));
+      final right = find.descendant(of: find.byType(RightStripeWidget), matching: find.byTooltip('结构 (Alt+7)'));
+      final left = find.descendant(of: find.byType(ActivityStripeWidget), matching: find.byTooltip('结构 (Alt+7)'));
       expect(right, findsOneWidget);
       expect(left, findsNothing, reason: '放到右边的按钮不再出现在左活动条');
 
@@ -280,7 +280,7 @@ void main() {
       await tester.pump();
       expect(layout.visibleTool(ToolSide.right, ToolSlot.top), SideTool.structure);
       final active = {for (final b in tester.widgetList<StripeButton>(find.byType(StripeButton))) if (b.isActive) b.tooltip};
-      expect(active, {'项目 (⌘1)', '结构 (⌘7)'}, reason: '左右各一个高亮');
+      expect(active, {'项目 (Alt+1)', '结构 (Alt+7)'}, reason: '左右各一个高亮');
       await tester.tap(right);
       await tester.pump();
       expect(layout.isSideOpen(ToolSide.right), isFalse);
@@ -334,11 +334,11 @@ void main() {
           ),
         ),
       ));
-      final structure = tester.getCenter(find.byTooltip('结构 (⌘7)')).dy;
+      final structure = tester.getCenter(find.byTooltip('结构 (Alt+7)')).dy;
       expect(structure, greaterThan(tester.getCenter(find.byTooltip('Maven')).dy), reason: '左下方的工具窗排在上方那组后面');
-      expect(structure, lessThan(tester.getCenter(find.byTooltip('终端 (⌥F12)')).dy));
+      expect(structure, lessThan(tester.getCenter(find.byTooltip('终端 (Alt+F12)')).dy));
       final active = {for (final b in tester.widgetList<StripeButton>(find.byType(StripeButton))) if (b.isActive) b.tooltip};
-      expect(active, {'项目 (⌘1)', '结构 (⌘7)'}, reason: '上下两块各一个,都高亮');
+      expect(active, {'项目 (Alt+1)', '结构 (Alt+7)'}, reason: '上下两块各一个,都高亮');
     });
   });
 }

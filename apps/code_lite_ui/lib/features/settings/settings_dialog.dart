@@ -8,6 +8,7 @@ import '../editor/syntax/color_schemes.dart';
 import '../editor/syntax/languages.dart';
 import '../editor/syntax/tokenizer.dart';
 import '../plugins/plugins_page.dart';
+import 'keymap_page.dart';
 
 const TextStyle _text = TextStyle(color: IntelliJTheme.textPrimary, fontSize: 13);
 const TextStyle _hint = TextStyle(color: IntelliJTheme.textMuted, fontSize: 12);
@@ -20,7 +21,7 @@ Future<void> showSettingsDialog(BuildContext context, SettingsStore settings, {P
       builder: (_) => SettingsDialog(settings: settings, plugins: plugins, openPlugins: openPlugins),
     );
 
-enum _Page { general, appearance, plugins }
+enum _Page { general, appearance, keymap, plugins }
 
 class SettingsDialog extends StatefulWidget {
   const SettingsDialog({super.key, required this.settings, this.plugins, this.openPlugins = false});
@@ -87,6 +88,10 @@ class _SettingsDialogState extends State<SettingsDialog> {
                           ),
                           _NavItem(label: 'General', selected: _page == _Page.general, onTap: () => setState(() => _page = _Page.general)),
                           _NavItem(label: 'Appearance', selected: _page == _Page.appearance, onTap: () => setState(() => _page = _Page.appearance)),
+                          if (widget.settings.keymap != null) ...[
+                            const SizedBox(height: 10),
+                            _NavItem(label: 'Keymap', selected: _page == _Page.keymap, onTap: () => setState(() => _page = _Page.keymap)),
+                          ],
                           if (widget.plugins != null) ...[
                             const SizedBox(height: 10),
                             _NavItem(label: 'Plugins', selected: _page == _Page.plugins, onTap: () => setState(() => _page = _Page.plugins)),
@@ -101,6 +106,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
                         children: switch (_page) {
                           _Page.general => _general(),
                           _Page.appearance => _appearance(),
+                          _Page.keymap => [KeymapPage(keymap: widget.settings.keymap!)],
                           _Page.plugins => [PluginsPage(plugins: widget.plugins!)],
                         },
                       ),

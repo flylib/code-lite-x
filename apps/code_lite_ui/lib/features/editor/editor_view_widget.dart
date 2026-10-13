@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/gestures.dart' show kPrimaryButton;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -664,8 +665,10 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
       return KeyEventResult.handled;
     }
 
-    // Printable character input
-    if (!isCmd && event.character != null && event.character!.isNotEmpty) {
+    // Printable character input。Windows / Linux 上 Alt+键是快捷键(Alt+1 打开项目窗),不当字符输入;
+    // macOS 的 ⌥+键是在打特殊字符(⌥2 = ™),照常输入。
+    final altShortcut = isAlt && defaultTargetPlatform != TargetPlatform.macOS;
+    if (!isCmd && !altShortcut && event.character != null && event.character!.isNotEmpty) {
       final code = event.character!.codeUnitAt(0);
       if (code >= 32) {
         controller.insertText(event.character!);

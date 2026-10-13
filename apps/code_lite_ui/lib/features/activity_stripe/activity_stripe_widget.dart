@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/keymap/keymap.dart';
 import '../../core/state/layout_store.dart';
 import '../../core/theme/app_icons.dart';
 import '../../core/theme/intellij_theme.dart';
@@ -25,6 +26,7 @@ class ActivityStripeWidget extends StatelessWidget {
     this.visibleTools,
     this.slotOf,
     this.sideOf,
+    this.keymap,
   });
 
   final SideTool leftTool;
@@ -46,13 +48,16 @@ class ActivityStripeWidget extends StatelessWidget {
   /// 工具窗停靠在哪一侧;放到右侧的不在这条活动条上(在 [RightStripeWidget])。null 时都在左侧。
   final ToolSide Function(SideTool tool)? sideOf;
 
+  /// 按钮提示里显示的快捷键;null 时按默认键位。
+  final KeymapStore? keymap;
+
   bool _isVisible(SideTool tool) => visibleTools?.contains(tool) ?? (isLeftOpen && leftTool == tool);
 
   /// 某一块([slot])的左侧工具窗按钮,按钮之间留 6px。
   List<Widget> _leftButtons(ToolSlot slot) => spacedButtons([
         for (final tool in SideTool.values)
           if ((sideOf?.call(tool) ?? ToolSide.left) == ToolSide.left && (slotOf?.call(tool) ?? ToolSlot.top) == slot)
-            sideToolButton(tool, active: _isVisible(tool), onTap: () => onSelectTool(tool), buildToolTitle: buildToolTitle),
+            sideToolButton(tool, active: _isVisible(tool), onTap: () => onSelectTool(tool), buildToolTitle: buildToolTitle, keymap: keymap),
       ]);
 
   @override
@@ -76,14 +81,14 @@ class ActivityStripeWidget extends StatelessWidget {
           // 下半段:底部工具窗(与 IntelliJ 一致,贴着它们打开的位置)。
           StripeButton(
             icon: Icons.terminal_outlined,
-            tooltip: '终端 (⌥F12)',
+            tooltip: withShortcut('终端', KeymapIds.terminal, keymap),
             isActive: isBottomOpen && bottomTab == BottomToolTab.terminal,
             onTap: () => onSelectBottomTab(BottomToolTab.terminal),
           ),
           const SizedBox(height: _gap),
           StripeButton(
             iconBuilder: (color, size) => GitBranchIcon(color: color, size: size),
-            tooltip: 'Git 提交与日志',
+            tooltip: withShortcut('Git 提交与日志', KeymapIds.git, keymap),
             isActive: isBottomOpen && bottomTab == BottomToolTab.git,
             onTap: () => onSelectBottomTab(BottomToolTab.git),
           ),
@@ -102,24 +107,44 @@ class ActivityStripeWidget extends StatelessWidget {
   }
 }
 
+/// 工具窗对应的快捷键操作。
+String keymapIdOf(SideTool tool) => switch (tool) {
+      SideTool.project => KeymapIds.project,
+      SideTool.commit => KeymapIds.commit,
+      SideTool.pullRequests => KeymapIds.pullRequests,
+      SideTool.structure => KeymapIds.structure,
+      SideTool.openProjects => KeymapIds.openProjects,
+      SideTool.build => KeymapIds.build,
+    };
+
+/// 没传快捷键配置时(单独用活动条)按默认键位显示。
+final KeymapStore _defaultKeymap = KeymapStore();
+
+/// 按钮提示:名字加上当前的快捷键(没有快捷键就只有名字)。
+String withShortcut(String name, String actionId, KeymapStore? keymap) {
+  final label = (keymap ?? _defaultKeymap).labelOf(actionId);
+  return label == null ? name : '$name ($label)';
+}
+
 /// 侧边工具窗在活动条上的按钮;[SideTool.build] 在项目里没有构建工具时没有按钮(null)。
-Widget? sideToolButton(SideTool tool, {required bool active, required VoidCallback onTap, String? buildToolTitle}) {
+Widget? sideToolButton(SideTool tool, {required bool active, required VoidCallback onTap, String? buildToolTitle, KeymapStore? keymap}) {
+  String tip(String name) => withShortcut(name, keymapIdOf(tool), keymap);
   return switch (tool) {
-    SideTool.project => StripeButton(icon: Icons.folder_outlined, tooltip: '项目 (⌘1)', isActive: active, onTap: onTap),
-    SideTool.commit => StripeButton(icon: Icons.task_alt, tooltip: 'Commit (⌘0)', isActive: active, onTap: onTap),
+    SideTool.project => StripeButton(icon: Icons.folder_outlined, tooltip: tip('项目'), isActive: active, onTap: onTap),
+    SideTool.commit => StripeButton(icon: Icons.task_alt, tooltip: tip('Commit'), isActive: active, onTap: onTap),
     SideTool.pullRequests => StripeButton(
         iconBuilder: (color, size) => PullRequestIcon(color: color, size: size),
-        tooltip: 'Pull Requests',
+        tooltip: tip('Pull Requests'),
         isActive: active,
         onTap: onTap,
       ),
-    SideTool.structure => StripeButton(icon: Icons.account_tree_outlined, tooltip: '结构 (⌘7)', isActive: active, onTap: onTap),
-    SideTool.openProjects => StripeButton(icon: Icons.layers_outlined, tooltip: 'Opening Projects', isActive: active, onTap: onTap),
+    SideTool.structure => StripeButton(icon: Icons.account_tree_outlined, tooltip: tip('结构'), isActive: active, onTap: onTap),
+    SideTool.openProjects => StripeButton(icon: Icons.layers_outlined, tooltip: tip('Opening Projects'), isActive: active, onTap: onTap),
     SideTool.build => buildToolTitle == null
         ? null
         : StripeButton(
             iconBuilder: (color, size) => BuildToolIcon(color: color, size: size),
-            tooltip: buildToolTitle,
+            tooltip: tip(buildToolTitle),
             isActive: active,
             onTap: onTap,
           ),
@@ -148,6 +173,7 @@ class RightStripeWidget extends StatelessWidget {
     required this.onSelectTool,
     this.buildToolTitle,
     this.hasNotification = false,
+    this.keymap,
   });
 
   final Set<SideTool> visibleTools;
@@ -159,10 +185,13 @@ class RightStripeWidget extends StatelessWidget {
   /// 通知按钮上的小黄点。
   final bool hasNotification;
 
+  /// 按钮提示里显示的快捷键;null 时按默认键位。
+  final KeymapStore? keymap;
+
   List<Widget> _buttons(ToolSlot slot) => spacedButtons([
         for (final tool in SideTool.values)
           if (sideOf(tool) == ToolSide.right && slotOf(tool) == slot)
-            sideToolButton(tool, active: visibleTools.contains(tool), onTap: () => onSelectTool(tool), buildToolTitle: buildToolTitle),
+            sideToolButton(tool, active: visibleTools.contains(tool), onTap: () => onSelectTool(tool), buildToolTitle: buildToolTitle, keymap: keymap),
       ]);
 
   @override

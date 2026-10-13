@@ -29,10 +29,10 @@ void main() {
 
     // 底部工具窗默认收起(启动时不跑 git log),从左侧条下半段打开。
     expect(find.text('Log'), findsNothing);
-    expect(find.byTooltip('Git 提交与日志'), findsOneWidget);
+    expect(find.byTooltip('Git 提交与日志 (Alt+9)'), findsOneWidget);
     expect(find.byTooltip('操作记录与回滚'), findsNothing); // SQLite 回滚面板已移除
     expect(find.byTooltip('助手'), findsNothing); // AI 助手已移除
-    expect(find.byTooltip('Commit (⌘0)'), findsOneWidget);
+    expect(find.byTooltip('Commit (Alt+0)'), findsOneWidget);
 
     // Cargo 工具窗已移除。
     expect(find.text('Cargo'), findsNothing);
@@ -77,7 +77,7 @@ void main() {
 
     expect(find.text('Project'), findsWidgets);
 
-    await tester.tap(find.byTooltip('项目 (⌘1)'));
+    await tester.tap(find.byTooltip('项目 (Alt+1)'));
     await tester.pump();
 
     expect(find.text('Project'), findsNothing);
@@ -102,7 +102,7 @@ void main() {
     expect(tester.getSize(panel).width, 370);
 
     // 切到结构面板,宽度沿用。
-    await tester.tap(find.byTooltip('结构 (⌘7)'));
+    await tester.tap(find.byTooltip('结构 (Alt+7)'));
     await tester.pump();
     expect(tester.getSize(find.byType(StructureWidget)).width, 370);
 
@@ -112,7 +112,7 @@ void main() {
     expect(tester.getSize(find.byType(StructureWidget)).width, 160);
 
     // 最窄宽度下切回项目面板也不能溢出(溢出会作为异常让测试失败)。
-    await tester.tap(find.byTooltip('项目 (⌘1)'));
+    await tester.tap(find.byTooltip('项目 (Alt+1)'));
     await tester.pump();
     expect(tester.getSize(panel).width, 160);
   });
@@ -129,7 +129,7 @@ void main() {
     expect(find.descendant(of: find.byType(RightStripeWidget), matching: find.byTooltip('通知')), findsOneWidget);
 
     // 打开结构,再用 ⋮ ▸ 移动到 ▸ 右侧上方
-    await tester.tap(find.byTooltip('结构 (⌘7)'));
+    await tester.tap(find.byTooltip('结构 (Alt+7)'));
     await tester.pump();
     await tester.tap(find.byTooltip('选项'));
     await tester.pumpAndSettle();
@@ -144,11 +144,11 @@ void main() {
     expect(tester.getTopRight(structure).dx, 1280 - 40 - 2, reason: '右活动条在最右,中间隔一条 2px 的缝');
     expect(tester.getSize(structure).width, 300);
     expect(find.byType(ProjectExplorerWidget), findsNothing, reason: '打开结构时顶替了左上方的项目视图,结构搬走后左边是空的');
-    await tester.tap(find.byTooltip('项目 (⌘1)'));
+    await tester.tap(find.byTooltip('项目 (Alt+1)'));
     await tester.pump();
     expect(find.byType(ProjectExplorerWidget), findsOneWidget, reason: '左右可以同时开着');
     expect(structure, findsOneWidget);
-    expect(find.descendant(of: find.byType(RightStripeWidget), matching: find.byTooltip('结构 (⌘7)')), findsOneWidget);
+    expect(find.descendant(of: find.byType(RightStripeWidget), matching: find.byTooltip('结构 (Alt+7)')), findsOneWidget);
 
     // 拖右侧分隔线向左 = 变宽
     final splitter = find.byWidgetPredicate((w) => w is MouseRegion && w.cursor == SystemMouseCursors.resizeColumn);
@@ -163,20 +163,20 @@ void main() {
     expect(tester.getSize(find.byType(ProjectExplorerWidget)).width, 250, reason: '左侧宽度不受影响');
 
     // 底部工具窗横跨两条活动条之间的整个宽度,右侧工具窗停在它上面(IntelliJ 的布局)
-    await tester.tap(find.byTooltip('终端 (⌥F12)'));
+    await tester.tap(find.byTooltip('终端 (Alt+F12)'));
     await tester.pump();
     final bottom = find.byType(BottomToolsWidget);
     expect(tester.getTopLeft(bottom).dx, 40);
     expect(tester.getTopRight(bottom).dx, 1280 - 40 - 2);
     expect(tester.getBottomLeft(structure).dy, lessThan(tester.getTopLeft(bottom).dy));
-    await tester.tap(find.byTooltip('终端 (⌥F12)'));
+    await tester.tap(find.byTooltip('终端 (Alt+F12)'));
     await tester.pump();
 
     // 点右活动条的按钮收起它,右活动条的按钮还在
-    await tester.tap(find.descendant(of: find.byType(RightStripeWidget), matching: find.byTooltip('结构 (⌘7)')));
+    await tester.tap(find.descendant(of: find.byType(RightStripeWidget), matching: find.byTooltip('结构 (Alt+7)')));
     await tester.pump();
     expect(structure, findsNothing);
-    expect(find.descendant(of: find.byType(RightStripeWidget), matching: find.byTooltip('结构 (⌘7)')), findsOneWidget);
+    expect(find.descendant(of: find.byType(RightStripeWidget), matching: find.byTooltip('结构 (Alt+7)')), findsOneWidget);
     expect(splitter, findsOneWidget);
   });
 }

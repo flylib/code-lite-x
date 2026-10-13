@@ -1,4 +1,4 @@
-// 读构建文件(pom.xml)用的极简 XML 解析:只要元素树和文本。
+// 读构建文件(pom.xml)、IntelliJ 快捷键配置用的极简 XML 解析:元素树、属性和文本。
 //
 // 不处理命名空间、DTD 与属性值里的实体;注释、CDATA、处理指令照规矩跳过。
 // 写坏的文件尽量容错(不配对的结束标签忽略,没闭合的元素在文件末尾自动闭合),
@@ -9,6 +9,9 @@ class XmlElement {
 
   final String name;
   final List<XmlElement> children = [];
+
+  /// 属性(值里的实体已解码)。
+  final Map<String, String> attributes = {};
   final StringBuffer _text = StringBuffer();
 
   /// 直接包含的文本(不含子元素的),去掉首尾空白。
@@ -76,6 +79,9 @@ XmlElement parseXml(String source) {
       final name = RegExp(r'^[^\s/>]+').stringMatch(body.trimLeft()) ?? '';
       if (name.isEmpty) throw FormatException('XML 标签没有名字', source, lt);
       final e = XmlElement(name);
+      for (final m in _attr.allMatches(body.trimLeft().substring(name.length))) {
+        e.attributes[m.group(1)!] = _decode(m.group(2) ?? m.group(3) ?? '');
+      }
       stack.last.children.add(e);
       if (!selfClosing) stack.add(e);
       i = end + 1;
@@ -101,6 +107,8 @@ int _tagEnd(String s, int from) {
   }
   return -1;
 }
+
+final RegExp _attr = RegExp(r'''([^\s=/>]+)\s*=\s*(?:"([^"]*)"|'([^']*)')''');
 
 final RegExp _entity = RegExp(r'&(#x[0-9a-fA-F]+|#[0-9]+|lt|gt|amp|quot|apos);');
 

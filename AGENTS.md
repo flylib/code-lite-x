@@ -81,6 +81,10 @@ CodeLiteX 是一款高性能的原生跨平台代码编辑器，内置 Git 管�
 - merge / rebase 有冲突时，标题栏出现两个按钮：一个弹出冲突文件列表，一个 × 中止这次合并。
 - 解决冲突用三栏 Merge 窗口（标题叫「Merge」，不叫「Open File」），中间的结果栏可以直接编辑。
 
+**快捷键**
+- 快捷键可配置，默认键位同 IntelliJ（macOS「Mac OS X 10.5+」；其它平台「Default」），存储格式和 action id 也用 IntelliJ 的（`meta 1`、`ActivateProjectToolWindow`），所以能直接「从 IntelliJ 导入」：读最新 `IntelliJIdea*` 配置目录的 `options/mac/keymap.xml`（当前配置名）+ `keymaps/*.xml`（用户改的）+ 安装包 `lib/app.jar` 里的自带配置，沿 parent 链解析；macOS 键位继承 `$default` 时 Ctrl 换成 ⌘（IntelliJ 自己也这么换）。设置 ▸ Keymap 可加（按下组合键录入，冲突的从原操作移走）、删、恢复默认。设置文件只存改过的（`keymap.overrides`）。
+- 第一批是打开 / 收起工具窗：⌘1 项目、⌘0 Commit、⌘7 结构、⌘9 Git、⌥F12 终端、⇧⌘F12 隐藏 / 恢复所有工具窗；PR、Opening Projects、Maven 默认无快捷键。再按一次同一个键收起（同 IntelliJ）。活动条按钮的提示跟着显示当前快捷键（`core/keymap/`、`features/settings/keymap_page.dart`）。
+
 **窗口**
 - macOS 左上角是真的关闭 / 最小化 / 缩放按钮（系统红绿灯），不要弹窗。
 

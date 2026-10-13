@@ -213,6 +213,30 @@ class LayoutStore extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// 「隐藏所有工具窗」之前开着的(再按一次恢复它们);null = 没在隐藏状态。
+  ({Set<SideTool> tools, bool bottom})? _hiddenAll;
+
+  /// IntelliJ 的 Hide All Tool Windows(⇧⌘F12):有开着的就全部收起并记下来;都收着时再按一次恢复刚才那些。
+  void toggleHideAll() {
+    final visible = visibleTools;
+    if (visible.isNotEmpty || _isBottomOpen) {
+      _hiddenAll = (tools: visible, bottom: _isBottomOpen);
+      for (final t in visible) {
+        _hide(t);
+      }
+      _isBottomOpen = false;
+    } else if (_hiddenAll case final h?) {
+      for (final t in h.tools) {
+        _show(t);
+      }
+      _isBottomOpen = h.bottom;
+      _hiddenAll = null;
+    } else {
+      return;
+    }
+    notifyListeners();
+  }
+
   /// 点底部工具窗的图标:切到那个标签,若已选中则收起整条底栏。
   void selectBottomTab(BottomToolTab tab) {
     if (_bottomTab == tab && _isBottomOpen) {

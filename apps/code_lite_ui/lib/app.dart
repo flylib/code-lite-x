@@ -11,6 +11,7 @@ import 'core/state/project_manager.dart';
 import 'core/state/scopes.dart';
 import 'core/plugins/plugin_manager.dart';
 import 'core/state/settings_store.dart';
+import 'core/keymap/keymap.dart';
 import 'core/platform/workspace_io.dart' as io;
 import 'core/state/workspace_store.dart';
 import 'core/theme/intellij_theme.dart';
@@ -66,7 +67,9 @@ class _CodeLiteAppState extends State<CodeLiteApp> {
   // 全局共享的:窗口布局、设置、插件、编辑器外观。每个打开的项目自己的状态在 ProjectContext 里。
   final LayoutStore _layout = LayoutStore();
   final EditorAppearance _appearance = EditorAppearance();
-  late final SettingsStore _settings = SettingsStore(appearance: _appearance, layout: _layout);
+  /// 快捷键(默认键位同 IntelliJ,可在设置里改、可从 IntelliJ 导入),随设置文件保存。
+  final KeymapStore _keymap = KeymapStore();
+  late final SettingsStore _settings = SettingsStore(appearance: _appearance, layout: _layout, keymap: _keymap);
   late final PluginManager _plugins = PluginManager();
   /// HTML 在浏览器里按 http://localhost:63342/<项目名>/<路径> 打开(同 IntelliJ):
   /// 地址由文件所在项目自己的服务器给出,那个服务器随项目关闭而关闭。
@@ -111,6 +114,7 @@ class _CodeLiteAppState extends State<CodeLiteApp> {
     _plugins.dispose();
     _layout.dispose();
     _appearance.dispose();
+    _keymap.dispose();
     super.dispose();
   }
 
@@ -180,7 +184,10 @@ class _Workbench extends StatelessWidget {
       manager: manager,
       branches: branches,
       branchActions: branchActions,
-      child: CallbackShortcuts(
+      // 快捷键改了(设置里改、从 IntelliJ 导入)立刻生效
+      child: ListenableBuilder(
+      listenable: settings.keymap ?? layout,
+      builder: (context, child) => CallbackShortcuts(
       bindings: <ShortcutActivator, VoidCallback>{
         // macOS 由系统菜单的 ⌘, 处理;其它平台没有菜单栏,用 IntelliJ 的 Ctrl+Alt+S。
         if (defaultTargetPlatform != TargetPlatform.macOS) ...{
@@ -189,7 +196,10 @@ class _Workbench extends StatelessWidget {
         },
         const SingleActivator(LogicalKeyboardKey.keyF, meta: true, shift: true): () => _openSearch(context),
         const SingleActivator(LogicalKeyboardKey.keyF, control: true, shift: true): () => _openSearch(context),
+        ..._keymapBindings(layout),
       },
+      child: child!,
+      ),
       child: Focus(
         autofocus: true,
         child: Scaffold(
@@ -223,7 +233,7 @@ class _Workbench extends StatelessWidget {
                   children: [
                     // 左活动条:订阅 layout,以及构建工具(检测到 Maven 等才出现它的按钮)。
                     ListenableBuilder(
-                      listenable: Listenable.merge([layout, buildTools]),
+                      listenable: Listenable.merge([layout, buildTools, settings.keymap]),
                       builder: (context, _) => ActivityStripeWidget(
                         buildToolTitle: buildTools.hasProjects ? buildTools.title : null,
                         leftTool: layout.leftTool,
@@ -235,6 +245,7 @@ class _Workbench extends StatelessWidget {
                         isBottomOpen: layout.isBottomOpen,
                         onSelectTool: layout.selectTool,
                         onSelectBottomTab: layout.selectBottomTab,
+                        keymap: settings.keymap,
                       ),
                     ),
 
@@ -285,13 +296,14 @@ class _Workbench extends StatelessWidget {
 
                     // 右活动条:始终显示(顶上是通知),停靠在右侧的工具窗按钮在下面。
                     ListenableBuilder(
-                      listenable: Listenable.merge([layout, buildTools]),
+                      listenable: Listenable.merge([layout, buildTools, settings.keymap]),
                       builder: (context, _) => RightStripeWidget(
                         buildToolTitle: buildTools.hasProjects ? buildTools.title : null,
                         visibleTools: layout.visibleTools,
                         sideOf: layout.sideOf,
                         slotOf: layout.slotOf,
                         onSelectTool: layout.selectTool,
+                        keymap: settings.keymap,
                       ),
                     ),
                   ],
@@ -381,6 +393,27 @@ class _Workbench extends StatelessWidget {
         return Row(children: side == ToolSide.left ? [sized, handle] : [handle, sized]);
       },
     );
+  }
+
+  /// 可配置的快捷键 → 操作(打开 / 收起工具窗,同 IntelliJ 的 Activate…ToolWindow、Hide All Windows)。
+  Map<ShortcutActivator, VoidCallback> _keymapBindings(LayoutStore layout) {
+    final keymap = settings.keymap;
+    if (keymap == null) return const {};
+    void side(SideTool tool) {
+      if (tool == SideTool.build && !buildTools.hasProjects) return; // 项目里没有构建工具时没有这个窗
+      layout.selectTool(tool);
+    }
+
+    final actions = <String, VoidCallback>{
+      for (final tool in SideTool.values) keymapIdOf(tool): () => side(tool),
+      KeymapIds.terminal: () => layout.selectBottomTab(BottomToolTab.terminal),
+      KeymapIds.git: () => layout.selectBottomTab(BottomToolTab.git),
+      KeymapIds.hideAll: layout.toggleHideAll,
+    };
+    return {
+      for (final e in actions.entries)
+        for (final k in keymap.shortcutsOf(e.key)) k.activator: e.value,
+    };
   }
 
   void _openSearch(BuildContext context) {

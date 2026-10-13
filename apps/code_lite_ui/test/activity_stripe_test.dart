@@ -34,7 +34,7 @@ void main() {
     double top(String tooltip) => tester.getTopLeft(find.byTooltip(tooltip)).dy;
     expect(find.byTooltip('Debug (Shift+F9)'), findsOneWidget);
     expect(find.byTooltip('通知'), findsNothing, reason: '通知在右活动条(IntelliJ 的位置)');
-    expect(top('Git 提交与日志'), lessThan(top('Debug (Shift+F9)')));
+    expect(top('Git 提交与日志 (Alt+9)'), lessThan(top('Debug (Shift+F9)')));
     expect(tester.getBottomLeft(find.byTooltip('Debug (Shift+F9)')).dy, greaterThan(560 - 60));
   });
 
@@ -62,8 +62,8 @@ void main() {
     ));
     double top(String tooltip) => tester.getTopLeft(find.byTooltip(tooltip)).dy;
     expect(top('通知'), lessThan(top('Maven')));
-    expect(top('Maven'), lessThan(top('结构 (⌘7)')));
-    expect(find.byTooltip('项目 (⌘1)'), findsNothing, reason: '左侧的工具窗不在右活动条');
+    expect(top('Maven'), lessThan(top('结构 (Alt+7)')));
+    expect(find.byTooltip('项目 (Alt+1)'), findsNothing, reason: '左侧的工具窗不在右活动条');
     final active = {for (final b in tester.widgetList<StripeButton>(find.byType(StripeButton))) if (b.isActive) b.tooltip};
     expect(active, {'Maven'});
   });
