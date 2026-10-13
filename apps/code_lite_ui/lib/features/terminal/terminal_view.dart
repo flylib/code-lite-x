@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/client/api_client.dart';
+import '../editor/context_menu_region.dart';
+import 'terminal_selection.dart';
 import '../../core/theme/intellij_theme.dart';
 import 'terminal_store.dart';
 
@@ -303,9 +305,17 @@ class _Screen {
     required this.appCursor,
     required this.bracketedPaste,
     required this.altScreen,
+    this.wrapped = const [],
+    this.history = 0,
   });
 
   final List<List<_Run>> rows;
+
+  /// 每行是不是自动折行折出来的(复制时接上下一行)。
+  final List<bool> wrapped;
+
+  /// 回滚缓冲里一共有多少行可翻;屏幕顶行的绝对行号 = history - 当前回滚偏移。
+  final int history;
   final int cursorRow;
   final int cursorCol;
   final bool cursorVisible;
@@ -346,11 +356,40 @@ class _Screen {
       appCursor: json['app_cursor'] == true,
       bracketedPaste: json['bracketed_paste'] == true,
       altScreen: json['alt_screen'] == true,
+      wrapped: [for (final w in (json['wrapped'] as List?) ?? const []) w == true],
+      history: (json['history'] as num?)?.toInt() ?? 0,
     );
+  }
+
+  /// 第 [row] 行按单元格摊开([cols] 格,空格补齐,宽字符后半格是空串),复制 / 选词用。
+  TermLine lineAt(int row, int cols) {
+    final cells = List<String>.filled(cols, ' ');
+    if (row >= 0 && row < rows.length) {
+      for (final run in rows[row]) {
+        var c = run.col;
+        for (final rune in run.text.runes) {
+          if (c >= cols) break;
+          cells[c] = String.fromCharCode(rune);
+          if (_isWide(rune) && c + 1 < cols) cells[c + 1] = '';
+          c += _isWide(rune) ? 2 : 1;
+        }
+      }
+    }
+    return TermLine(cells, wrapped: row >= 0 && row < wrapped.length && wrapped[row]);
   }
 }
 
 class TerminalView extends StatefulWidget {
+  /// 单元格大小与内边距(测试按格子算点击位置用)。
+  @visibleForTesting
+  static Size cellSizeOf(BuildContext context) {
+    final m = _CellMetrics.of(context);
+    return Size(m.width, m.height);
+  }
+
+  @visibleForTesting
+  static const double padding = _kPad;
+
   const TerminalView({
     super.key,
     required this.sessionId,
@@ -443,6 +482,7 @@ class _TerminalViewState extends State<TerminalView> implements TextInputClient 
   void _send(String data) {
     if (data.isEmpty) return;
     widget.client.ptyWrite(widget.sessionId, data);
+    if (_sel != null) setState(() => _sel = null); // 打字就取消选区
     if (_scrollback != 0) {
       _scrollback = 0;
       _seq = -1;
@@ -462,7 +502,19 @@ class _TerminalViewState extends State<TerminalView> implements TextInputClient 
     // 输入法组字中:回车/退格/方向键都归输入法。
     if (_composing) return KeyEventResult.ignored;
 
+    // 复制选中的输出:⌘C(其它平台 Ctrl+Shift+C)。没有选区时 ⌘C 不管,Ctrl+C 照常是中断。
+    final copyChord = key == LogicalKeyboardKey.keyC &&
+        (keys.isMetaPressed || (keys.isControlPressed && keys.isShiftPressed));
+    if (copyChord && _hasSelection) {
+      _copy();
+      return KeyEventResult.handled;
+    }
+
     if (keys.isMetaPressed) {
+      if (key == LogicalKeyboardKey.keyA) {
+        _selectAll();
+        return KeyEventResult.handled;
+      }
       if (key == LogicalKeyboardKey.keyV) {
         _paste();
         return KeyEventResult.handled;
@@ -655,6 +707,115 @@ class _TerminalViewState extends State<TerminalView> implements TextInputClient 
   @override
   void didChangeInputControl(TextInputControl? oldControl, TextInputControl? newControl) {}
 
+  // --- 选区与复制 ------------------------------------------------------------------
+
+  TermSelection? _sel;
+
+  /// 按下后鼠标挪到别的格子才算开始选;只是点一下不选。
+  bool _dragging = false;
+  bool _pressed = false;
+  Duration? _lastDown;
+  Offset _lastDownAt = Offset.zero;
+  int _clicks = 0;
+
+  bool get _hasSelection => _sel != null;
+
+  /// 屏幕顶行的绝对行号(0 = 回滚缓冲里最早的一行)。
+  int get _topLine => _screen.history - _scrollback;
+
+  int get _viewCols => _cols > 0 ? _cols : 80;
+
+  TermPos _posAt(Offset local) {
+    final m = _CellMetrics.of(context);
+    final rows = math.max(1, _screen.rows.length);
+    final row = ((local.dy - _kPad) / m.height).floor().clamp(0, rows - 1);
+    final col = ((local.dx - _kPad) / m.width).floor().clamp(0, _viewCols - 1);
+    return TermPos(_topLine + row, col);
+  }
+
+  void _onPointerDown(PointerDownEvent e) {
+    if (e.buttons != kPrimaryButton) return;
+    _focus.requestFocus();
+    // 用事件自己的时间戳判断连击(和手势识别器一样)
+    final last = _lastDown;
+    final again = last != null && e.timeStamp - last < const Duration(milliseconds: 400) && (e.localPosition - _lastDownAt).distance < 6;
+    _clicks = again ? (_clicks % 3) + 1 : 1;
+    _lastDown = e.timeStamp;
+    _lastDownAt = e.localPosition;
+    _pressed = true;
+    _dragging = false;
+    final p = _posAt(e.localPosition);
+    final line = _screen.lineAt(p.line - _topLine, _viewCols);
+    setState(() {
+      switch (_clicks) {
+        case 2: // 双击:选词
+          final (a, b) = wordRange(line.cells, p.col);
+          _sel = TermSelection(TermPos(p.line, a), TermPos(p.line, b));
+        case 3: // 三击:选整行
+          _sel = TermSelection(TermPos(p.line, 0), TermPos(p.line, _viewCols - 1));
+        default:
+          _sel = null; // 单击:取消选区,等拖动再选
+          _anchor = p;
+      }
+    });
+  }
+
+  TermPos? _anchor;
+
+  void _onPointerMove(PointerMoveEvent e) {
+    if (!_pressed || _clicks != 1 || e.buttons != kPrimaryButton) return;
+    final anchor = _anchor;
+    if (anchor == null) return;
+    // 拖到上 / 下边缘外面:跟着翻(选长输出时)
+    final m = _CellMetrics.of(context);
+    final height = context.size?.height ?? 0;
+    if (e.localPosition.dy < _kPad) _scrollBy(-m.height);
+    if (height > 0 && e.localPosition.dy > height - _kPad) _scrollBy(m.height);
+    final p = _posAt(e.localPosition);
+    if (!_dragging && p == anchor) return;
+    _dragging = true;
+    setState(() => _sel = TermSelection(anchor, p));
+  }
+
+  void _onPointerUp(PointerUpEvent e) => _pressed = false;
+
+  void _selectAll() {
+    final int last = _topLine + math.max<int>(0, _screen.rows.length - 1);
+    setState(() => _sel = TermSelection(const TermPos(0, 0), TermPos(last, _viewCols - 1)));
+  }
+
+  /// 选中的文字。看不到的那部分(选区比一屏长、或者翻走了)按页向 PTY 取回来。
+  String _selectedText() {
+    final sel = _sel;
+    if (sel == null) return '';
+    final cols = _viewCols;
+    final lines = <int, TermLine>{};
+    void take(_Screen screen, int top) {
+      for (var r = 0; r < screen.rows.length; r++) {
+        lines[top + r] = screen.lineAt(r, cols);
+      }
+    }
+
+    take(_screen, _topLine);
+    TermLine? lineAt(int line) {
+      if (lines.containsKey(line)) return lines[line];
+      // 让这一行出现在屏幕顶上再读一页
+      final res = widget.client.ptySnapshot(widget.sessionId, scrollback: math.max(0, _screen.history - line));
+      if (res['status'] != 'ok' || res['unchanged'] == true) return null;
+      final page = _Screen.fromJson(res);
+      take(page, page.history - ((res['scrollback'] as num?)?.toInt() ?? 0));
+      return lines[line];
+    }
+
+    return selectionText(sel, lineAt, cols);
+  }
+
+  void _copy() {
+    final text = _selectedText();
+    if (text.isEmpty) return;
+    Clipboard.setData(ClipboardData(text: text));
+  }
+
   // --- 滚动:翻回滚缓冲(鼠标滚轮 + 触控板) -----------------------------------------
 
   /// 还不够一行的滚动量(像素)。触控板一次只滚几个像素,不攒起来的话每次都四舍五入成 0,怎么滚都不动。
@@ -697,9 +858,12 @@ class _TerminalViewState extends State<TerminalView> implements TextInputClient 
         final rows = math.max(2, (constraints.maxHeight - _kPad * 2) ~/ m.height);
         final cols = math.max(10, (constraints.maxWidth - _kPad * 2) ~/ m.width);
         _syncSize(rows, cols);
-        return Listener(
-          onPointerSignal: _onPointerSignal,
-          onPointerPanZoomUpdate: _onPanZoomUpdate,
+        final menu = ContextMenuRegion(
+          menuBuilder: (_) => [
+            MenuItemButton(onPressed: _hasSelection ? _copy : null, child: const Text('复制')),
+            MenuItemButton(onPressed: _paste, child: const Text('粘贴')),
+            MenuItemButton(onPressed: _selectAll, child: const Text('全选')),
+          ],
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
             onTap: _focus.requestFocus,
@@ -716,11 +880,22 @@ class _TerminalViewState extends State<TerminalView> implements TextInputClient 
                     metrics: m,
                     focused: _focus.hasFocus,
                     composing: _composing ? _imeValue.text : null,
+                    selection: _sel,
+                    topLine: _topLine,
+                    cols: cols,
                   ),
                 ),
               ),
             ),
           ),
+        );
+        return Listener(
+          onPointerSignal: _onPointerSignal,
+          onPointerPanZoomUpdate: _onPanZoomUpdate,
+          onPointerDown: _onPointerDown,
+          onPointerMove: _onPointerMove,
+          onPointerUp: _onPointerUp,
+          child: menu,
         );
       },
     );
@@ -733,12 +908,22 @@ class _TerminalPainter extends CustomPainter {
     required this.metrics,
     required this.focused,
     required this.composing,
+    this.selection,
+    this.topLine = 0,
+    this.cols = 0,
   });
 
   final _Screen screen;
   final _CellMetrics metrics;
   final bool focused;
   final String? composing;
+
+  /// 选区(绝对行号);[topLine] 是屏幕顶行的绝对行号。
+  final TermSelection? selection;
+  final int topLine;
+  final int cols;
+
+  static const Color selectionColor = Color(0x664A88E8);
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -748,6 +933,12 @@ class _TerminalPainter extends CustomPainter {
 
     for (var r = 0; r < screen.rows.length; r++) {
       final y = _kPad + r * ch;
+      // 选区底色画在文字下面
+      final selected = selection?.colsOn(topLine + r, cols);
+      if (selected != null) {
+        final (c0, c1) = selected;
+        canvas.drawRect(Rect.fromLTWH(_kPad + c0 * cw, y, (c1 - c0 + 1) * cw, ch), Paint()..color = selectionColor);
+      }
       for (final run in screen.rows[r]) {
         final inverse = run.attrs & _Run.inverse != 0;
         var fg = _color(run.fg, foreground: true);
@@ -845,7 +1036,12 @@ class _TerminalPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_TerminalPainter old) =>
-      old.screen != screen || old.focused != focused || old.composing != composing;
+      old.screen != screen ||
+      old.focused != focused ||
+      old.composing != composing ||
+      old.selection != selection ||
+      old.topLine != topLine ||
+      old.cols != cols;
 }
 
 /// 一个 run 占几列。Rust 侧保证宽字符(中日韩)单独成 run,所以这里只需区分两种情况。

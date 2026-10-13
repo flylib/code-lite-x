@@ -160,12 +160,17 @@ impl PtySession {
 
         let mut parser = self.parser.lock();
         let screen = parser.screen_mut();
+        // 回滚缓冲里一共有多少行可翻(夹到最大值就是它):界面用它把选区记成绝对行号,翻页、来新输出都不丢
+        screen.set_scrollback(usize::MAX);
+        let history = screen.scrollback();
         screen.set_scrollback(scrollback);
         let offset = screen.scrollback();
         let screen = parser.screen();
         let (rows, cols) = screen.size();
 
         let lines: Vec<Vec<Run>> = (0..rows).map(|r| row_runs(screen, r, cols)).collect();
+        // 自动折行的行:复制时和下一行接起来,不插换行
+        let wrapped: Vec<bool> = (0..rows).map(|r| screen.row_wrapped(r)).collect();
         let (cur_r, cur_c) = screen.cursor_position();
         let result = json!({
             "status": "ok",
@@ -177,6 +182,8 @@ impl PtySession {
             // 翻看历史时不画光标,否则光标会悬在旧内容上。
             "cursor_visible": !screen.hide_cursor() && offset == 0,
             "scrollback": offset,
+            "history": history,
+            "wrapped": wrapped,
             "app_cursor": screen.application_cursor(),
             "bracketed_paste": screen.bracketed_paste(),
             "alt_screen": screen.alternate_screen(),
@@ -375,5 +382,21 @@ mod tests {
         assert_eq!(text(&p)[0], "line 17");
         p.screen_mut().set_scrollback(10_000);
         assert_eq!(text(&p)[0], "line 1");
+    }
+
+    #[test]
+    fn snapshot_reports_history_and_wrapped_rows() {
+        let mut p = vt100::Parser::new(3, 10, 100);
+        for i in 1..=10 {
+            p.process(format!("l{i}\r\n").as_bytes());
+        }
+        p.process(b"0123456789abc"); // 超过 10 列:折到下一行
+        let screen = p.screen_mut();
+        screen.set_scrollback(usize::MAX);
+        assert_eq!(screen.scrollback(), 9, "12 行内容(10 行 + 折成两行的那一行)- 屏幕 3 行 = 9 行可翻");
+        screen.set_scrollback(0);
+        let s = p.screen();
+        assert!(s.row_wrapped(1), "第一段被折行");
+        assert!(!s.row_wrapped(2));
     }
 }
