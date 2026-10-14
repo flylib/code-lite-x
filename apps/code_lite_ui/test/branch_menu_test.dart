@@ -114,6 +114,24 @@ void main() {
     expect(find.text('origin/main'), findsOneWidget, reason: '本地 main 右边写着它的上游');
   });
 
+  testWidgets('every branch row has its arrow at the right edge, whatever the name / upstream length', (tester) async {
+    client.localNames = ['main', 'feat/login', 'dev', 'feat/retention-archive-before-cleanup-with-a-very-long-name', 'kdev'];
+    client.upstreams['feat/retention-archive-before-cleanup-with-a-very-long-name'] = 'origin/feat/retention-archive-before-cleanup-with-a-very-long-name';
+    client.upstreams['kdev'] = 'origin/kdev';
+    await show(tester);
+    await openPopup(tester);
+    final chevrons = find.byKey(const ValueKey('branch-row-chevron'));
+    expect(chevrons.evaluate().length, greaterThan(4));
+    double rightOf(Element e) {
+      final box = e.renderObject! as RenderBox;
+      return box.localToGlobal(Offset(box.size.width, 0)).dx;
+    }
+
+    final rights = {for (final e in chevrons.evaluate()) rightOf(e).round()};
+    expect(rights, hasLength(1), reason: '箭头全部右对齐(有没有上游、名字长短都一样)');
+    expect(tester.takeException(), isNull, reason: '长名字不溢出');
+  });
+
   testWidgets('opening the popup refreshes the branch list', (tester) async {
     await show(tester);
     final before = client.callsTo('git.branches').length;

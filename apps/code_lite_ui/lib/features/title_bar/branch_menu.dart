@@ -219,19 +219,28 @@ class _BranchPopupState extends State<BranchPopup> {
           const SizedBox(width: 18),
           Icon(icon, size: 15, color: color),
           const SizedBox(width: 6),
-          Flexible(
-            child: Text(
-              node.label,
-              overflow: TextOverflow.ellipsis,
-              style: popupText.copyWith(fontWeight: node.isCurrent ? FontWeight.w600 : FontWeight.normal),
-            ),
+          // 名字和远端分支占满中间,箭头始终贴右边(各行对齐);空间不够时先省略远端分支名
+          Expanded(
+            child: Row(children: [
+              Flexible(
+                flex: 3,
+                child: Text(
+                  node.label,
+                  overflow: TextOverflow.ellipsis,
+                  style: popupText.copyWith(fontWeight: node.isCurrent ? FontWeight.w600 : FontWeight.normal),
+                ),
+              ),
+              if (node.upstream != null) ...[
+                const SizedBox(width: 12),
+                Expanded(
+                  flex: 2,
+                  child: Text(node.upstream!, textAlign: TextAlign.right, overflow: TextOverflow.ellipsis, maxLines: 1, style: popupMuted),
+                ),
+              ],
+            ]),
           ),
-          if (node.upstream != null) ...[
-            const SizedBox(width: 12),
-            Expanded(child: Text(node.upstream!, textAlign: TextAlign.right, overflow: TextOverflow.ellipsis, style: popupMuted)),
-          ] else
-            const Spacer(),
-          const Icon(Icons.chevron_right, size: 16, color: IntelliJTheme.textMuted),
+          const SizedBox(width: 6),
+          const Icon(Icons.chevron_right, key: ValueKey('branch-row-chevron'), size: 16, color: IntelliJTheme.textMuted),
         ]),
       ),
     );
