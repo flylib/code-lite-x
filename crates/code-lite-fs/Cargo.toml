@@ -12,3 +12,4 @@ serde_json = { workspace = true }
 rayon = "1.11"
 nucleo-matcher = "0.3"
 notify = "8.2"
+imara-diff = "0.2"

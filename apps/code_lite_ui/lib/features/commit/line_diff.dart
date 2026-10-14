@@ -1,5 +1,11 @@
 /// 并排差异视图的行模型:左边是旧版本,右边是新版本,逐行对齐。
+///
+/// 差分本身交给 Rust(`codelite_line_diff`,imara-diff 的 histogram 算法):原来这里的 Myers
+/// 回溯时每一步都复制整个状态数组,2 万行改 2000 处要 2.4 GB、整体改写要 24 秒,还都在界面线程上。
+/// 没有 Rust 库(web 预览)时才用下面 Dart 的那份([dartLineHunks])。
 library;
+
+import '../../core/ffi/rust_diff.dart';
 
 enum DiffRowKind { equal, insert, delete, modify }
 
@@ -20,36 +26,19 @@ class DiffRow {
 
 /// 逐行比较 [a](旧)与 [b](新),输出左右对齐的行。
 ///
-/// 用 Myers 差分求最短编辑脚本,再把相邻的"删一段 + 插一段"两两配成 modify 行 ——
-/// 这样改过的行左右并排显示(IntelliJ 的蓝色块),多出来的才是纯增 / 纯删。
-/// 先剥掉公共前后缀:大文件里通常只改了几行,剥完后实际参与差分的很少。
-List<DiffRow> sideBySideDiff(List<String> a, List<String> b) {
-  var start = 0;
-  while (start < a.length && start < b.length && a[start] == b[start]) {
-    start++;
-  }
-  var endA = a.length, endB = b.length;
-  while (endA > start && endB > start && a[endA - 1] == b[endB - 1]) {
-    endA--;
-    endB--;
-  }
+/// 每段改动里删掉的行和新增的行两两配成 modify 行 —— 改过的行左右并排显示(IntelliJ 的蓝色块),
+/// 多出来的才是纯增 / 纯删。
+List<DiffRow> sideBySideDiff(List<String> a, List<String> b) => rowsFromHunks(a.length, lineHunks(a, b));
 
-  final rows = <DiffRow>[for (var i = 0; i < start; i++) DiffRow(DiffRowKind.equal, i, i)];
-  final ops = _myers(a.sublist(start, endA), b.sublist(start, endB));
-
-  // ops: 0 = equal, -1 = delete, +1 = insert(按编辑脚本顺序)
-  var i = start, j = start, k = 0;
-  while (k < ops.length) {
-    if (ops[k] == 0) {
+/// 由各段改动排出左右对齐的行([aLength] 是旧版本的行数)。
+List<DiffRow> rowsFromHunks(int aLength, List<LineHunk> hunks) {
+  final rows = <DiffRow>[];
+  var i = 0, j = 0;
+  for (final h in hunks) {
+    while (i < h.aStart) {
       rows.add(DiffRow(DiffRowKind.equal, i++, j++));
-      k++;
-      continue;
     }
-    var dels = 0, ins = 0;
-    while (k < ops.length && ops[k] != 0) {
-      ops[k] < 0 ? dels++ : ins++;
-      k++;
-    }
+    final dels = h.aEnd - h.aStart, ins = h.bEnd - h.bStart;
     final pairs = dels < ins ? dels : ins;
     for (var p = 0; p < pairs; p++) {
       rows.add(DiffRow(DiffRowKind.modify, i++, j++));
@@ -61,8 +50,8 @@ List<DiffRow> sideBySideDiff(List<String> a, List<String> b) {
       rows.add(DiffRow(DiffRowKind.insert, null, j++));
     }
   }
-  for (var t = 0; t < a.length - endA; t++) {
-    rows.add(DiffRow(DiffRowKind.equal, endA + t, endB + t));
+  while (i < aLength) {
+    rows.add(DiffRow(DiffRowKind.equal, i++, j++));
   }
   return rows;
 }
@@ -104,8 +93,16 @@ class LineHunk {
   String toString() => 'LineHunk($aStart..$aEnd → $bStart..$bEnd)';
 }
 
-/// [a] 改成 [b] 的各段改动,按位置排序;相邻两段之间至少隔着一行没变的。三方合并用。
+/// [a] 改成 [b] 的各段改动,按位置排序;相邻两段之间至少隔着一行没变的。并排差异、三方合并共用。
 List<LineHunk> lineHunks(List<String> a, List<String> b) {
+  final r = rustLineHunks(a, b);
+  if (r != null) return [for (var k = 0; k + 3 < r.length; k += 4) LineHunk(r[k], r[k + 1], r[k + 2], r[k + 3])];
+  return dartLineHunks(a, b);
+}
+
+/// Dart 的 Myers 实现(没有 Rust 库时用;测试里和 Rust 的结果对照)。
+/// 注意:回溯时每一步都复制整个状态数组,改动多的大文件会很慢、很占内存。
+List<LineHunk> dartLineHunks(List<String> a, List<String> b) {
   var start = 0;
   while (start < a.length && start < b.length && a[start] == b[start]) {
     start++;

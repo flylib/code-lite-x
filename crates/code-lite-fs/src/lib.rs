@@ -4,6 +4,7 @@
 
 pub mod entry;
 pub mod file_index;
+pub mod line_diff;
 pub mod project_search;
 pub mod search;
 pub mod tree;

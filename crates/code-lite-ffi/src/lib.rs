@@ -321,6 +321,37 @@ pub unsafe extern "C" fn codelite_watch_poll(ctx: *mut CodeLiteContext, root: *c
     }
 }
 
+/// 按行差分(见 `code_lite_fs::line_diff`):两边各是用 `\n` 连起来的 [a_count] / [b_count] 行。
+/// 返回 u32 小端数组,每 4 个一组 `(a_start, a_end, b_start, b_end)`,字节数写进 `out_len`,用 [codelite_bytes_free] 释放。
+/// 不用上下文,任意线程可调。
+#[no_mangle]
+pub unsafe extern "C" fn codelite_line_diff(
+    a: *const u8,
+    a_len: usize,
+    a_count: u32,
+    b: *const u8,
+    b_len: usize,
+    b_count: u32,
+    out_len: *mut usize,
+) -> *mut u8 {
+    if out_len.is_null() {
+        return std::ptr::null_mut();
+    }
+    *out_len = 0;
+    let slice = |p: *const u8, n: usize| if p.is_null() || n == 0 { &[][..] } else { std::slice::from_raw_parts(p, n) };
+    let (a, b) = (slice(a, a_len), slice(b, b_len));
+    let (la, lb) = (code_lite_fs::line_diff::split_joined(a, a_count), code_lite_fs::line_diff::split_joined(b, b_count));
+    let mut bytes = Vec::new();
+    for h in code_lite_fs::line_diff::line_hunks(&la, &lb) {
+        for v in h {
+            bytes.extend_from_slice(&v.to_le_bytes());
+        }
+    }
+    let boxed = bytes.into_boxed_slice();
+    *out_len = boxed.len();
+    Box::into_raw(boxed) as *mut u8
+}
+
 /// 全局搜索 / 替换(见 `code_lite_fs::project_search`)。
 /// 请求:`{"op":"search"|"replace","root","query","replacement","options":{...}}`;返回结果 JSON,用 [codelite_string_free] 释放。
 /// 不用上下文、不碰共享状态,可以在任意线程(Dart 的后台 isolate)里调;内部用多线程并行。
