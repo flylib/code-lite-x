@@ -23,6 +23,17 @@ void main() {
     await client.dispose();
   });
 
+  /// 等 shell 安静下来(50 ms 内没有新输出),返回那时的整屏帧。之后用它的 seq 取下一帧就是增量。
+  /// 不等的话,机器忙时 shell 还在画提示符,「没变」的判断和「只带变了的行」都会被新输出打乱。
+  Future<PtyFrame> settle() async {
+    for (var i = 0; i < 100; i++) {
+      final full = client.ptyFrame(id);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      if (client.ptyFrame(id, sinceSeq: full.seq).unchanged) return full;
+    }
+    fail('shell 一直有输出');
+  }
+
   /// 等到画面里出现 [text],返回那一帧和此前收到的各帧。
   Future<(PtyFrame, List<PtyFrame>)> waitFor(String text, {int sinceSeq = -1}) async {
     final seen = <PtyFrame>[];
@@ -48,11 +59,10 @@ void main() {
     expect(first.rows, 10);
     expect(first.cols, 60);
 
-    // 整屏同步一次(之前几帧可能是增量),再看没变时只回头部
-    final full = client.ptyFrame(id);
+    // 安静下来后整屏同步一次;settle 里已经确认了没新输出时只回「没变」
+    final full = await settle();
     expect(full.full, isTrue);
     expect(full.changed, hasLength(10));
-    expect(client.ptyFrame(id, sinceSeq: full.seq).unchanged, isTrue);
 
     client.ptyWrite(id, "printf 'CLX\\033[31mRED\\033[0m 中文\\n'\r");
     final (hit, frames) = await waitFor('CLXRED 中文', sinceSeq: full.seq);
@@ -78,7 +88,7 @@ void main() {
     if (!available) return;
     client.ptyWrite(id, "echo same-screen\r");
     await waitFor('same-screen');
-    final frame = client.ptyFrame(id);
+    final frame = await settle();
     final snap = PtyFrame.fromSnapshot(client.ptySnapshot(id));
     String text(PtyFrame f) => [for (var i = 0; i < f.rows; i++) f.changed[i]!.runs.map((r) => '${r.col}:${r.text}:${r.fg}:${r.attrs}').join('|')].join('\n');
     expect(text(frame), text(snap));
