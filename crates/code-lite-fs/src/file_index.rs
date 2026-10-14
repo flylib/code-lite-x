@@ -23,11 +23,47 @@ const SKIP_DIRS: [&str; 9] = [".git", "node_modules", "target", "build", ".dart_
 const MAX_FILES: usize = 500_000;
 const CHUNK: usize = 4096;
 
+#[derive(Clone)]
 struct Entry {
     /// 相对路径,分隔符一律 `/`。
     rel: String,
     /// 文件名在 `rel` 里的起始字节下标。
     name_start: usize,
+}
+
+impl Entry {
+    fn new(rel: &str) -> Self {
+        let name_start = rel.rfind('/').map_or(0, |i| i + 1);
+        Entry { rel: rel.to_string(), name_start }
+    }
+}
+
+/// 这个相对路径在不在清单 / 监视的范围外(某一级目录是构建产物、版本库或 IDE 自己的)。
+pub fn skipped(rel: &str) -> bool {
+    rel.split('/').any(|part| SKIP_DIRS.contains(&part))
+}
+
+/// [root] 下的 [rel_dir] 目录里的所有文件(相对 [root],跳过同样的目录);文件监视发现新目录时用。
+pub fn files_under(root: &Path, rel_dir: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut stack = vec![PathBuf::from(rel_dir)];
+    while let Some(dir) = stack.pop() {
+        let Ok(entries) = fs::read_dir(root.join(&dir)) else { continue };
+        for e in entries.flatten() {
+            let name = e.file_name().to_string_lossy().into_owned();
+            if SKIP_DIRS.contains(&name.as_str()) {
+                continue;
+            }
+            let Ok(ft) = e.file_type() else { continue };
+            let rel = dir.join(&name);
+            if ft.is_dir() {
+                stack.push(rel);
+            } else if ft.is_file() {
+                out.push(rel.to_string_lossy().replace('\\', "/"));
+            }
+        }
+    }
+    out
 }
 
 pub struct FileIndex {
@@ -63,6 +99,60 @@ impl FileIndex {
     /// 同步建好(测试用)。
     pub fn build_now(&self) {
         *self.files.write().unwrap() = Some(Arc::new(collect(&self.root)));
+        self.generation.fetch_add(1, Ordering::AcqRel);
+    }
+
+    /// 清单里有没有这个文件;清单还没建好时 None。
+    pub fn contains(&self, rel: &str) -> Option<bool> {
+        let files = self.files.read().unwrap();
+        files.as_ref().map(|f| f.binary_search_by(|e| e.rel.as_str().cmp(rel)).is_ok())
+    }
+
+    /// 清单里有没有这个目录下的文件(目录本身不进清单)。
+    pub fn contains_dir(&self, rel_dir: &str) -> bool {
+        let prefix = format!("{rel_dir}/");
+        let files = self.files.read().unwrap();
+        files.as_ref().is_some_and(|f| {
+            let at = f.partition_point(|e| e.rel.as_str() < prefix.as_str());
+            f.get(at).is_some_and(|e| e.rel.starts_with(&prefix))
+        })
+    }
+
+    /// 文件监视报来的增删,就地改清单(不重扫)。[removed] 里可以是文件,也可以是目录(连同下面的文件一起去掉)。
+    /// 清单还没建好时什么也不做(建好的那份已经是新的)。
+    pub fn apply(&self, created: &[String], removed: &[String]) {
+        if created.is_empty() && removed.is_empty() {
+            return;
+        }
+        let mut guard = self.files.write().unwrap();
+        let Some(arc) = guard.as_mut() else { return };
+        let v = Arc::make_mut(arc);
+        for r in removed {
+            match v.binary_search_by(|e| e.rel.as_str().cmp(r)) {
+                Ok(i) => {
+                    v.remove(i);
+                }
+                Err(_) => {
+                    let prefix = format!("{r}/");
+                    let start = v.partition_point(|e| e.rel.as_str() < prefix.as_str());
+                    let n = v[start..].iter().take_while(|e| e.rel.starts_with(&prefix)).count();
+                    v.drain(start..start + n);
+                }
+            }
+        }
+        if created.len() > 256 {
+            // 一大批(切分支、解压):追加后整体排序,比一个个插快
+            v.extend(created.iter().map(|c| Entry::new(c)));
+            v.sort_by(|a, b| a.rel.cmp(&b.rel));
+            v.dedup_by(|a, b| a.rel == b.rel);
+        } else {
+            for c in created {
+                if let Err(i) = v.binary_search_by(|e| e.rel.as_str().cmp(c)) {
+                    v.insert(i, Entry::new(c));
+                }
+            }
+        }
+        drop(guard);
         self.generation.fetch_add(1, Ordering::AcqRel);
     }
 

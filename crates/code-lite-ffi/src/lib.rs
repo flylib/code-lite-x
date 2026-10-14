@@ -16,6 +16,8 @@ pub struct CodeLiteContext {
     pub terminals: code_lite_terminal::TerminalManager,
     /// 项目文件索引(按根目录;Go to File 用)。随上下文一起释放。
     pub indexes: std::sync::Mutex<std::collections::HashMap<String, std::sync::Arc<code_lite_fs::file_index::FileIndex>>>,
+    /// 项目目录的文件监视(按根目录)。随上下文一起停掉(切换 / 关闭项目)。
+    pub watchers: std::sync::Mutex<std::collections::HashMap<String, code_lite_fs::watcher::ProjectWatcher>>,
 }
 
 impl CodeLiteContext {
@@ -79,6 +81,7 @@ pub unsafe extern "C" fn codelite_init(workspace_path: *const c_char) -> *mut Co
         workspace_root: PathBuf::from(path_str),
         terminals: code_lite_terminal::TerminalManager::new(),
         indexes: Default::default(),
+        watchers: Default::default(),
     });
 
     Box::into_raw(ctx)
@@ -277,6 +280,45 @@ pub unsafe extern "C" fn codelite_index_query(
     }
     let (Some(root), Some(query)) = (c_str_to_str(root), c_str_to_str(query)) else { return err_json("Invalid argument") };
     json_to_c_char(&(*ctx).index(root).query(query, limit as usize))
+}
+
+/// 开始监视 [root](已经在监视就什么也不做),顺带建好它的文件清单。
+/// 返回 `{"status":"ok"}`;系统不让监视时 `{"status":"error"}`(调用方用 Dart 自己的监视)。
+#[no_mangle]
+pub unsafe extern "C" fn codelite_watch_start(ctx: *mut CodeLiteContext, root: *const c_char) -> *const c_char {
+    if ctx.is_null() {
+        return err_json("Context is null");
+    }
+    let Some(root) = c_str_to_str(root) else { return err_json("Invalid root") };
+    let ctx = &*ctx;
+    let _ = ctx.index(root);
+    let mut watchers = ctx.watchers.lock().unwrap();
+    if !watchers.contains_key(root) {
+        match code_lite_fs::watcher::ProjectWatcher::start(std::path::Path::new(root)) {
+            Ok(w) => {
+                watchers.insert(root.to_string(), w);
+            }
+            Err(e) => return err_json(&e),
+        }
+    }
+    json_to_c_char(&serde_json::json!({ "status": "ok" }))
+}
+
+/// 取走 [root] 攒下的文件变化(见 `code_lite_fs::watcher::ProjectWatcher::poll`),并就地更新它的文件清单。
+/// 很便宜(没变化时就是一次加锁),界面隔几百毫秒调一次。没在监视时 `{"status":"error"}`。
+#[no_mangle]
+pub unsafe extern "C" fn codelite_watch_poll(ctx: *mut CodeLiteContext, root: *const c_char) -> *const c_char {
+    if ctx.is_null() {
+        return err_json("Context is null");
+    }
+    let Some(root) = c_str_to_str(root) else { return err_json("Invalid root") };
+    let ctx = &*ctx;
+    let index = ctx.indexes.lock().unwrap().get(root).cloned();
+    let watchers = ctx.watchers.lock().unwrap();
+    match watchers.get(root) {
+        Some(w) => json_to_c_char(&w.poll(index.as_ref())),
+        None => err_json("not watching"),
+    }
 }
 
 /// 全局搜索 / 替换(见 `code_lite_fs::project_search`)。

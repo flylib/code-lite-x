@@ -163,6 +163,13 @@ class ApiClient {
   Map<String, dynamic> ptyOpen(int rows, int cols) => _ffi.ptyOpen(rows, cols);
   Map<String, dynamic> ptyWrite(String id, String data) => _ffi.ptyWrite(id, data);
   Map<String, dynamic> ptyResize(String id, int rows, int cols) => _ffi.ptyResize(id, rows, cols);
+  /// 开始监视项目目录(Rust:构建产物、.git 等的事件在 Rust 里就丢掉,顺带让文件清单实时更新)。
+  /// 没有 Rust 库 / 系统不让监视时返回 false,调用方用 Dart 的监视。
+  bool startWatching() => _ffi.watchStart(_root);
+
+  /// 取走攒下的文件变化:`{"changed","created","removed","structure","overflow"}`(相对路径);没在监视时 null。
+  Map<String, dynamic>? pollWatch() => _ffi.watchPoll(_root);
+
   /// 按文件名快速打开(Go to File):在 Rust 常驻的项目文件清单上模糊匹配,返回前 [limit] 个。
   /// `{"status":"ok","ready","files","generation","results":[{"path","score","indices"}]}`;
   /// 没有 Rust 库 / 库太旧时 `{"status":"error"}`。

@@ -155,6 +155,11 @@ class ProjectContext {
   final Set<String> _changedFiles = {};
   Timer? _watchDebounce;
 
+  /// Rust 文件监视:隔 300 ms 取一批变化。
+  Timer? _watchTimer;
+  bool _treeLoading = false;
+  bool _treeDirty = false;
+
   /// 打开 [projectPath]:读文件树、恢复上次的标签。失败(目录不存在 / 初始化失败)返回 false。
   Future<bool> open(String projectPath) => workspace.openFolder(projectPath);
 
@@ -171,14 +176,66 @@ class ProjectContext {
     _sessionTimer?.cancel();
     _watch?.cancel();
     _watch = null;
+    _watchTimer?.cancel();
+    _watchTimer = null;
     if (root != null) {
       branches.start();
-      _watch = io.watchFiles(root).listen(_onFileChanged);
+      // 文件监视交给 Rust(构建产物的事件在那边就丢掉);不行再用 Dart 自己的
+      if (client.startWatching()) {
+        _watchTimer = Timer.periodic(const Duration(milliseconds: 300), (_) => _pollWatch());
+      } else {
+        _watch = io.watchFiles(root).listen(_onFileChanged);
+      }
       // 光标和滚动位置不会通知任何人,定时看一眼(没变就不写盘),这样被强杀 / 崩溃也只丢几秒
       _sessionTimer = Timer.periodic(const Duration(seconds: 5), (_) => workspace.saveSession());
     } else {
       branches.stop();
       _sessionTimer = null;
+    }
+  }
+
+  /// Rust 攒下的一批变化:改了 / 新建的文件里有打开着的标签就和磁盘对一下;有文件新建或删掉就刷新文件树。
+  void _pollWatch() {
+    final root = workspace.rootPath;
+    if (root == null || _disposed) return;
+    final r = client.pollWatch();
+    if (r == null) return;
+    if (r['overflow'] == true) {
+      // 一下子变了太多(切大分支、解压):整体重来
+      sessions.syncWithDisk();
+      _reloadTree();
+      return;
+    }
+    final touched = <String>{
+      for (final p in (r['changed'] as List? ?? const [])) p as String,
+      for (final p in (r['created'] as List? ?? const [])) p as String,
+    };
+    if (touched.isNotEmpty) {
+      final prefix = '$root/';
+      final paths = [
+        for (final p in sessions.tabs.keys)
+          if (touched.contains(p.startsWith(prefix) ? p.substring(prefix.length) : p)) p,
+      ];
+      if (paths.isNotEmpty) sessions.syncWithDisk(paths);
+    }
+    if (r['structure'] == true) _reloadTree();
+  }
+
+  /// 刷新文件树;正在刷的话等它完了再刷一次(中间来的多次合成一次)。
+  Future<void> _reloadTree() async {
+    if (_treeLoading) {
+      _treeDirty = true;
+      return;
+    }
+    _treeLoading = true;
+    try {
+      await workspace.load();
+    } finally {
+      _treeLoading = false;
+    }
+    if (_treeDirty && !_disposed) {
+      _treeDirty = false;
+      await _reloadTree();
     }
   }
 
@@ -245,6 +302,7 @@ class ProjectContext {
     _disposed = true;
     _sessionTimer?.cancel();
     _watchDebounce?.cancel();
+    _watchTimer?.cancel();
     await _watch?.cancel();
     await _webServer?.close(); // 端口随项目一起释放
     workspace.removeListener(_onWorkspaceChanged);

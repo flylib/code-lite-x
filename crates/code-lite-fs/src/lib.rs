@@ -7,6 +7,7 @@ pub mod file_index;
 pub mod project_search;
 pub mod search;
 pub mod tree;
+pub mod watcher;
 
 pub use entry::FileSystemEntry;
 pub use search::{SearchOptions, SearchResult, WorkspaceSearcher};

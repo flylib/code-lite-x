@@ -137,6 +137,10 @@ class CodeLiteBindings {
   /// 项目文件索引(Go to File);库太旧时为 null。
   _IndexRefreshC? _indexRefresh;
   _IndexQueryDart? _indexQuery;
+
+  /// 文件监视;库太旧时为 null。
+  _IndexRefreshC? _watchStart;
+  _IndexRefreshC? _watchPoll;
   _BytesFreeDart? _bytesFree;
 
   /// 复用的长度出参(只在调用它的线程上用)。
@@ -188,6 +192,10 @@ class CodeLiteBindings {
     if (_dylib!.providesSymbol('codelite_index_query') && _dylib!.providesSymbol('codelite_index_refresh')) {
       _indexRefresh = _dylib!.lookupFunction<_IndexRefreshC, _IndexRefreshC>('codelite_index_refresh');
       _indexQuery = _dylib!.lookupFunction<_IndexQueryC, _IndexQueryDart>('codelite_index_query');
+    }
+    if (_dylib!.providesSymbol('codelite_watch_start') && _dylib!.providesSymbol('codelite_watch_poll')) {
+      _watchStart = _dylib!.lookupFunction<_IndexRefreshC, _IndexRefreshC>('codelite_watch_start');
+      _watchPoll = _dylib!.lookupFunction<_IndexRefreshC, _IndexRefreshC>('codelite_watch_poll');
     }
     if (_dylib!.providesSymbol('codelite_pty_frame') && _dylib!.providesSymbol('codelite_bytes_free')) {
       _ptyFrame = _dylib!.lookupFunction<_PtyFrameC, _PtyFrameDart>('codelite_pty_frame');
@@ -258,6 +266,26 @@ class CodeLiteBindings {
     final ptr = _ptyResize(_ctx!, idPtr.pointer, rows, cols);
     _freeAllocatedString(idPtr);
     return _parseJsonMap(_fromCString(ptr));
+  }
+
+  /// 开始监视 [root](Rust,过滤掉构建产物等的事件)。库里没有 / 系统不让监视时返回 false。
+  bool watchStart(String root) {
+    final f = _watchStart;
+    if (!isAvailable || f == null) return false;
+    final rootPtr = _toCString(root);
+    final r = _parseJsonMap(_fromCString(f(_ctx!, rootPtr.pointer)));
+    _freeAllocatedString(rootPtr);
+    return r['status'] == 'ok';
+  }
+
+  /// 取走 [root] 攒下的文件变化;没在监视 / 库里没有时返回 null。
+  Map<String, dynamic>? watchPoll(String root) {
+    final f = _watchPoll;
+    if (!isAvailable || f == null) return null;
+    final rootPtr = _toCString(root);
+    final r = _parseJsonMap(_fromCString(f(_ctx!, rootPtr.pointer)));
+    _freeAllocatedString(rootPtr);
+    return r['status'] == 'ok' ? r : null;
   }
 
   /// 在后台重新扫 [root] 的文件清单。库里没有这个函数时返回 false。
