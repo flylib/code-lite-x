@@ -12,7 +12,7 @@ Flutter(Dart)管界面和交互;**计算量大、数据量大、或要和操作�
 |---|---|---|---|---|
 | 0 | 交互终端:PTY + vt100 解析 | ✅ | 每个项目一个 Rust 上下文;后台线程读 shell 输出喂给 vt100,屏幕在 Rust 里;回滚 5000 行;选区复制按页取历史 | 早期 |
 | 1 | 终端画面只传变化的行(二进制) | ✅ | `codelite_pty_frame`:Rust 记着上一帧每行的指纹,只发变了的行,二进制(格式见 `encode_frame`),Dart `pty_frame.dart` 直接解码。编译日志刷屏时每帧 2.3 ms → 0.7 ms、占界面线程 5% → 1.7%(release 库实测,每帧平均只带 1 行)。旧库没有这个函数时自动退回 JSON 快照;选区复制翻页仍用 JSON 快照 | `3d40e46` |
-| 2 | 全局搜索 / 替换 | ✅ | `codelite_search`(`code_lite_fs::project_search`):整文件一次匹配先挑出可能命中的文件,按路径排序分批并行(`rayon`),够数就停;Dart 在后台 isolate 里调(`rust_search.dart`),不卡界面。结果与 Dart 版逐条一致(列号是 UTF-16、按 `\r\n` / `\r` 分行、整词用 ASCII `\b`)。bcpoker_admin 实测 260 ms → 80 ms(约 3 倍)。Rust 不支持的正则(环视、反向引用)和没有 Rust 库时回到 Dart 那份。文件清单还没常驻,留给 #3 | 见 git log |
+| 2 | 全局搜索 / 替换 | ✅ | `codelite_search`(`code_lite_fs::project_search`):整文件一次匹配先挑出可能命中的文件,按路径排序分批并行(`rayon`),够数就停;Dart 在后台 isolate 里调(`rust_search.dart`),不卡界面。结果与 Dart 版逐条一致(列号是 UTF-16、按 `\r\n` / `\r` 分行、整词用 ASCII `\b`)。bcpoker_admin 实测 260 ms → 80 ms(约 3 倍)。Rust 不支持的正则(环视、反向引用)和没有 Rust 库时回到 Dart 那份。文件清单还没常驻,留给 #3 | `5de5df9` |
 | 3 | 项目文件索引 + 按文件名快速打开(Go to File) | ⏳ | 文件清单常驻 Rust(随文件监视 #4 更新),打字时 `nucleo` 实时模糊匹配排序;全局搜索也可复用这份清单省掉遍历 | |
 | 4 | 文件监视 | ⏳ | `notify`;在 Rust 里先滤掉 `target/`、`node_modules/`、`.git` 等编译产物的事件,只把有用的变化交给界面 | |
 | 5 | 差异对比(Commit / Merge / PR) | ⏳ | `imara-diff`(histogram);大文件差异更快 | |
