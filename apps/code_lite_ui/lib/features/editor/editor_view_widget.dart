@@ -1208,7 +1208,7 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
                       ),
                     ),
                   ),
-                  _buildRightErrorStripe(lines.length, diagnostics: diagnostics),
+                  _buildRightErrorStripe(lines.length, diagnostics: diagnostics, controller: controller),
                 ],
               ),
               if (isPrimary) _buildMiniDiffOverlay(),
@@ -1554,8 +1554,8 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
     controller.setMnemonicBookmark(line, picked);
   }
 
-  void _jumpToLine(CodeEditorController controller, int line) {
-    controller.setCursor(EditorPosition(line, 0));
+  void _jumpToLine(CodeEditorController controller, int line, {int col = 0}) {
+    controller.setCursor(EditorPosition(line, col));
     final scroll = identical(controller, _controller) ? _verticalScroll : widget.secondaryTab?.verticalScroll;
     if (scroll == null || !scroll.hasClients) return;
     final target = (line * _lineHeight - scroll.position.viewportDimension / 3).clamp(0.0, scroll.position.maxScrollExtent);
@@ -1909,19 +1909,38 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
   /// 用户要求窄一点:8px,标记条两边各留 1px。
   static const double errorStripeWidth = 8;
 
-  Widget _buildRightErrorStripe(int totalLines, {required List<EditorDiagnostic> diagnostics}) {
+  /// 鼠标停在错误条的哪个标记上(显示它的提示、手形光标)。
+  EditorDiagnostic? _stripeHover;
+
+  /// 点错误条(IntelliJ 的做法):点在标记上跳到那个问题(行、列),点空白处滚到文件里对应的位置。
+  Widget _buildRightErrorStripe(int totalLines, {required List<EditorDiagnostic> diagnostics, required CodeEditorController controller}) {
+    final marks = [for (final d in diagnostics) if (!d.isUnnecessary) d];
     // 没有底色和边线:标记直接画在岛上(IntelliJ 新 UI)
     return SizedBox(
       width: errorStripeWidth,
       child: LayoutBuilder(
         builder: (context, constraints) {
           final height = constraints.maxHeight;
-          return Stack(
+          final hover = _stripeHover;
+          void onHover(Offset p) {
+            final d = errorStripeHit(marks, totalLines, height, p.dy);
+            if (!identical(d, _stripeHover)) setState(() => _stripeHover = d);
+          }
+
+          void onTap(Offset p) {
+            final d = errorStripeHit(marks, totalLines, height, p.dy);
+            if (d != null) {
+              _jumpToLine(controller, d.line, col: d.colStart);
+            } else if (totalLines > 0 && height > 0) {
+              _jumpToLine(controller, ((p.dy / height) * totalLines).floor().clamp(0, totalLines - 1));
+            }
+          }
+
+          final stripe = Stack(
             children: [
-              ...diagnostics.where((d) => !d.isUnnecessary).map((d) {
-                final topPos = totalLines > 0 ? (d.line / totalLines) * height : 0.0;
-                return Positioned(
-                  top: topPos.clamp(0.0, height - 4),
+              for (final d in marks)
+                Positioned(
+                  top: errorStripeMarkTop(d.line, totalLines, height),
                   left: 1,
                   right: 1,
                   child: Container(
@@ -1931,14 +1950,52 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
                       borderRadius: BorderRadius.circular(1),
                     ),
                   ),
-                );
-              }),
+                ),
             ],
+          );
+          return MouseRegion(
+            key: const ValueKey('error-stripe'),
+            cursor: hover != null ? SystemMouseCursors.click : MouseCursor.defer,
+            onHover: (e) => onHover(e.localPosition),
+            onExit: (_) {
+              if (_stripeHover != null) setState(() => _stripeHover = null);
+            },
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTapUp: (e) => onTap(e.localPosition),
+              child: hover == null
+                  ? stripe
+                  : Tooltip(
+                      message: '${hover.isError ? '错误' : '警告'}(第 ${hover.line + 1} 行):${hover.message}',
+                      waitDuration: const Duration(milliseconds: 300),
+                      child: stripe,
+                    ),
+            ),
           );
         },
       ),
     );
   }
+}
+
+/// 错误条上一个标记的顶边:按它所在行在整个文件里的比例(高 3px,不出界)。
+double errorStripeMarkTop(int line, int totalLines, double height) =>
+    (totalLines > 0 ? (line / totalLines) * height : 0.0).clamp(0.0, height < 4 ? 0.0 : height - 4);
+
+/// 错误条上 [y] 处点到的问题:离得最近、相差不超过 5px 的标记;一样近时错误优先于警告。没点到返回 null。
+EditorDiagnostic? errorStripeHit(List<EditorDiagnostic> marks, int totalLines, double height, double y) {
+  EditorDiagnostic? best;
+  var bestDist = double.infinity;
+  for (final d in marks) {
+    final dist = (errorStripeMarkTop(d.line, totalLines, height) + 1.5 - y).abs();
+    if (dist > 5) continue;
+    final better = dist < bestDist - 0.5 || (dist <= bestDist + 0.5 && d.isError && !(best?.isError ?? false));
+    if (best == null || better) {
+      best = d;
+      bestDist = dist;
+    }
+  }
+  return best;
 }
 
 class _BlameSession {
