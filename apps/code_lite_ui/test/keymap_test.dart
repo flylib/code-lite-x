@@ -47,7 +47,9 @@ void main() {
         KeymapIds.terminal: '⌥F12',
         KeymapIds.git: '⌘9',
         KeymapIds.hideAll: '⇧⌘F12',
+        KeymapIds.gotoFile: '⇧⌘O',
       });
+      expect(KeymapStore(mac: false).labelOf(KeymapIds.gotoFile), 'Ctrl+Shift+N');
       expect(KeymapStore(mac: false).labelOf(KeymapIds.project), 'Alt+1');
     });
 

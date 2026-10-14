@@ -163,6 +163,15 @@ class ApiClient {
   Map<String, dynamic> ptyOpen(int rows, int cols) => _ffi.ptyOpen(rows, cols);
   Map<String, dynamic> ptyWrite(String id, String data) => _ffi.ptyWrite(id, data);
   Map<String, dynamic> ptyResize(String id, int rows, int cols) => _ffi.ptyResize(id, rows, cols);
+  /// 按文件名快速打开(Go to File):在 Rust 常驻的项目文件清单上模糊匹配,返回前 [limit] 个。
+  /// `{"status":"ok","ready","files","generation","results":[{"path","score","indices"}]}`;
+  /// 没有 Rust 库 / 库太旧时 `{"status":"error"}`。
+  Map<String, dynamic> fileIndexQuery(String query, {int limit = 50}) =>
+      _ffi.indexQuery(_root, query, limit) ?? const {'status': 'error', 'error': '文件索引不可用(需要 Rust 库)'};
+
+  /// 后台重新扫一遍项目文件清单(打开 Go to File 时调,新建 / 删掉的文件跟上)。
+  void fileIndexRefresh() => _ffi.indexRefresh(_root);
+
   /// 一帧终端画面:二进制、只带和上一帧不同的行(Rust `encode_frame`)。
   /// Rust 库太旧没有这个接口时,用 JSON 整屏快照代替。
   PtyFrame ptyFrame(String id, {int sinceSeq = -1, int scrollback = 0}) =>

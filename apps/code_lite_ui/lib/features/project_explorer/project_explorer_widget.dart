@@ -455,35 +455,38 @@ class _ProjectExplorerWidgetState extends State<ProjectExplorerWidget> {
   static const Color _matchBg = Color(0xFF6B5A1E);
 
   /// 文件图标:按语法引擎识别的语言给图标与颜色。
-  static (IconData, Color) _fileIcon(String name) {
-    final lang = languages.detect(name);
-    return switch (lang.id) {
-      'java' => (Icons.coffee_outlined, const Color(0xFFE76F00)),
-      'kotlin' => (Icons.change_history, const Color(0xFFA97BFF)),
-      'scala' => (Icons.stacked_line_chart, const Color(0xFFDE3423)),
-      'groovy' => (Icons.code, const Color(0xFF4298B8)),
-      'dart' => (Icons.flutter_dash, const Color(0xFF40C4FF)),
-      'rust' => (Icons.settings_suggest_outlined, const Color(0xFFD87642)),
-      'go' => (Icons.code, const Color(0xFF00ADD8)),
-      'c' || 'cpp' || 'csharp' => (Icons.code, const Color(0xFF659AD2)),
-      'swift' => (Icons.code, const Color(0xFFF05138)),
-      'javascript' => (Icons.javascript, const Color(0xFFE8D44D)),
-      'typescript' => (Icons.code, const Color(0xFF3178C6)),
-      'python' => (Icons.code, const Color(0xFF4B8BBE)),
-      'ruby' => (Icons.diamond_outlined, const Color(0xFFCC342D)),
-      'php' => (Icons.php, const Color(0xFF8892BF)),
-      'shellscript' || 'powershell' => (Icons.terminal, const Color(0xFF89D185)),
-      'sql' => (Icons.storage, const Color(0xFFCC7832)),
-      'xml' || 'html' => (Icons.code, const Color(0xFFE8BF6A)),
-      'css' => (Icons.css, const Color(0xFF42A5F5)),
-      'json' => (Icons.data_object, const Color(0xFFCBCB41)),
-      'markdown' => (Icons.description_outlined, const Color(0xFF6CB4F8)),
-      'yaml' || 'toml' || 'ini' || 'properties' => (Icons.tune, IntelliJTheme.textMuted),
-      'dockerfile' => (Icons.directions_boat_outlined, const Color(0xFF2496ED)),
-      'ignore' => (Icons.visibility_off_outlined, IntelliJTheme.textMuted),
-      _ => (Icons.insert_drive_file_outlined, IntelliJTheme.textMuted),
-    };
-  }
+  static (IconData, Color) _fileIcon(String name) => fileTypeIcon(name);
+}
+
+/// 文件图标(按语法引擎识别的语言):文件树、Go to File 等处共用。
+(IconData, Color) fileTypeIcon(String name) {
+  final lang = languages.detect(name);
+  return switch (lang.id) {
+    'java' => (Icons.coffee_outlined, const Color(0xFFE76F00)),
+    'kotlin' => (Icons.change_history, const Color(0xFFA97BFF)),
+    'scala' => (Icons.stacked_line_chart, const Color(0xFFDE3423)),
+    'groovy' => (Icons.code, const Color(0xFF4298B8)),
+    'dart' => (Icons.flutter_dash, const Color(0xFF40C4FF)),
+    'rust' => (Icons.settings_suggest_outlined, const Color(0xFFD87642)),
+    'go' => (Icons.code, const Color(0xFF00ADD8)),
+    'c' || 'cpp' || 'csharp' => (Icons.code, const Color(0xFF659AD2)),
+    'swift' => (Icons.code, const Color(0xFFF05138)),
+    'javascript' => (Icons.javascript, const Color(0xFFE8D44D)),
+    'typescript' => (Icons.code, const Color(0xFF3178C6)),
+    'python' => (Icons.code, const Color(0xFF4B8BBE)),
+    'ruby' => (Icons.diamond_outlined, const Color(0xFFCC342D)),
+    'php' => (Icons.php, const Color(0xFF8892BF)),
+    'shellscript' || 'powershell' => (Icons.terminal, const Color(0xFF89D185)),
+    'sql' => (Icons.storage, const Color(0xFFCC7832)),
+    'xml' || 'html' => (Icons.code, const Color(0xFFE8BF6A)),
+    'css' => (Icons.css, const Color(0xFF42A5F5)),
+    'json' => (Icons.data_object, const Color(0xFFCBCB41)),
+    'markdown' => (Icons.description_outlined, const Color(0xFF6CB4F8)),
+    'yaml' || 'toml' || 'ini' || 'properties' => (Icons.tune, IntelliJTheme.textMuted),
+    'dockerfile' => (Icons.directions_boat_outlined, const Color(0xFF2496ED)),
+    'ignore' => (Icons.visibility_off_outlined, IntelliJTheme.textMuted),
+    _ => (Icons.insert_drive_file_outlined, IntelliJTheme.textMuted),
+  };
 }
 
 enum _RowKind { dir, file, hint }

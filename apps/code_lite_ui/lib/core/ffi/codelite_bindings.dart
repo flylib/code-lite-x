@@ -68,6 +68,10 @@ typedef _PtyFrameDart = Pointer<Uint8> Function(Pointer<Void> ctx, Pointer<Char>
 typedef _BytesFreeC = Void Function(Pointer<Uint8> ptr, Size len);
 typedef _BytesFreeDart = void Function(Pointer<Uint8> ptr, int len);
 
+typedef _IndexRefreshC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> root);
+typedef _IndexQueryC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> root, Pointer<Char> query, Uint32 limit);
+typedef _IndexQueryDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> root, Pointer<Char> query, int limit);
+
 typedef _PtySnapshotC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> id, Int64 sinceSeq, Uint32 scrollback);
 typedef _PtySnapshotDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> id, int sinceSeq, int scrollback);
 typedef _PtyCloseC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> id);
@@ -129,6 +133,10 @@ class CodeLiteBindings {
 
   /// 二进制画面帧;库太旧(没有这两个函数)时为 null,退回 JSON 快照。
   _PtyFrameDart? _ptyFrame;
+
+  /// 项目文件索引(Go to File);库太旧时为 null。
+  _IndexRefreshC? _indexRefresh;
+  _IndexQueryDart? _indexQuery;
   _BytesFreeDart? _bytesFree;
 
   /// 复用的长度出参(只在调用它的线程上用)。
@@ -177,6 +185,10 @@ class CodeLiteBindings {
     _ptyWrite = _dylib!.lookupFunction<_PtyWriteC, _PtyWriteDart>('codelite_pty_write');
     _ptyResize = _dylib!.lookupFunction<_PtyResizeC, _PtyResizeDart>('codelite_pty_resize');
     _ptySnapshot = _dylib!.lookupFunction<_PtySnapshotC, _PtySnapshotDart>('codelite_pty_snapshot');
+    if (_dylib!.providesSymbol('codelite_index_query') && _dylib!.providesSymbol('codelite_index_refresh')) {
+      _indexRefresh = _dylib!.lookupFunction<_IndexRefreshC, _IndexRefreshC>('codelite_index_refresh');
+      _indexQuery = _dylib!.lookupFunction<_IndexQueryC, _IndexQueryDart>('codelite_index_query');
+    }
     if (_dylib!.providesSymbol('codelite_pty_frame') && _dylib!.providesSymbol('codelite_bytes_free')) {
       _ptyFrame = _dylib!.lookupFunction<_PtyFrameC, _PtyFrameDart>('codelite_pty_frame');
       _bytesFree = _dylib!.lookupFunction<_BytesFreeC, _BytesFreeDart>('codelite_bytes_free');
@@ -245,6 +257,28 @@ class CodeLiteBindings {
     final idPtr = _toCString(id);
     final ptr = _ptyResize(_ctx!, idPtr.pointer, rows, cols);
     _freeAllocatedString(idPtr);
+    return _parseJsonMap(_fromCString(ptr));
+  }
+
+  /// 在后台重新扫 [root] 的文件清单。库里没有这个函数时返回 false。
+  bool indexRefresh(String root) {
+    final f = _indexRefresh;
+    if (!isAvailable || f == null) return false;
+    final rootPtr = _toCString(root);
+    final ptr = f(_ctx!, rootPtr.pointer);
+    _freeAllocatedString(rootPtr);
+    _fromCString(ptr);
+    return true;
+  }
+
+  /// 按文件名模糊查找(Rust 文件索引)。库里没有这个函数时返回 null。
+  Map<String, dynamic>? indexQuery(String root, String query, int limit) {
+    final f = _indexQuery;
+    if (!isAvailable || f == null) return null;
+    final rootPtr = _toCString(root), queryPtr = _toCString(query);
+    final ptr = f(_ctx!, rootPtr.pointer, queryPtr.pointer, limit);
+    _freeAllocatedString(rootPtr);
+    _freeAllocatedString(queryPtr);
     return _parseJsonMap(_fromCString(ptr));
   }
 

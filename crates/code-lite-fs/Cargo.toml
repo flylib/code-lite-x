@@ -10,3 +10,4 @@ serde = { workspace = true }
 regex = { workspace = true }
 serde_json = { workspace = true }
 rayon = "1.11"
+nucleo-matcher = "0.3"

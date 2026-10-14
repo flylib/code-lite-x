@@ -40,6 +40,7 @@ import 'features/pull_requests/pr_store.dart';
 import 'features/pull_requests/pr_timeline_tab.dart';
 import 'features/project_explorer/structure_widget.dart';
 import 'features/search/global_search_modal.dart';
+import 'features/search/goto_file_dialog.dart';
 import 'features/settings/settings_dialog.dart';
 import 'features/status_bar/status_bar_widget.dart';
 import 'features/terminal/terminal_store.dart';
@@ -196,7 +197,7 @@ class _Workbench extends StatelessWidget {
         },
         const SingleActivator(LogicalKeyboardKey.keyF, meta: true, shift: true): () => _openSearch(context),
         const SingleActivator(LogicalKeyboardKey.keyF, control: true, shift: true): () => _openSearch(context),
-        ..._keymapBindings(layout),
+        ..._keymapBindings(context, layout),
       },
       child: child!,
       ),
@@ -396,7 +397,7 @@ class _Workbench extends StatelessWidget {
   }
 
   /// 可配置的快捷键 → 操作(打开 / 收起工具窗,同 IntelliJ 的 Activate…ToolWindow、Hide All Windows)。
-  Map<ShortcutActivator, VoidCallback> _keymapBindings(LayoutStore layout) {
+  Map<ShortcutActivator, VoidCallback> _keymapBindings(BuildContext context, LayoutStore layout) {
     final keymap = settings.keymap;
     if (keymap == null) return const {};
     void side(SideTool tool) {
@@ -409,11 +410,39 @@ class _Workbench extends StatelessWidget {
       KeymapIds.terminal: () => layout.selectBottomTab(BottomToolTab.terminal),
       KeymapIds.git: () => layout.selectBottomTab(BottomToolTab.git),
       KeymapIds.hideAll: layout.toggleHideAll,
+      KeymapIds.gotoFile: () => _gotoFile(context),
     };
     return {
       for (final e in actions.entries)
         for (final k in keymap.shortcutsOf(e.key)) k.activator: e.value,
     };
+  }
+
+  /// Go to File(⇧⌘O):在 Rust 常驻的文件清单上按文件名模糊查找;没输入时列出打开着的标签。
+  Future<void> _gotoFile(BuildContext context) async {
+    final workspace = context.workspaceRead;
+    final sessions = context.sessionRead;
+    final root = workspace.rootPath;
+    if (root == null) return;
+    String rel(String p) => p.startsWith('$root/') ? p.substring(root.length + 1) : p;
+    final active = sessions.activePath;
+    // 打开着的标签:显示相对路径,选中时用标签原来的路径(不会多开一个同样的标签)
+    final tabs = {
+      if (active != null && !sessions.isSpecialTab(active)) rel(active): active,
+      for (final p in sessions.openPaths.reversed)
+        if (!sessions.isSpecialTab(p)) rel(p): p,
+    };
+    final recent = tabs.keys.toList();
+    final target = await showGotoFileDialog(
+      context,
+      query: (q, limit) => client.fileIndexQuery(q, limit: limit),
+      refresh: client.fileIndexRefresh,
+      recent: recent,
+    );
+    if (target == null || !context.mounted) return;
+    // 已经开着就用那个标签的路径;否则和文件树一样用绝对路径
+    final path = tabs[target.path] ?? (target.path.startsWith('/') ? target.path : '$root/${target.path}');
+    await openFileAt(workspace, sessions, path, (target.line ?? 1) - 1, (target.column ?? 1) - 1);
   }
 
   void _openSearch(BuildContext context) {
@@ -484,18 +513,8 @@ class _EditorRegion extends StatelessWidget {
   }
 
   /// 差异视图的「跳到源文件」:打开文件,光标放到 [line] 并滚动到可见处。
-  Future<void> _openSourceAt(WorkspaceStore workspace, EditorSessionManager sessions, String path, int line) async {
-    await workspace.openFile(path);
-    final tab = sessions.tabs[path];
-    if (tab == null) return;
-    tab.controller.setCursor(EditorPosition(line, 0));
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final scroll = tab.verticalScroll;
-      if (!scroll.hasClients) return;
-      final target = (line * sessions.appearance.lineHeight - scroll.position.viewportDimension / 3).clamp(0.0, scroll.position.maxScrollExtent);
-      scroll.jumpTo(target);
-    });
-  }
+  Future<void> _openSourceAt(WorkspaceStore workspace, EditorSessionManager sessions, String path, int line) =>
+      openFileAt(workspace, sessions, path, line);
 
   /// Blame 菜单的 Show in File History:打开底部 Git 窗口,按该文件筛选并选中这个提交。
   Future<void> _showInHistory(BuildContext context, String hash, String path) async {
@@ -988,4 +1007,19 @@ Future<void> _cloneRepository(BuildContext context, ProjectManager manager) asyn
   final path = await showCloneDialog(context, initialLocation: _defaultProjectLocation(manager), home: io.homeDirectory());
   if (path == null || !context.mounted) return;
   await _openProject(context, manager, path);
+}
+
+/// 打开文件,光标放到第 [line] 行(0 起)第 [column] 列,并滚到看得见的地方(上方留三分之一屏)。
+/// 差异视图跳源文件、Go to File 的 `Foo.java:120` 共用。
+Future<void> openFileAt(WorkspaceStore workspace, EditorSessionManager sessions, String path, int line, [int column = 0]) async {
+  await workspace.openFile(path);
+  final tab = sessions.tabs[path];
+  if (tab == null) return;
+  tab.controller.setCursor(EditorPosition(line, column));
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    final scroll = tab.verticalScroll;
+    if (!scroll.hasClients) return;
+    final target = (line * sessions.appearance.lineHeight - scroll.position.viewportDimension / 3).clamp(0.0, scroll.position.maxScrollExtent);
+    scroll.jumpTo(target);
+  });
 }

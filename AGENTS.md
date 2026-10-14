@@ -78,6 +78,9 @@ CodeLiteX 是一款高性能的原生跨平台代码编辑器，内置 Git 管�
 **文件树**
 - 快速搜索（IntelliJ 的 speed search）：**只在文件树有焦点时生效**（点一下文件树）。直接打字在已展开的节点里找，选中跳到第一个匹配（从当前选中往下找，到底回到顶上），匹配字符高亮，顶上浮一个搜索框（没匹配时红字）；↑↓ 在匹配间跳，回车打开文件 / 展开目录，Backspace 删字，Esc 或失去焦点退出。匹配不分大小写，先找连续出现，否则分段匹配、每段从词首开始（`admser` → admin-service，`stmgc` → SeaTunnelMigrationGroupController）。不搜时 ↑↓ 移动选中，→ 展开 / ← 收起或回到上一级，回车打开。
 
+**Go to File**
+- ⇧⌘O（其它平台 Ctrl+Shift+N，可在 Keymap 里改）弹出 IntelliJ 式的按文件名查找：文件清单常驻 Rust，打字实时模糊匹配；没有 `/` 只匹配文件名，有 `/` 匹配路径；`Foo.java:120:5` 打开后跳到那一行那一列；没输入时列出打开着的标签；↑↓ 选，回车打开，Esc 关。不收 `.git`、`node_modules`、`target`、`build`、`.dart_tool`、`.gradle`、`.idea`、`out` 下的文件（`.github` 这类点目录照收，同 IntelliJ）。
+
 **项目**
 - 一个进程同时打开多个项目，都留在内存里，切换只是换显示哪一个。「Opening Projects」列表里点 × 才真正关闭，关闭时有未保存的修改要问。
 - 标题栏的项目下拉：直接打字就开始搜索、过滤项目（IntelliJ 的做法）。

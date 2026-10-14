@@ -14,6 +14,22 @@ pub struct CodeLiteContext {
     pub workspace_root: PathBuf,
     /// 用户终端会话。随上下文销毁一起杀掉 shell(切换项目即关闭旧项目的终端)。
     pub terminals: code_lite_terminal::TerminalManager,
+    /// 项目文件索引(按根目录;Go to File 用)。随上下文一起释放。
+    pub indexes: std::sync::Mutex<std::collections::HashMap<String, std::sync::Arc<code_lite_fs::file_index::FileIndex>>>,
+}
+
+impl CodeLiteContext {
+    /// [root] 的文件索引;第一次要时建一个并在后台开始扫。
+    fn index(&self, root: &str) -> std::sync::Arc<code_lite_fs::file_index::FileIndex> {
+        let mut map = self.indexes.lock().unwrap();
+        if let Some(i) = map.get(root) {
+            return i.clone();
+        }
+        let i = code_lite_fs::file_index::FileIndex::new(root);
+        i.refresh();
+        map.insert(root.to_string(), i.clone());
+        i
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -62,6 +78,7 @@ pub unsafe extern "C" fn codelite_init(workspace_path: *const c_char) -> *mut Co
     let ctx = Box::new(CodeLiteContext {
         workspace_root: PathBuf::from(path_str),
         terminals: code_lite_terminal::TerminalManager::new(),
+        indexes: Default::default(),
     });
 
     Box::into_raw(ctx)
@@ -233,6 +250,33 @@ pub unsafe extern "C" fn codelite_pty_snapshot(
         }
         None => err_json("No such terminal session"),
     }
+}
+
+/// 在后台(重新)扫 [root] 的文件清单(打开 Go to File 时调,让清单跟上磁盘)。建好之前查询用旧清单。
+#[no_mangle]
+pub unsafe extern "C" fn codelite_index_refresh(ctx: *mut CodeLiteContext, root: *const c_char) -> *const c_char {
+    if ctx.is_null() {
+        return err_json("Context is null");
+    }
+    let Some(root) = c_str_to_str(root) else { return err_json("Invalid root") };
+    (*ctx).index(root).refresh();
+    json_to_c_char(&serde_json::json!({ "status": "ok" }))
+}
+
+/// 按文件名模糊查找(见 `code_lite_fs::file_index`):返回前 [limit] 个,带匹配字符的下标(UTF-16)。
+/// 很快(几千个文件 < 1 ms,两万个 < 3 ms),界面线程直接调。清单还没建好时 `ready: false`。
+#[no_mangle]
+pub unsafe extern "C" fn codelite_index_query(
+    ctx: *mut CodeLiteContext,
+    root: *const c_char,
+    query: *const c_char,
+    limit: u32,
+) -> *const c_char {
+    if ctx.is_null() {
+        return err_json("Context is null");
+    }
+    let (Some(root), Some(query)) = (c_str_to_str(root), c_str_to_str(query)) else { return err_json("Invalid argument") };
+    json_to_c_char(&(*ctx).index(root).query(query, limit as usize))
 }
 
 /// 全局搜索 / 替换(见 `code_lite_fs::project_search`)。

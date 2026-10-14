@@ -45,9 +45,10 @@ abstract final class KeymapIds {
   static const terminal = 'ActivateTerminalToolWindow';
   static const git = 'ActivateVersionControlToolWindow';
   static const hideAll = 'HideAllWindows';
+  static const gotoFile = 'GotoFile';
 }
 
-/// 目前支持配置的操作:打开 / 收起各个工具窗。默认键位取自 IntelliJ。
+/// 目前支持配置的操作:打开 / 收起各个工具窗、Go to File。默认键位取自 IntelliJ。
 const List<KeymapAction> keymapActions = [
   KeymapAction(id: KeymapIds.project, title: '项目', group: '工具窗', mac: ['meta 1'], other: ['alt 1']),
   KeymapAction(id: KeymapIds.commit, title: 'Commit', group: '工具窗', mac: ['meta 0'], other: ['alt 0']),
@@ -58,6 +59,7 @@ const List<KeymapAction> keymapActions = [
   KeymapAction(id: KeymapIds.terminal, title: '终端', group: '工具窗', mac: ['alt F12'], other: ['alt F12']),
   KeymapAction(id: KeymapIds.git, title: 'Git 提交与日志', group: '工具窗', mac: ['meta 9'], other: ['alt 9']),
   KeymapAction(id: KeymapIds.hideAll, title: '隐藏 / 恢复所有工具窗', group: '工具窗', mac: ['shift meta F12'], other: ['ctrl shift F12']),
+  KeymapAction(id: KeymapIds.gotoFile, title: '按文件名打开(Go to File)', group: '导航', mac: ['shift meta O'], other: ['ctrl shift N']),
 ];
 
 KeymapAction? keymapActionById(String id) => keymapActions.where((a) => a.id == id).firstOrNull;

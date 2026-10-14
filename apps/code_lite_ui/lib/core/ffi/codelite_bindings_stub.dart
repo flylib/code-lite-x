@@ -36,6 +36,10 @@ class CodeLiteBindings {
 
   Map<String, dynamic> ptyResize(String id, int rows, int cols) => {'status': 'error', 'error': 'FFI not available'};
 
+  bool indexRefresh(String root) => false;
+
+  Map<String, dynamic>? indexQuery(String root, String query, int limit) => null;
+
   PtyFrame? ptyFrame(String id, {int sinceSeq = -1, int scrollback = 0}) => null;
 
   Map<String, dynamic> ptySnapshot(String id, {int sinceSeq = -1, int scrollback = 0}) =>
