@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import '../ffi/pty_frame.dart';
 import '../fs/workspace_fs.dart' as fs;
 import '../git/git.dart';
 import '../github/github_service.dart';
@@ -162,6 +163,12 @@ class ApiClient {
   Map<String, dynamic> ptyOpen(int rows, int cols) => _ffi.ptyOpen(rows, cols);
   Map<String, dynamic> ptyWrite(String id, String data) => _ffi.ptyWrite(id, data);
   Map<String, dynamic> ptyResize(String id, int rows, int cols) => _ffi.ptyResize(id, rows, cols);
+  /// 一帧终端画面:二进制、只带和上一帧不同的行(Rust `encode_frame`)。
+  /// Rust 库太旧没有这个接口时,用 JSON 整屏快照代替。
+  PtyFrame ptyFrame(String id, {int sinceSeq = -1, int scrollback = 0}) =>
+      _ffi.ptyFrame(id, sinceSeq: sinceSeq, scrollback: scrollback) ??
+      PtyFrame.fromSnapshot(ptySnapshot(id, sinceSeq: sinceSeq, scrollback: scrollback));
+
   Map<String, dynamic> ptySnapshot(String id, {int sinceSeq = -1, int scrollback = 0}) =>
       _ffi.ptySnapshot(id, sinceSeq: sinceSeq, scrollback: scrollback);
   Map<String, dynamic> ptyClose(String id) => _ffi.ptyClose(id);

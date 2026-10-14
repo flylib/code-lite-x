@@ -1,6 +1,9 @@
 import 'dart:convert';
 import 'dart:ffi';
 import 'dart:io';
+import 'dart:typed_data';
+
+import 'pty_frame.dart';
 
 // Native function typedefs
 typedef _InitC = Pointer<Void> Function(Pointer<Char> path);
@@ -60,6 +63,11 @@ typedef _PtyWriteC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> id,
 typedef _PtyWriteDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> id, Pointer<Char> data);
 typedef _PtyResizeC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> id, Uint16 rows, Uint16 cols);
 typedef _PtyResizeDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> id, int rows, int cols);
+typedef _PtyFrameC = Pointer<Uint8> Function(Pointer<Void> ctx, Pointer<Char> id, Int64 sinceSeq, Uint32 scrollback, Pointer<Size> outLen);
+typedef _PtyFrameDart = Pointer<Uint8> Function(Pointer<Void> ctx, Pointer<Char> id, int sinceSeq, int scrollback, Pointer<Size> outLen);
+typedef _BytesFreeC = Void Function(Pointer<Uint8> ptr, Size len);
+typedef _BytesFreeDart = void Function(Pointer<Uint8> ptr, int len);
+
 typedef _PtySnapshotC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> id, Int64 sinceSeq, Uint32 scrollback);
 typedef _PtySnapshotDart = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> id, int sinceSeq, int scrollback);
 typedef _PtyCloseC = Pointer<Char> Function(Pointer<Void> ctx, Pointer<Char> id);
@@ -118,6 +126,13 @@ class CodeLiteBindings {
   late final _PtyWriteDart _ptyWrite;
   late final _PtyResizeDart _ptyResize;
   late final _PtySnapshotDart _ptySnapshot;
+
+  /// 二进制画面帧;库太旧(没有这两个函数)时为 null,退回 JSON 快照。
+  _PtyFrameDart? _ptyFrame;
+  _BytesFreeDart? _bytesFree;
+
+  /// 复用的长度出参(只在调用它的线程上用)。
+  Pointer<Size>? _lenOut;
   late final _PtyCloseDart _ptyClose;
 
   Pointer<Void>? get contextPointer => _ctx;
@@ -162,6 +177,10 @@ class CodeLiteBindings {
     _ptyWrite = _dylib!.lookupFunction<_PtyWriteC, _PtyWriteDart>('codelite_pty_write');
     _ptyResize = _dylib!.lookupFunction<_PtyResizeC, _PtyResizeDart>('codelite_pty_resize');
     _ptySnapshot = _dylib!.lookupFunction<_PtySnapshotC, _PtySnapshotDart>('codelite_pty_snapshot');
+    if (_dylib!.providesSymbol('codelite_pty_frame') && _dylib!.providesSymbol('codelite_bytes_free')) {
+      _ptyFrame = _dylib!.lookupFunction<_PtyFrameC, _PtyFrameDart>('codelite_pty_frame');
+      _bytesFree = _dylib!.lookupFunction<_BytesFreeC, _BytesFreeDart>('codelite_bytes_free');
+    }
     _ptyClose = _dylib!.lookupFunction<_PtyCloseC, _PtyCloseDart>('codelite_pty_close');
   }
 
@@ -228,6 +247,25 @@ class CodeLiteBindings {
     _freeAllocatedString(idPtr);
     return _parseJsonMap(_fromCString(ptr));
   }
+
+  /// 一帧终端画面(二进制,只带变了的行)。库里没有这个函数时返回 null(调用方退回 [ptySnapshot])。
+  PtyFrame? ptyFrame(String id, {int sinceSeq = -1, int scrollback = 0}) {
+    final frame = _ptyFrame, free = _bytesFree;
+    if (!isAvailable || frame == null || free == null) return null;
+    final lenOut = _lenOut ??= _allocSize();
+    final idPtr = _toCString(id);
+    final ptr = frame(_ctx!, idPtr.pointer, sinceSeq, scrollback, lenOut);
+    _freeAllocatedString(idPtr);
+    if (ptr == nullptr) return PtyFrame.lostFrame;
+    final len = lenOut.value;
+    // 先拷出来再还给 Rust(谁分配谁释放)
+    final bytes = Uint8List.fromList(ptr.asTypedList(len));
+    free(ptr, len);
+    return PtyFrame.decode(bytes);
+  }
+
+  /// 长度出参:借 Rust 的分配函数要一块 8 字节内存(不引入 package:ffi),进程结束前不释放。
+  Pointer<Size> _allocSize() => _stringAlloc(sizeOf<Size>()).cast<Size>();
 
   Map<String, dynamic> ptySnapshot(String id, {int sinceSeq = -1, int scrollback = 0}) {
     if (!isAvailable) return {'status': 'error', 'error': 'FFI not available'};

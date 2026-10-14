@@ -1,4 +1,5 @@
 import 'package:code_lite_ui/core/client/api_client.dart';
+import 'package:code_lite_ui/core/ffi/pty_frame.dart';
 import 'package:code_lite_ui/features/terminal/terminal_view.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -14,6 +15,11 @@ class _FakePty extends ApiClient {
 
   @override
   Map<String, dynamic> ptyResize(String id, int rows, int cols) => {'status': 'ok'};
+
+  /// 界面取画面走二进制帧;假终端用自己的 JSON 快照转一帧(整屏)。
+  @override
+  PtyFrame ptyFrame(String id, {int sinceSeq = -1, int scrollback = 0}) =>
+      PtyFrame.fromSnapshot(ptySnapshot(id, sinceSeq: sinceSeq, scrollback: scrollback));
 
   @override
   Map<String, dynamic> ptyWrite(String id, String data) => {'status': 'ok'};

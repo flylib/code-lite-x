@@ -10,6 +10,8 @@
 // 只覆盖 api_client 实际调用的成员;jsonRpcCall 带 Pointer<Void>,
 // 而它唯一的调用方 core_api_client.dart 不在 web 构建的导入链里,故不包含。
 
+import 'pty_frame.dart';
+
 class CodeLiteBindings {
   CodeLiteBindings._();
 
@@ -33,6 +35,8 @@ class CodeLiteBindings {
   Map<String, dynamic> ptyWrite(String id, String data) => {'status': 'error', 'error': 'FFI not available'};
 
   Map<String, dynamic> ptyResize(String id, int rows, int cols) => {'status': 'error', 'error': 'FFI not available'};
+
+  PtyFrame? ptyFrame(String id, {int sinceSeq = -1, int scrollback = 0}) => null;
 
   Map<String, dynamic> ptySnapshot(String id, {int sinceSeq = -1, int scrollback = 0}) =>
       {'status': 'error', 'error': 'FFI not available'};

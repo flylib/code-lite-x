@@ -53,6 +53,8 @@ pub struct PtySession {
     child: Mutex<Box<dyn Child + Send + Sync>>,
     seq: Arc<AtomicU64>,
     alive: Arc<AtomicBool>,
+    /// 上一次 [PtySession::frame] 发出去的画面(每行的指纹),下一帧只发变了的行。
+    frame_cache: Mutex<Option<FrameCache>>,
 }
 
 impl PtySession {
@@ -120,6 +122,7 @@ impl PtySession {
             child: Mutex::new(child),
             seq,
             alive,
+            frame_cache: Mutex::new(None),
         })
     }
 
@@ -191,6 +194,16 @@ impl PtySession {
         // 视图偏移只服务这一次读取,复位后输出继续写在底部。
         parser.screen_mut().set_scrollback(0);
         result
+    }
+
+    /// 二进制画面帧(给界面每帧取画面用,格式见 [encode_frame]):和上一帧比只带变了的行。
+    /// `since_seq` 等于当前 seq 时只回「没变」;界面手里的不是上一帧(`since_seq` 对不上)时发整屏。
+    pub fn frame(&self, since_seq: Option<u64>, scrollback: usize) -> Vec<u8> {
+        let seq = self.seq();
+        let alive = self.is_alive();
+        let mut parser = self.parser.lock();
+        let mut cache = self.frame_cache.lock();
+        encode_frame(&mut parser, &mut cache, seq, alive, since_seq, scrollback)
     }
 
     fn kill(&self) {
@@ -299,6 +312,122 @@ impl TerminalManager {
     }
 }
 
+// -----------------------------------------------------------------------------
+// 二进制画面帧
+// -----------------------------------------------------------------------------
+
+/// 帧格式版本(改格式时加一,Dart 侧 `pty_frame.dart` 同步改)。
+pub const FRAME_VERSION: u8 = 1;
+
+pub const FRAME_UNCHANGED: u8 = 1;
+pub const FRAME_FULL: u8 = 2;
+pub const FRAME_ALIVE: u8 = 4;
+pub const FRAME_CURSOR_VISIBLE: u8 = 8;
+pub const FRAME_APP_CURSOR: u8 = 16;
+pub const FRAME_BRACKETED_PASTE: u8 = 32;
+pub const FRAME_ALT_SCREEN: u8 = 64;
+
+/// 上一帧发出去的内容:它的 seq 和每行的指纹。
+pub struct FrameCache {
+    seq: u64,
+    hashes: Vec<u64>,
+}
+
+/// 画一帧。小端字节序:
+///
+/// ```text
+/// 头部  u8 版本, u8 标志(FRAME_*), u64 seq, u16 行数, u16 列数, u16 光标行, u16 光标列,
+///       u32 回滚偏移, u32 可翻历史行数, u16 本帧带的行数
+/// 每行  u16 行号, u8 是否自动折行, u16 run 个数,
+///       每个 run:u16 起始列, i32 前景色, i32 背景色, u8 属性, u16 文字字节数, UTF-8 文字
+/// ```
+///
+/// 和 [FrameCache] 里的上一帧比:`since_seq` 正是上一帧的 seq(界面手里就是上一帧)、行数没变时只带变了的行,
+/// 否则带全部行(标志里有 FRAME_FULL)。`since_seq` 等于当前 seq 时只有头部(FRAME_UNCHANGED)。
+pub fn encode_frame(
+    parser: &mut vt100::Parser,
+    cache: &mut Option<FrameCache>,
+    seq: u64,
+    alive: bool,
+    since_seq: Option<u64>,
+    scrollback: usize,
+) -> Vec<u8> {
+    let mut out = Vec::with_capacity(4096);
+    if since_seq == Some(seq) {
+        out.push(FRAME_VERSION);
+        out.push(FRAME_UNCHANGED | if alive { FRAME_ALIVE } else { 0 });
+        out.extend_from_slice(&seq.to_le_bytes());
+        out.extend_from_slice(&[0u8; 2 * 4 + 4 * 2 + 2]);
+        return out;
+    }
+
+    let screen = parser.screen_mut();
+    screen.set_scrollback(usize::MAX);
+    let history = screen.scrollback();
+    screen.set_scrollback(scrollback);
+    let offset = screen.scrollback();
+    let screen = parser.screen();
+    let (rows, cols) = screen.size();
+    let (cur_r, cur_c) = screen.cursor_position();
+
+    let lines: Vec<(bool, Vec<Run>)> = (0..rows).map(|r| (screen.row_wrapped(r), row_runs(screen, r, cols))).collect();
+    let hashes: Vec<u64> = lines.iter().map(|(w, runs)| row_hash(*w, runs)).collect();
+    let diff_base = cache.as_ref().filter(|c| since_seq == Some(c.seq) && c.hashes.len() == hashes.len());
+    let changed: Vec<usize> = match diff_base {
+        Some(c) => (0..lines.len()).filter(|&i| c.hashes[i] != hashes[i]).collect(),
+        None => (0..lines.len()).collect(),
+    };
+
+    let mut flags = 0u8;
+    if diff_base.is_none() { flags |= FRAME_FULL; }
+    if alive { flags |= FRAME_ALIVE; }
+    // 翻看历史时不画光标,否则光标会悬在旧内容上
+    if !screen.hide_cursor() && offset == 0 { flags |= FRAME_CURSOR_VISIBLE; }
+    if screen.application_cursor() { flags |= FRAME_APP_CURSOR; }
+    if screen.bracketed_paste() { flags |= FRAME_BRACKETED_PASTE; }
+    if screen.alternate_screen() { flags |= FRAME_ALT_SCREEN; }
+
+    out.push(FRAME_VERSION);
+    out.push(flags);
+    out.extend_from_slice(&seq.to_le_bytes());
+    for v in [rows, cols, cur_r, cur_c] {
+        out.extend_from_slice(&v.to_le_bytes());
+    }
+    out.extend_from_slice(&(offset.min(u32::MAX as usize) as u32).to_le_bytes());
+    out.extend_from_slice(&(history.min(u32::MAX as usize) as u32).to_le_bytes());
+    out.extend_from_slice(&(changed.len() as u16).to_le_bytes());
+    for &i in &changed {
+        let (wrapped, runs) = &lines[i];
+        out.extend_from_slice(&(i as u16).to_le_bytes());
+        out.push(*wrapped as u8);
+        out.extend_from_slice(&(runs.len() as u16).to_le_bytes());
+        for run in runs {
+            out.extend_from_slice(&run.c.to_le_bytes());
+            out.extend_from_slice(&(run.fg as i32).to_le_bytes());
+            out.extend_from_slice(&(run.bg as i32).to_le_bytes());
+            out.push(run.a);
+            let bytes = run.t.as_bytes();
+            let len = bytes.len().min(u16::MAX as usize);
+            out.extend_from_slice(&(len as u16).to_le_bytes());
+            out.extend_from_slice(&bytes[..len]);
+        }
+    }
+    // 视图偏移只服务这一次读取,复位后输出继续写在底部
+    parser.screen_mut().set_scrollback(0);
+    *cache = Some(FrameCache { seq, hashes });
+    out
+}
+
+fn row_hash(wrapped: bool, runs: &[Run]) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    wrapped.hash(&mut h);
+    for r in runs {
+        (r.c, r.fg, r.bg, r.a, &r.t).hash(&mut h);
+    }
+    h.finish()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -398,5 +527,78 @@ mod tests {
         let s = p.screen();
         assert!(s.row_wrapped(1), "第一段被折行");
         assert!(!s.row_wrapped(2));
+    }
+
+    /// 从帧里读出:标志、带了哪些行(行号 → 文字)。
+    fn read_frame(f: &[u8]) -> (u8, u64, Vec<(u16, String)>) {
+        let u16_at = |o: usize| u16::from_le_bytes([f[o], f[o + 1]]);
+        assert_eq!(f[0], FRAME_VERSION);
+        let flags = f[1];
+        let seq = u64::from_le_bytes(f[2..10].try_into().unwrap());
+        let n = u16_at(26) as usize;
+        let mut o = 28;
+        let mut rows = Vec::new();
+        for _ in 0..n {
+            let idx = u16_at(o);
+            let nruns = u16_at(o + 3) as usize;
+            o += 5;
+            let mut text = String::new();
+            for _ in 0..nruns {
+                let len = u16_at(o + 11) as usize;
+                text.push_str(std::str::from_utf8(&f[o + 13..o + 13 + len]).unwrap());
+                o += 13 + len;
+            }
+            rows.push((idx, text.trim_end().to_string()));
+        }
+        assert_eq!(o, f.len(), "帧长度和内容对得上");
+        (flags, seq, rows)
+    }
+
+    #[test]
+    fn frame_sends_full_screen_then_only_changed_rows() {
+        let mut p = vt100::Parser::new(4, 20, 100);
+        let mut cache = None;
+        p.process(b"one\r\ntwo\r\n");
+        let (flags, seq, rows) = read_frame(&encode_frame(&mut p, &mut cache, 5, true, None, 0));
+        assert_eq!(seq, 5);
+        assert!(flags & FRAME_FULL != 0 && flags & FRAME_ALIVE != 0 && flags & FRAME_CURSOR_VISIBLE != 0);
+        assert_eq!(rows.len(), 4, "第一帧整屏");
+        assert_eq!(rows[0], (0, "one".into()));
+
+        // 没变:只有头部
+        let unchanged = encode_frame(&mut p, &mut cache, 5, true, Some(5), 0);
+        assert_eq!(unchanged.len(), 28);
+        assert!(unchanged[1] & FRAME_UNCHANGED != 0);
+
+        // 新输出只改了第 3 行:只带这一行
+        p.process(b"three");
+        let (flags, _, rows) = read_frame(&encode_frame(&mut p, &mut cache, 6, true, Some(5), 0));
+        assert_eq!(flags & FRAME_FULL, 0);
+        assert_eq!(rows, vec![(2, "three".to_string())]);
+
+        // 界面手里的不是上一帧(seq 对不上,比如刚滚动 / 刚改大小):整屏
+        let (flags, _, rows) = read_frame(&encode_frame(&mut p, &mut cache, 7, true, Some(3), 0));
+        assert!(flags & FRAME_FULL != 0);
+        assert_eq!(rows.len(), 4);
+    }
+
+    #[test]
+    fn frame_wide_text_and_colors_survive_and_scrolling_shifts_rows() {
+        let mut p = vt100::Parser::new(3, 30, 100);
+        let mut cache = None;
+        for i in 1..=6 {
+            p.process(format!("\x1b[31mline {i} 中文\x1b[0m\r\n").as_bytes());
+        }
+        let f = encode_frame(&mut p, &mut cache, 1, false, None, 0);
+        let (flags, _, rows) = read_frame(&f);
+        assert_eq!(flags & FRAME_ALIVE, 0, "shell 退出了");
+        assert_eq!(rows[0].1, "line 5 中文");
+        // 往上翻 2 行:整屏都变了,偏移和可翻行数在头部
+        let f = encode_frame(&mut p, &mut cache, 2, false, Some(1), 2);
+        let (_, _, rows) = read_frame(&f);
+        assert_eq!(rows[0].1, "line 3 中文");
+        assert_eq!(u32::from_le_bytes(f[18..22].try_into().unwrap()), 2, "回滚偏移");
+        assert_eq!(u32::from_le_bytes(f[22..26].try_into().unwrap()), 4, "可翻 4 行");
+        assert_eq!(p.screen().scrollback(), 0, "读完复位到底部");
     }
 }

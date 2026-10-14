@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/client/api_client.dart';
+import '../../core/ffi/pty_frame.dart';
 import '../editor/context_menu_region.dart';
 import 'terminal_selection.dart';
 import '../../core/theme/intellij_theme.dart';
@@ -284,17 +285,8 @@ const TextStyle _baseStyle = TextStyle(
   color: IntelliJTheme.textPrimary,
 );
 
-class _Run {
-  const _Run(this.col, this.text, this.fg, this.bg, this.attrs);
-
-  final int col;
-  final String text;
-  final int fg;
-  final int bg;
-  final int attrs;
-
-  static const bold = 1, italic = 2, underline = 4, inverse = 8, dim = 16;
-}
+/// 画面里同样式的一段文字(和 Rust 的帧格式共用一个类型)。
+typedef _Run = PtyRun;
 
 class _Screen {
   const _Screen({
@@ -358,6 +350,22 @@ class _Screen {
       altScreen: json['alt_screen'] == true,
       wrapped: [for (final w in (json['wrapped'] as List?) ?? const []) w == true],
       history: (json['history'] as num?)?.toInt() ?? 0,
+    );
+  }
+
+  /// 套上一帧:整屏帧直接换;否则只换帧里带的行,其余沿用这一屏的。
+  _Screen apply(PtyFrame f) {
+    final base = !f.full && rows.length == f.rows;
+    return _Screen(
+      rows: [for (var i = 0; i < f.rows; i++) f.changed[i]?.runs ?? (base ? rows[i] : const <_Run>[])],
+      wrapped: [for (var i = 0; i < f.rows; i++) f.changed[i]?.wrapped ?? (base && i < wrapped.length && wrapped[i])],
+      cursorRow: f.cursorRow,
+      cursorCol: f.cursorCol,
+      cursorVisible: f.cursorVisible,
+      appCursor: f.appCursor,
+      bracketedPaste: f.bracketedPaste,
+      altScreen: f.altScreen,
+      history: f.history,
     );
   }
 
@@ -450,22 +458,23 @@ class _TerminalViewState extends State<TerminalView> implements TextInputClient 
 
   void _poll() {
     if (!mounted || _ended) return;
-    final res = widget.client.ptySnapshot(widget.sessionId, sinceSeq: _seq, scrollback: _scrollback);
-    if (res['status'] != 'ok') {
+    // 二进制帧,只带和上一帧不同的行(Rust 侧比对);以前每帧整屏 JSON,编译日志刷屏时每帧要 8 ms
+    final f = widget.client.ptyFrame(widget.sessionId, sinceSeq: _seq, scrollback: _scrollback);
+    if (f.lost) {
       _ended = true;
       widget.onLost();
       return;
     }
-    if (res['alive'] == false) {
+    if (!f.alive) {
       _ended = true;
       widget.onExited();
       return;
     }
-    if (res['unchanged'] == true) return;
+    if (f.unchanged) return;
     setState(() {
-      _seq = (res['seq'] as num).toInt();
-      _scrollback = (res['scrollback'] as num?)?.toInt() ?? 0;
-      _screen = _Screen.fromJson(res);
+      _seq = f.seq;
+      _scrollback = f.scrollback;
+      _screen = _screen.apply(f);
     });
     _updateImeGeometry();
   }

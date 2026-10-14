@@ -18,6 +18,7 @@ CodeLiteX 是一款高性能的原生跨平台代码编辑器，内置 Git 管�
 | `scripts/` | 构建与原生打包 | Bash + cargo + flutter CLI + install_name_tool | `CodeLiteX.app` / `dist/release/macos/` | 自动化独立发布构建、动态库嵌入与 rpath/代码签名修复 |
 
 > [!NOTE]
+> - **Rust 负责哪些事**:见 `docs/rust-core.md`(清单 + 状态)。新增交给 Rust 的事项要先记进去,实现后更新状态。
 > - **严格的 FFI 隔离**：Flutter UI 与 Rust Core 之间**仅通过 C-ABI FFI 动态链接库通信**。UI 层严禁直接引入 Rust 原生源码，统一通过 `ApiClient` → `CodeLiteBindings` 访问底层能力。
 
 ---

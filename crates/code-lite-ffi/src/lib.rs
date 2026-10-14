@@ -235,6 +235,38 @@ pub unsafe extern "C" fn codelite_pty_snapshot(
     }
 }
 
+/// 二进制画面帧(格式见 `code_lite_terminal::encode_frame`):和上一帧比只带变了的行。
+/// 长度写进 `out_len`;返回的缓冲用 [codelite_bytes_free] 还回来。会话不存在时返回空指针。
+#[no_mangle]
+pub unsafe extern "C" fn codelite_pty_frame(
+    ctx: *mut CodeLiteContext,
+    id: *const c_char,
+    since_seq: i64,
+    scrollback: u32,
+    out_len: *mut usize,
+) -> *mut u8 {
+    if !out_len.is_null() {
+        *out_len = 0;
+    }
+    if ctx.is_null() || out_len.is_null() {
+        return std::ptr::null_mut();
+    }
+    let Some(id) = c_str_to_str(id) else { return std::ptr::null_mut() };
+    let Some(s) = (*ctx).terminals.get(id) else { return std::ptr::null_mut() };
+    let since = if since_seq < 0 { None } else { Some(since_seq as u64) };
+    let boxed = s.frame(since, scrollback as usize).into_boxed_slice();
+    *out_len = boxed.len();
+    Box::into_raw(boxed) as *mut u8
+}
+
+/// 释放 Rust 返回的字节缓冲(`codelite_pty_frame` 等),`len` 是当时拿到的长度。
+#[no_mangle]
+pub unsafe extern "C" fn codelite_bytes_free(ptr: *mut u8, len: usize) {
+    if !ptr.is_null() {
+        drop(Box::from_raw(std::ptr::slice_from_raw_parts_mut(ptr, len)));
+    }
+}
+
 #[no_mangle]
 pub unsafe extern "C" fn codelite_pty_close(ctx: *mut CodeLiteContext, id: *const c_char) -> *const c_char {
     if ctx.is_null() {
