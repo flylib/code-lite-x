@@ -11,7 +11,7 @@ Flutter(Dart)管界面和交互;**计算量大、数据量大、或要和操作�
 | # | 事项 | 状态 | 说明 | 提交 |
 |---|---|---|---|---|
 | 0 | 交互终端:PTY + vt100 解析 | ✅ | 每个项目一个 Rust 上下文;后台线程读 shell 输出喂给 vt100,屏幕在 Rust 里;回滚 5000 行;选区复制按页取历史 | 早期 |
-| 1 | 终端画面只传变化的行(二进制) | ✅ | `codelite_pty_frame`:Rust 记着上一帧每行的指纹,只发变了的行,二进制(格式见 `encode_frame`),Dart `pty_frame.dart` 直接解码。编译日志刷屏时每帧 2.3 ms → 0.7 ms、占界面线程 5% → 1.7%(release 库实测,每帧平均只带 1 行)。旧库没有这个函数时自动退回 JSON 快照;选区复制翻页仍用 JSON 快照 | 见 git log |
+| 1 | 终端画面只传变化的行(二进制) | ✅ | `codelite_pty_frame`:Rust 记着上一帧每行的指纹,只发变了的行,二进制(格式见 `encode_frame`),Dart `pty_frame.dart` 直接解码。编译日志刷屏时每帧 2.3 ms → 0.7 ms、占界面线程 5% → 1.7%(release 库实测,每帧平均只带 1 行)。旧库没有这个函数时自动退回 JSON 快照;选区复制翻页仍用 JSON 快照 | `3d40e46` |
 | 2 | 项目文件索引 + 全局搜索 / 替换 | ⏳ | 并行遍历 + SIMD 搜索(`ignore`、`grep-searcher`、`rayon`);实测 Dart 240 ms → Rust 70~120 ms;耗时操作在 Rust 线程里跑,不卡界面 | |
 | 3 | 按文件名快速打开(Go to File) | ⏳ | 文件清单留在 Rust(复用 #2 的索引),打字时 `nucleo` 实时模糊匹配排序 | |
 | 4 | 文件监视 | ⏳ | `notify`;在 Rust 里先滤掉 `target/`、`node_modules/`、`.git` 等编译产物的事件,只把有用的变化交给界面 | |
