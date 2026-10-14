@@ -256,13 +256,15 @@ pub fn handle(request: &str) -> Value {
 mod tests {
     use super::*;
 
+    /// 每个测试一个独立的临时目录。测试并行跑,只用时间戳会撞名(macOS 的时钟只到微秒),
+    /// 撞了之后一个测试的清理会删掉另一个的文件,所以再加一个计数。
     fn tmp() -> PathBuf {
-        let d = std::env::temp_dir().join(format!("clx_ps_{}_{}", std::process::id(), rand_suffix()));
+        static N: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let n = N.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let d = std::env::temp_dir().join(format!("clx_ps_{}_{n}", std::process::id()));
+        let _ = fs::remove_dir_all(&d);
         fs::create_dir_all(&d).unwrap();
         d
-    }
-    fn rand_suffix() -> u128 {
-        std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
     }
     fn write(root: &Path, rel: &str, text: &str) {
         let p = root.join(rel);

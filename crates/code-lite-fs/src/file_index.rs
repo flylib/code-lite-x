@@ -182,11 +182,11 @@ mod tests {
     use super::*;
 
     fn tree(files: &[&str]) -> PathBuf {
-        let d = std::env::temp_dir().join(format!(
-            "clx_idx_{}_{}",
-            std::process::id(),
-            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
-        ));
+        // 测试并行跑:只用时间戳会撞名,加计数(见 project_search 的同名说明)
+        static N: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let n = N.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let d = std::env::temp_dir().join(format!("clx_idx_{}_{n}", std::process::id()));
+        let _ = fs::remove_dir_all(&d);
         for f in files {
             let p = d.join(f);
             fs::create_dir_all(p.parent().unwrap()).unwrap();
