@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/theme/intellij_theme.dart';
 import '../editor/syntax/languages.dart';
@@ -9,7 +10,9 @@ import '../tool_window/tool_window_actions.dart';
 /// - 展开状态按完整路径记(以前按目录名记,所有叫 `src` 的目录会一起展开);
 /// - 初次扫描只到几层深,更深的目录(`loaded: false`)展开时再经 [onLoadChildren] 读取;
 /// - Java / Kotlin 源码根(`src/main/java`)下只有一个子目录的包链压成一行,如 `com.acme.app`,与 IntelliJ 一致;
-/// - 文件图标按语法引擎识别出的语言区分。
+/// - 文件图标按语法引擎识别出的语言区分;
+/// - 快速搜索(IntelliJ 的 speed search):点一下文件树让它获得焦点,直接打字就在展开着的节点里找,
+///   选中跳到第一个匹配,↑↓ 在匹配之间跳,回车打开,Esc 退出。只在文件树有焦点时生效。
 class ProjectExplorerWidget extends StatefulWidget {
   final Map<String, dynamic> treeData;
   final String activeFilePath;
@@ -93,10 +96,156 @@ class _ProjectExplorerWidgetState extends State<ProjectExplorerWidget> {
 
   bool _isExpanded(String path, {required bool isRoot}) => isRoot ? !_rootCollapsed : _expanded.contains(path);
 
+  // --- 焦点、选中行与快速搜索 ----------------------------------------------------------
+
+  final FocusNode _focus = FocusNode(debugLabel: 'project-tree');
+  final ScrollController _scroll = ScrollController();
+
+  /// 键盘选中的行(路径);和编辑器里打开的文件([ProjectExplorerWidget.activeFilePath])是两回事。
+  String? _selected;
+
+  /// 快速搜索的输入;空串 = 没在搜。
+  String _query = '';
+
+  static const double _rowHeight = 24;
+
+  @override
+  void initState() {
+    super.initState();
+    _focus.addListener(() {
+      // 失去焦点就退出搜索(和 IntelliJ 一样)
+      if (!_focus.hasFocus && _query.isNotEmpty) setState(() => _query = '');
+      setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _focus.dispose();
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  List<_Row> _rows() {
+    final rows = <_Row>[];
+    if (widget.treeData.isNotEmpty) _addRows(rows, widget.treeData, 0, isRoot: true, inSourceRoot: false);
+    return rows;
+  }
+
+  void _activate(_Row r) {
+    if (r.isDir) {
+      _toggle(r.path, r.node!, isRoot: r.isRoot);
+    } else if (r.isFile) {
+      widget.onSelectFile(r.path);
+    }
+  }
+
+  void _select(String path, List<_Row> rows) {
+    setState(() => _selected = path);
+    final i = rows.indexWhere((r) => r.path == path);
+    if (i < 0 || !_scroll.hasClients) return;
+    final pos = _scroll.position;
+    final top = 4 + i * _rowHeight;
+    if (top < pos.pixels) {
+      _scroll.jumpTo(top - 4);
+    } else if (top + _rowHeight > pos.pixels + pos.viewportDimension) {
+      _scroll.jumpTo((top + _rowHeight - pos.viewportDimension + 4).clamp(0.0, pos.maxScrollExtent));
+    }
+  }
+
+  /// 搜索词变了:选中的还匹配就不动,否则从它开始往下找第一个匹配(找不到从头找)。
+  void _searchFrom(List<_Row> rows, {int step = 0}) {
+    final hits = [for (var i = 0; i < rows.length; i++) if (rows[i].selectable && speedSearchMatch(rows[i].name, _query) != null) i];
+    if (hits.isEmpty) {
+      setState(() {});
+      return;
+    }
+    final cur = rows.indexWhere((r) => r.path == _selected);
+    int pick;
+    if (step == 0) {
+      pick = hits.contains(cur) ? cur : hits.firstWhere((i) => i >= cur, orElse: () => hits.first);
+    } else if (step > 0) {
+      pick = hits.firstWhere((i) => i > cur, orElse: () => hits.first);
+    } else {
+      pick = hits.lastWhere((i) => i < cur, orElse: () => hits.last);
+    }
+    _select(rows[pick].path, rows);
+  }
+
+  KeyEventResult _onKey(FocusNode node, KeyEvent e) {
+    if (e is! KeyDownEvent && e is! KeyRepeatEvent) return KeyEventResult.ignored;
+    final kb = HardwareKeyboard.instance;
+    if (kb.isMetaPressed || kb.isControlPressed) return KeyEventResult.ignored; // ⌘1 之类交给应用快捷键
+    final rows = _rows();
+    final selectable = [for (final r in rows) if (r.selectable) r];
+    if (selectable.isEmpty) return KeyEventResult.ignored;
+    final key = e.logicalKey;
+    final cur = selectable.indexWhere((r) => r.path == _selected);
+    final row = cur < 0 ? null : selectable[cur];
+    final searching = _query.isNotEmpty;
+
+    if (key == LogicalKeyboardKey.escape) {
+      if (!searching) return KeyEventResult.ignored;
+      setState(() => _query = '');
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowDown || key == LogicalKeyboardKey.arrowUp) {
+      final down = key == LogicalKeyboardKey.arrowDown;
+      if (searching) {
+        _searchFrom(rows, step: down ? 1 : -1);
+      } else {
+        final next = cur < 0 ? 0 : (cur + (down ? 1 : -1)).clamp(0, selectable.length - 1);
+        _select(selectable[next].path, rows);
+      }
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.enter || key == LogicalKeyboardKey.numpadEnter) {
+      if (row != null) _activate(row);
+      if (searching) setState(() => _query = '');
+      return KeyEventResult.handled;
+    }
+    if (!searching && row != null && (key == LogicalKeyboardKey.arrowRight || key == LogicalKeyboardKey.arrowLeft)) {
+      final right = key == LogicalKeyboardKey.arrowRight;
+      if (row.isDir && row.expanded != right) {
+        _toggle(row.path, row.node!, isRoot: row.isRoot); // → 展开 / ← 收起
+      } else if (!right) {
+        // ← 在文件或收起的目录上:跳到上一级目录
+        final i = rows.indexOf(row);
+        for (var j = i - 1; j >= 0; j--) {
+          if (rows[j].isDir && rows[j].depth < row.depth) {
+            _select(rows[j].path, rows);
+            break;
+          }
+        }
+      } else if (row.isDir && cur + 1 < selectable.length) {
+        _select(selectable[cur + 1].path, rows); // → 在展开的目录上:进到第一个子节点
+      }
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.backspace) {
+      if (!searching) return KeyEventResult.ignored;
+      setState(() => _query = _query.substring(0, _query.length - 1));
+      if (_query.isNotEmpty) _searchFrom(_rows());
+      return KeyEventResult.handled;
+    }
+    final ch = e.character;
+    if (ch != null && ch.length == 1 && ch.codeUnitAt(0) > 0x20 && ch.codeUnitAt(0) != 0x7f) {
+      setState(() => _query += ch);
+      _searchFrom(rows);
+      return KeyEventResult.handled;
+    }
+    if (ch == ' ' && searching) {
+      setState(() => _query += ' ');
+      _searchFrom(rows);
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
   @override
   Widget build(BuildContext context) {
-    final rows = <Widget>[];
-    if (widget.treeData.isNotEmpty) _addRows(rows, widget.treeData, 0, isRoot: true, inSourceRoot: false);
+    final rows = _rows();
+    final noMatch = _query.isNotEmpty && !rows.any((r) => r.selectable && speedSearchMatch(r.name, _query) != null);
     // 宽度与右侧分隔线由外层统一给出(可拖动调整)。
     return Container(
       color: IntelliJTheme.panelBg,
@@ -137,11 +286,34 @@ class _ProjectExplorerWidgetState extends State<ProjectExplorerWidget> {
             ),
           ),
 
-          // Tree contents:扁平的行列表,只构建看得见的行。
+          // Tree contents:扁平的行列表,只构建看得见的行。点一下获得焦点,之后打字就是快速搜索。
           Expanded(
-            child: ListView(
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              children: rows,
+            child: Focus(
+              focusNode: _focus,
+              onKeyEvent: _onKey,
+              // 按下就拿焦点(Listener 不参与手势竞争,不影响行上的点击)
+              child: Listener(
+                behavior: HitTestBehavior.translucent,
+                onPointerDown: (_) => _focus.requestFocus(),
+                child: Stack(
+                  children: [
+                    ListView.builder(
+                      controller: _scroll,
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      itemExtent: _rowHeight,
+                      itemCount: rows.length,
+                      itemBuilder: (context, i) => _buildRow(rows[i]),
+                    ),
+                    if (_query.isNotEmpty)
+                      Positioned(
+                        top: 4,
+                        left: 8,
+                        right: 8,
+                        child: _SearchField(query: _query, noMatch: noMatch),
+                      ),
+                  ],
+                ),
+              ),
             ),
           ),
         ],
@@ -149,10 +321,11 @@ class _ProjectExplorerWidgetState extends State<ProjectExplorerWidget> {
     );
   }
 
-  void _addRows(List<Widget> rows, Map<String, dynamic> node, int depth, {required bool isRoot, required bool inSourceRoot}) {
+  void _addRows(List<_Row> rows, Map<String, dynamic> node, int depth, {required bool isRoot, required bool inSourceRoot}) {
     final isDir = node['is_dir'] as bool? ?? false;
     if (!isDir) {
-      rows.add(_fileRow(node, depth));
+      final name = node['name'] as String? ?? '';
+      rows.add(_Row.file(node['path'] as String? ?? name, name, depth));
       return;
     }
     var name = node['name'] as String? ?? '';
@@ -168,7 +341,7 @@ class _ProjectExplorerWidgetState extends State<ProjectExplorerWidget> {
     }
     final path = dir['path'] as String? ?? name;
     final expanded = _isExpanded(path, isRoot: isRoot);
-    rows.add(_dirRow(name, path, dir, depth, expanded: expanded, isRoot: isRoot, isPackage: inSourceRoot));
+    rows.add(_Row.dir(path, name, depth, dir, expanded: expanded, isRoot: isRoot, isPackage: inSourceRoot));
     if (!expanded) return;
 
     final kids = _childrenOf(dir);
@@ -177,7 +350,7 @@ class _ProjectExplorerWidgetState extends State<ProjectExplorerWidget> {
       if (!_loading.contains(path) && !_failed.contains(path)) {
         WidgetsBinding.instance.addPostFrameCallback((_) => _load(path));
       }
-      rows.add(_hintRow(_failed.contains(path) ? '无法读取' : '加载中…', depth + 1));
+      rows.add(_Row.hint(_failed.contains(path) ? '无法读取' : '加载中…', depth + 1));
       return;
     }
     final childInSource = inSourceRoot || _sourceRoots.contains(dir['name']);
@@ -186,43 +359,46 @@ class _ProjectExplorerWidgetState extends State<ProjectExplorerWidget> {
     }
   }
 
-  Widget _dirRow(
-    String name,
-    String path,
-    Map<String, dynamic> node,
-    int depth, {
-    required bool expanded,
-    required bool isRoot,
-    required bool isPackage,
-  }) {
-    return InkWell(
-      key: ValueKey('dir:$path'),
-      onTap: () => _toggle(path, node, isRoot: isRoot),
-      child: Container(
-        padding: EdgeInsets.only(left: 8.0 + (depth * 12.0), top: 3, bottom: 3, right: 8),
-        child: Row(
-          children: [
-            Icon(
-              expanded ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_right,
-              size: 14,
-              color: IntelliJTheme.textMuted,
+  Widget _buildRow(_Row r) {
+    if (r.kind == _RowKind.hint) return _hintRow(r.name, r.depth);
+    final selected = r.path == _selected;
+    final hits = _query.isEmpty ? null : speedSearchMatch(r.name, _query);
+    Widget tap(Widget child) => InkWell(
+          key: ValueKey('${r.isDir ? 'dir' : 'file'}:${r.path}'),
+          onTap: () {
+            _focus.requestFocus();
+            setState(() => _selected = r.path);
+            _activate(r);
+          },
+          child: Container(
+            decoration: BoxDecoration(
+              color: selected ? (_focus.hasFocus ? _selectedFocused : _selectedIdle) : null,
+              borderRadius: BorderRadius.circular(4),
             ),
-            const SizedBox(width: 4),
-            Icon(
-              isPackage ? Icons.folder_special_outlined : Icons.folder,
-              size: 14,
-              color: isPackage ? const Color(0xFF8A9199) : IntelliJTheme.gitYellow,
-            ),
-            const SizedBox(width: 6),
-            Expanded(
-              child: Text(
-                name,
-                style: const TextStyle(color: IntelliJTheme.textHigh, fontSize: 12, fontWeight: FontWeight.w500),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
-        ),
+            child: child,
+          ),
+        );
+    return r.isDir ? tap(_dirRow(r, hits)) : tap(_fileRow(r, hits));
+  }
+
+  static const Color _selectedFocused = Color(0xFF2E436E);
+  static const Color _selectedIdle = Color(0xFF26292E);
+
+  Widget _dirRow(_Row r, List<int>? hits) {
+    return Padding(
+      padding: EdgeInsets.only(left: 8.0 + (r.depth * 12.0), right: 8),
+      child: Row(
+        children: [
+          Icon(r.expanded ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_right, size: 14, color: IntelliJTheme.textMuted),
+          const SizedBox(width: 4),
+          Icon(
+            r.isPackage ? Icons.folder_special_outlined : Icons.folder,
+            size: 14,
+            color: r.isPackage ? const Color(0xFF8A9199) : IntelliJTheme.gitYellow,
+          ),
+          const SizedBox(width: 6),
+          Expanded(child: _label(r.name, hits, const TextStyle(color: IntelliJTheme.textHigh, fontSize: 12, fontWeight: FontWeight.w500))),
+        ],
       ),
     );
   }
@@ -232,45 +408,51 @@ class _ProjectExplorerWidgetState extends State<ProjectExplorerWidget> {
         child: Text(text, style: const TextStyle(color: IntelliJTheme.textMuted, fontSize: 11.5)),
       );
 
-  Widget _fileRow(Map<String, dynamic> node, int depth) {
-    final name = node['name'] as String? ?? '';
-    final path = node['path'] as String? ?? name;
-    final isSelected = widget.activeFilePath == path;
-    final (icon, color) = _fileIcon(name);
-    return InkWell(
-      key: ValueKey('file:$path'),
-      onTap: () => widget.onSelectFile(path),
-      child: Container(
-        decoration: BoxDecoration(
-          color: isSelected ? IntelliJTheme.selectionBg : Colors.transparent,
-          borderRadius: BorderRadius.circular(4),
-        ),
-        padding: EdgeInsets.only(left: 26.0 + (depth * 12.0), top: 3, bottom: 3, right: 8),
-        child: Row(
-          children: [
-            Icon(icon, size: 13, color: color),
-            const SizedBox(width: 6),
-            Expanded(
-              child: Text(
-                name,
-                style: TextStyle(
-                  color: isSelected ? const Color(0xFF6CB4F8) : IntelliJTheme.textPrimary,
-                  fontSize: 12,
-                ),
-                overflow: TextOverflow.ellipsis,
-              ),
+  Widget _fileRow(_Row r, List<int>? hits) {
+    final isActive = widget.activeFilePath == r.path;
+    final (icon, color) = _fileIcon(r.name);
+    return Container(
+      decoration: BoxDecoration(
+        color: isActive && r.path != _selected ? IntelliJTheme.selectionBg : Colors.transparent,
+        borderRadius: BorderRadius.circular(4),
+      ),
+      padding: EdgeInsets.only(left: 26.0 + (r.depth * 12.0), right: 8),
+      child: Row(
+        children: [
+          Icon(icon, size: 13, color: color),
+          const SizedBox(width: 6),
+          Expanded(
+            child: _label(r.name, hits, TextStyle(color: isActive ? const Color(0xFF6CB4F8) : IntelliJTheme.textPrimary, fontSize: 12)),
+          ),
+          if (isActive)
+            Container(
+              width: 4,
+              height: 4,
+              decoration: const BoxDecoration(color: IntelliJTheme.gitGreen, shape: BoxShape.circle),
             ),
-            if (isSelected)
-              Container(
-                width: 4,
-                height: 4,
-                decoration: const BoxDecoration(color: IntelliJTheme.gitGreen, shape: BoxShape.circle),
-              ),
-          ],
-        ),
+        ],
       ),
     );
   }
+
+  /// 名字;快速搜索时匹配上的字符加底色(IntelliJ 的黄色高亮)。
+  Widget _label(String name, List<int>? hits, TextStyle style) {
+    if (hits == null || hits.isEmpty) return Text(name, style: style, overflow: TextOverflow.ellipsis, maxLines: 1);
+    final hit = hits.toSet();
+    final spans = <TextSpan>[];
+    for (var i = 0; i < name.length; i++) {
+      final on = hit.contains(i);
+      final ch = name[i];
+      if (spans.isNotEmpty && (spans.last.style?.backgroundColor != null) == on) {
+        spans[spans.length - 1] = TextSpan(text: spans.last.text! + ch, style: spans.last.style);
+      } else {
+        spans.add(TextSpan(text: ch, style: on ? style.copyWith(backgroundColor: _matchBg, color: IntelliJTheme.textHigh) : style));
+      }
+    }
+    return Text.rich(TextSpan(children: spans), overflow: TextOverflow.ellipsis, maxLines: 1, key: ValueKey('match:$name'));
+  }
+
+  static const Color _matchBg = Color(0xFF6B5A1E);
 
   /// 文件图标:按语法引擎识别的语言给图标与颜色。
   static (IconData, Color) _fileIcon(String name) {
@@ -302,4 +484,109 @@ class _ProjectExplorerWidgetState extends State<ProjectExplorerWidget> {
       _ => (Icons.insert_drive_file_outlined, IntelliJTheme.textMuted),
     };
   }
+}
+
+enum _RowKind { dir, file, hint }
+
+/// 文件树里的一行(展开后摊平成列表,键盘选择和快速搜索都在这上面走)。
+class _Row {
+  _Row.dir(this.path, this.name, this.depth, this.node, {required this.expanded, required this.isRoot, required this.isPackage})
+      : kind = _RowKind.dir;
+  _Row.file(this.path, this.name, this.depth)
+      : kind = _RowKind.file,
+        node = null,
+        expanded = false,
+        isRoot = false,
+        isPackage = false;
+  _Row.hint(this.name, this.depth)
+      : kind = _RowKind.hint,
+        path = '',
+        node = null,
+        expanded = false,
+        isRoot = false,
+        isPackage = false;
+
+  final _RowKind kind;
+  final String path;
+  final String name;
+  final int depth;
+  final Map<String, dynamic>? node;
+  final bool expanded;
+  final bool isRoot;
+  final bool isPackage;
+
+  bool get isDir => kind == _RowKind.dir;
+  bool get isFile => kind == _RowKind.file;
+  bool get selectable => kind != _RowKind.hint;
+}
+
+/// 快速搜索的输入框(浮在文件树顶上);一个都没匹配上时字变红。
+class _SearchField extends StatelessWidget {
+  const _SearchField({required this.query, required this.noMatch});
+
+  final String query;
+  final bool noMatch;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      key: const ValueKey('tree-speed-search'),
+      height: 26,
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      decoration: BoxDecoration(
+        color: IntelliJTheme.popupBg,
+        borderRadius: BorderRadius.circular(5),
+        border: Border.all(color: noMatch ? IntelliJTheme.gitRed : IntelliJTheme.accentBlue),
+        boxShadow: const [BoxShadow(color: Color(0x66000000), blurRadius: 6, offset: Offset(0, 2))],
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.search, size: 14, color: IntelliJTheme.textMuted),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              query,
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
+              style: TextStyle(color: noMatch ? IntelliJTheme.diagError : IntelliJTheme.textHigh, fontSize: 12.5),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 快速搜索的匹配(仿 IntelliJ):不分大小写;先找连续出现,没有再分段匹配 ——
+/// 每一段要从「词的开头」开始(名字开头、`-` `_` `.` 等符号之后、小写后面的大写),
+/// 所以 `admser` 能找到 admin-service,`adm` 却不会落到 .bcp-cl**a**u**d**e.y**m**l 上。
+/// 返回匹配上的字符下标(高亮用),没匹配上返回 null。
+List<int>? speedSearchMatch(String name, String query) {
+  if (query.isEmpty) return null;
+  final n = name.toLowerCase(), q = query.toLowerCase();
+  final at = n.indexOf(q);
+  if (at >= 0) return [for (var i = 0; i < q.length; i++) at + i];
+  bool alnum(String c) => RegExp(r'[A-Za-z0-9]').hasMatch(c);
+  bool wordStart(int i) {
+    if (i == 0) return true;
+    final prev = name[i - 1], cur = name[i];
+    if (!alnum(prev)) return true;
+    return cur.toUpperCase() == cur && cur.toLowerCase() != cur && prev.toLowerCase() == prev && prev.toUpperCase() != prev;
+  }
+
+  final out = <int>[];
+  // qi:要匹配的查询字符;from:名字里从哪开始找;run:上一个字符紧挨着能接着匹配
+  bool go(int qi, int from) {
+    if (qi == q.length) return true;
+    for (var i = from; i < n.length; i++) {
+      final continues = out.isNotEmpty && i == out.last + 1;
+      if (n[i] != q[qi] || !(continues || wordStart(i))) continue;
+      out.add(i);
+      if (go(qi + 1, i + 1)) return true;
+      out.removeLast();
+    }
+    return false;
+  }
+
+  return go(0, 0) ? out : null;
 }
