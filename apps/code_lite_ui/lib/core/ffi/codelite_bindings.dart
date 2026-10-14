@@ -334,32 +334,12 @@ class CodeLiteBindings {
   }
 
   DynamicLibrary? _loadLibrary() {
-    // 打包后的 .app:库在 Contents/Frameworks,可执行文件在 Contents/MacOS。
-    final bundled = Platform.isMacOS
-        ? '${File(Platform.resolvedExecutable).parent.parent.path}/Frameworks/libcodelite.dylib'
-        : null;
-    final candidates = [
-      if (bundled != null) bundled,
-      'target/debug/libcodelite.dylib',
-      'target/release/libcodelite.dylib',
-      '../../target/debug/libcodelite.dylib',
-      '../../target/release/libcodelite.dylib',
-      'libcodelite.dylib',
-      '/Users/dev/rust/code-lite-x/target/debug/libcodelite.dylib',
-      '/Users/dev/rust/code-lite-x/target/release/libcodelite.dylib',
-      'target/debug/libcodelite.so',
-      '../../target/debug/libcodelite.so',
-      'codelite.dll',
-    ];
-
-    for (final path in candidates) {
-      if (File(path).existsSync()) {
-        try {
-          return DynamicLibrary.open(path);
-        } catch (_) {}
-      }
+    final path = codeliteLibraryPath();
+    if (path != null) {
+      try {
+        return DynamicLibrary.open(path);
+      } catch (_) {}
     }
-
     try {
       return Platform.isMacOS
           ? DynamicLibrary.open('libcodelite.dylib')
@@ -368,6 +348,32 @@ class CodeLiteBindings {
       return null;
     }
   }
+}
+
+/// Rust 库文件的路径(第一个存在的候选);找不到返回 null。
+/// 后台 isolate 要自己打开同一个库(比如全局搜索),用它保证和主 isolate 是同一份。
+String? codeliteLibraryPath() {
+  // 打包后的 .app:库在 Contents/Frameworks,可执行文件在 Contents/MacOS。
+  final bundled = Platform.isMacOS
+      ? '${File(Platform.resolvedExecutable).parent.parent.path}/Frameworks/libcodelite.dylib'
+      : null;
+  final candidates = [
+    if (bundled != null) bundled,
+    'target/debug/libcodelite.dylib',
+    'target/release/libcodelite.dylib',
+    '../../target/debug/libcodelite.dylib',
+    '../../target/release/libcodelite.dylib',
+    'libcodelite.dylib',
+    '/Users/dev/rust/code-lite-x/target/debug/libcodelite.dylib',
+    '/Users/dev/rust/code-lite-x/target/release/libcodelite.dylib',
+    'target/debug/libcodelite.so',
+    '../../target/debug/libcodelite.so',
+    'codelite.dll',
+  ];
+  for (final path in candidates) {
+    if (File(path).existsSync()) return File(path).absolute.path;
+  }
+  return null;
 }
 
 class _AllocatedString {

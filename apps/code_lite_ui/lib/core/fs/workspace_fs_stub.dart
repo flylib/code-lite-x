@@ -20,3 +20,9 @@ Future<Map<String, dynamic>> readTextFile(String root, String relPath) async =>
 
 Future<Map<String, dynamic>> writeTextFile(String root, String relPath, String content) async =>
     {'status': 'error', 'error': 'web 预览不支持保存文件'};
+
+Future<Map<String, dynamic>> searchWorkspaceInDart(String root, String query, [Map<String, dynamic>? options]) =>
+    searchWorkspace(root, query, options);
+
+Future<Map<String, dynamic>> replaceWorkspaceInDart(String root, String query, String replacement, [Map<String, dynamic>? options]) =>
+    replaceWorkspace(root, query, replacement, options);

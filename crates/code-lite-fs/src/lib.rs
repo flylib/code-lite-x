@@ -3,6 +3,7 @@
 //! File system operations, directory tree traversal, and file scanning for CodeLiteX.
 
 pub mod entry;
+pub mod project_search;
 pub mod search;
 pub mod tree;
 

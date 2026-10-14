@@ -8,3 +8,5 @@ license.workspace = true
 [dependencies]
 serde = { workspace = true }
 regex = { workspace = true }
+serde_json = { workspace = true }
+rayon = "1.11"

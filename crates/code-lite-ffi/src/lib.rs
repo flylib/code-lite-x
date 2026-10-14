@@ -235,6 +235,15 @@ pub unsafe extern "C" fn codelite_pty_snapshot(
     }
 }
 
+/// 全局搜索 / 替换(见 `code_lite_fs::project_search`)。
+/// 请求:`{"op":"search"|"replace","root","query","replacement","options":{...}}`;返回结果 JSON,用 [codelite_string_free] 释放。
+/// 不用上下文、不碰共享状态,可以在任意线程(Dart 的后台 isolate)里调;内部用多线程并行。
+#[no_mangle]
+pub unsafe extern "C" fn codelite_search(request: *const c_char) -> *const c_char {
+    let Some(req) = c_str_to_str(request) else { return err_json("Invalid request") };
+    json_to_c_char(&code_lite_fs::project_search::handle(req))
+}
+
 /// 二进制画面帧(格式见 `code_lite_terminal::encode_frame`):和上一帧比只带变了的行。
 /// 长度写进 `out_len`;返回的缓冲用 [codelite_bytes_free] 还回来。会话不存在时返回空指针。
 #[no_mangle]

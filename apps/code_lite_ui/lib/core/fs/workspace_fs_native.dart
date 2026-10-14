@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
 
+import 'rust_search.dart';
+
 /// 工作区文件树与全局搜索/替换的纯 Dart 实现(原 Rust `code-lite-fs` 的 tree / search)。
 ///
 /// 返回的 JSON 形状与原来的 FFI 导出一致,UI 无需改动。扫描、搜索、替换都放进
@@ -27,7 +29,15 @@ Future<Map<String, dynamic>> listDirectory(String path, {int depth = 2}) =>
 
 /// 全局搜索。返回 `{"status":"ok","query","total","matches":[{file_path,line_number,col_start,col_end,line_snippet}]}`,
 /// 正则写错时返回 `{"status":"error","error":...}`。
-Future<Map<String, dynamic>> searchWorkspace(String root, String query, [Map<String, dynamic>? options]) =>
+Future<Map<String, dynamic>> searchWorkspace(String root, String query, [Map<String, dynamic>? options]) async {
+  // 先交给 Rust(并行、快 2~3 倍);没有 Rust 库、或正则 Rust 不支持(环视、反向引用)时用下面这份 Dart 的
+  final rust = await rustSearch({'op': 'search', 'root': root, 'query': query, 'options': options ?? const {}});
+  if (rust != null && rust['status'] != 'unsupported') return rust;
+  return searchWorkspaceInDart(root, query, options);
+}
+
+/// Dart 实现的全局搜索:没有 Rust 库、或正则 Rust 不支持时用;测试里拿它和 Rust 的结果对照。
+Future<Map<String, dynamic>> searchWorkspaceInDart(String root, String query, [Map<String, dynamic>? options]) =>
     Isolate.run(() {
       try {
         final matches = _search(root, query, _SearchOptions.fromJson(options));
@@ -46,7 +56,14 @@ Future<Map<String, dynamic>> replaceWorkspace(
   String query,
   String replacement, [
   Map<String, dynamic>? options,
-]) =>
+]) async {
+  final rust = await rustSearch({'op': 'replace', 'root': root, 'query': query, 'replacement': replacement, 'options': options ?? const {}});
+  if (rust != null && rust['status'] != 'unsupported') return rust;
+  return replaceWorkspaceInDart(root, query, replacement, options);
+}
+
+/// Dart 实现的全局替换(同上)。
+Future<Map<String, dynamic>> replaceWorkspaceInDart(String root, String query, String replacement, [Map<String, dynamic>? options]) =>
     Isolate.run(() {
       try {
         return {'status': 'ok', 'replaced_count': _replaceAll(root, query, replacement, _SearchOptions.fromJson(options))};
