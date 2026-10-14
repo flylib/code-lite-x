@@ -29,17 +29,18 @@ CodeLiteX 是一款高性能的原生跨平台代码编辑器，内置 Git 管�
    - `codegraph_callers` / `codegraph_callees`：追踪上下游调用链路；
    - `codegraph_impact`：精准评估修改符号时的影响面（Blast Radius）；
    - 检索接口 URL、文本配置、i18n、样式或未建立索引的脚本统一使用 **Grep**。
-2. **Rust Cargo 离线构建与测试铁律**：
+2. **Rust 版本**：仓库根的 `rust-toolchain.toml` 固定编译器版本（当前 1.99.0），升级时改那里，再跑一遍下面的离线测试和打包。
+3. **Rust Cargo 离线构建与测试铁律**：
    - 依赖已在本地 Cargo vendor / cache 完备锁定，所有 cargo 命令**必须显式增加 `--offline` 标志**并指定 PATH：
      ```bash
      export PATH="$HOME/.cargo/bin:$PATH" && cargo <cmd> --offline
      ```
    - 严禁擅自引入未经本地离线验证的重型外部 crate，保证工作区在断网环境下 100% 可编译、可运行、可测试。
-3. **UI 视觉与防御性布局规范**：
+4. **UI 视觉与防御性布局规范**：
    - 遵循 IntelliJ IDEA Darcula 工业级暗色主题规范（`IntelliJTheme`）；
    - 在任何嵌套 `Row` 或面板标题区域，文本标签**必须使用 `Expanded`/`Flexible` 包裹并设置 `overflow: TextOverflow.ellipsis`**，避免因屏幕缩放或视口收窄触发 RenderFlex 溢出；
    - 图标按钮优先使用轻量 `InkWell` 或 ShrinkWrap 约束，严禁出现默认 48px 强制触控区域挤占紧凑桌面布局。
-4. **配置与敏感信息红线**：
+5. **配置与敏感信息红线**：
    严禁将以下信息提交至 Git：
    - 第三方服务 API Key / Token
    - 私钥、证书与生产环境凭证
