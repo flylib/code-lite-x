@@ -1,6 +1,9 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
+import 'folding.dart';
 
 /// Represents a line and column coordinate in the editor (0-indexed).
 @immutable
@@ -113,6 +116,9 @@ class CodeEditorController extends ChangeNotifier {
 
   EditorSelection _selection = const EditorSelection.collapsed(EditorPosition.zero);
   int? _preferredCol;
+
+  /// 代码折叠(哪些段收起了、可见行和文档行的换算)。光标落进收起的段时自动展开。
+  final FoldState folds = FoldState();
 
   bool _isDirty = false;
   bool _canUndo = false;
@@ -358,6 +364,7 @@ class CodeEditorController extends ChangeNotifier {
       ];
     }
     _shiftBookmarks(start, removed, insertion);
+    folds.applyEdit(start.line, end.line, replacement.length);
     _updateColumns(start.line, end.line, replacement);
     _lines.replaceRange(start.line, end.line + 1, replacement);
     _length += insertion.length - removed.length;
@@ -367,6 +374,7 @@ class CodeEditorController extends ChangeNotifier {
 
     _selection = selectionAfter ?? EditorSelection.collapsed(_clampPosition(_selection.head));
     _preferredCol = _selection.head.col;
+    folds.reveal(_selection.head.line);
 
     if (record && !_applyingHistory) {
       final edit = _TextEdit(
@@ -447,6 +455,7 @@ class CodeEditorController extends ChangeNotifier {
       _selection = EditorSelection(anchor: _clampPosition(selection.anchor), head: _clampPosition(selection.head));
       _preferredCol = _selection.head.col;
       _historySelection = _selection;
+      folds.reveal(_selection.head.line);
     } finally {
       _applyingHistory = false;
     }
@@ -607,6 +616,7 @@ class CodeEditorController extends ChangeNotifier {
   /// [markDirty] 为 false 时这份文本就是"已保存"的基准。要作为一次可撤销的编辑,用 [replaceAllText]。
   void setText(String newText, {bool markDirty = false}) {
     _lines = newText.isEmpty ? [''] : newText.split('\n');
+    folds.lineCount = _lines.length; // 收起的段先留着,语法树更新后再核对(见 FoldState.reconcile)
     _cols = null; // 最宽行下次用到时重建
     _textCache = newText;
     _linesSnapshot = null;
@@ -648,6 +658,7 @@ class CodeEditorController extends ChangeNotifier {
     }
     _historySelection = _selection;
     _breakGroup = true;
+    folds.reveal(clamped.line);
     _resetBlink();
     onCursorChanged?.call(clamped);
     notifyListeners();
@@ -661,6 +672,7 @@ class CodeEditorController extends ChangeNotifier {
     _selection = EditorSelection(anchor: clampedAnchor, head: clampedHead);
     _historySelection = _selection;
     _breakGroup = true;
+    folds.reveal(clampedHead.line);
     _resetBlink();
     onCursorChanged?.call(clampedHead);
     notifyListeners();
@@ -771,6 +783,78 @@ class CodeEditorController extends ChangeNotifier {
     notifyListeners();
   }
 
+  // ---------------------------------------------------------------------------
+  // 代码折叠
+  // ---------------------------------------------------------------------------
+
+  /// 收起 [r];光标在藏起来的行里时移到起始行行尾(IntelliJ 如此)。
+  void collapseFold(FoldRange r) {
+    if (!folds.collapse(r)) return;
+    final head = _selection.head;
+    if (folds.isHidden(head.line)) {
+      _selection = EditorSelection.collapsed(EditorPosition(r.start, _lines[r.start].length));
+      _preferredCol = _selection.head.col;
+      _historySelection = _selection;
+      onCursorChanged?.call(_selection.head);
+    }
+    notifyListeners();
+  }
+
+  /// 一次收起好几段(全部收起)。
+  void collapseFolds(Iterable<FoldRange> ranges) {
+    var changed = false;
+    for (final r in ranges) {
+      changed = folds.collapse(r) || changed;
+    }
+    if (!changed) return;
+    final head = _selection.head;
+    if (folds.isHidden(head.line)) {
+      final line = folds.lineOfRow(folds.rowOfLine(head.line));
+      _selection = EditorSelection.collapsed(EditorPosition(line, _lines[line].length));
+      _preferredCol = _selection.head.col;
+      _historySelection = _selection;
+      onCursorChanged?.call(_selection.head);
+    }
+    notifyListeners();
+  }
+
+  void expandFold(int start) {
+    if (folds.expand(start)) notifyListeners();
+  }
+
+  void expandAllFolds() {
+    if (folds.expandAll()) notifyListeners();
+  }
+
+  /// 收起 / 展开 [r](行号栏的折叠箭头)。
+  void toggleFold(FoldRange r) => folds.isCollapsed(r.start) ? expandFold(r.start) : collapseFold(r);
+
+  /// 可折叠的范围从哪来:编辑区把语法树的查询接上(`DocumentHighlighter.foldsIn`)。
+  /// 返回从第 [from, to) 行开始的范围;没有语法树时为 null 或返回空。
+  List<FoldRange> Function(int from, int to)? foldRegionsProvider;
+
+  /// 光标所在的、还没收起的最内层一段(IntelliJ 的 Collapse,⌘-)。
+  void collapseRegionAtCaret() {
+    final line = _selection.head.line;
+    final regions = foldRegionsProvider?.call(0, line + 1) ?? const <FoldRange>[];
+    FoldRange? best;
+    for (final r in regions) {
+      if (r.start <= line && line <= r.end && !folds.isCollapsed(r.start) && (best == null || r.start > best.start)) best = r;
+    }
+    if (best != null) collapseFold(best);
+  }
+
+  /// 展开光标所在行收起的段(IntelliJ 的 Expand,⌘=)。
+  void expandRegionAtCaret() => expandFold(_selection.head.line);
+
+  /// 全部收起(⇧⌘-)。
+  void collapseAllRegions() => collapseFolds(foldRegionsProvider?.call(0, _lines.length) ?? const []);
+
+  /// 语法树更新后核对收起的段(见 [FoldState.reconcile])。
+  void reconcileFolds(List<FoldRange> regions, int from, int to) {
+    if (folds.reconcile(regions, from, to)) notifyListeners();
+  }
+
   /// Navigates the cursor in the given direction.
   void moveCursor({
     required NavigationDirection direction,
@@ -836,8 +920,9 @@ class CodeEditorController extends ChangeNotifier {
           break;
 
         case NavigationDirection.up:
-          if (current.line > 0) {
-            final targetLine = current.line - 1;
+          // 按可见行走:收起的段整段跳过
+          if (folds.rowOfLine(current.line) > 0) {
+            final targetLine = folds.lineOfRow(folds.rowOfLine(current.line) - 1);
             final targetCol = (_preferredCol ?? current.col).clamp(0, _lines[targetLine].length);
             target = EditorPosition(targetLine, targetCol);
           } else {
@@ -846,8 +931,8 @@ class CodeEditorController extends ChangeNotifier {
           break;
 
         case NavigationDirection.down:
-          if (current.line < _lines.length - 1) {
-            final targetLine = current.line + 1;
+          if (folds.rowOfLine(current.line) < folds.rowCount - 1) {
+            final targetLine = folds.lineOfRow(folds.rowOfLine(current.line) + 1);
             final targetCol = (_preferredCol ?? current.col).clamp(0, _lines[targetLine].length);
             target = EditorPosition(targetLine, targetCol);
           } else {

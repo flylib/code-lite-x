@@ -14,6 +14,7 @@ import '../../core/theme/app_icons.dart';
 import '../../core/theme/intellij_theme.dart';
 import 'code_editor_controller.dart';
 import 'editor_session_manager.dart';
+import 'folding.dart';
 import 'ime_text_input_client.dart';
 import 'lsp_overlay.dart';
 import 'markdown/markdown_links.dart';
@@ -373,7 +374,9 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
         return true;
       });
     }
-    return _highlighterOf(controller)..update(lang, lines, scheme: _appearance.colorScheme, path: filePath);
+    final hl = _highlighterOf(controller)..update(lang, lines, scheme: _appearance.colorScheme, path: filePath);
+    controller.foldRegionsProvider = hl.foldsIn;
+    return hl;
   }
 
   /// 编辑器的高亮带语法树(tree-sitter,在 Rust 里);语法树后台解析完时重画这个窗格。
@@ -405,9 +408,12 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
   }
 
   /// 代码区内的点击坐标 → 行列(取离点击点最近的字符边界)。
-  EditorPosition _positionAt(Offset local, List<String> lines, DocumentHighlighter hl) {
+  EditorPosition _positionAt(Offset local, List<String> lines, DocumentHighlighter hl, [FoldState? folds]) {
     if (lines.isEmpty) return const EditorPosition(0, 0);
-    final line = ((local.dy - _padV) / _lineHeight).floor().clamp(0, lines.length - 1);
+    // 按可见行算:上面收起的段不占地方
+    final rows = folds?.rowCount ?? lines.length;
+    final row = ((local.dy - _padV) / _lineHeight).floor().clamp(0, rows - 1);
+    final line = (folds?.lineOfRow(row) ?? row).clamp(0, lines.length - 1);
     final x = local.dx - _padH;
     final text = lines[line];
     if (x <= 0 || text.isEmpty) return EditorPosition(line, 0);
@@ -456,6 +462,7 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
 
   @override
   void dispose() {
+    _gutterHover.dispose();
     for (final hl in _highlighters.values) {
       hl.dispose();
     }
@@ -1107,7 +1114,8 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
                               data: _blame[controller]!.data,
                               loading: _blame[controller]!.loading,
                               appearance: _appearance,
-                              totalLines: lines.length,
+                              totalLines: controller.folds.rowCount,
+                              lineOfRow: controller.folds.lineOfRow,
                               lineHeight: _lineHeight,
                               menuBuilder: (line, commit) => blameMenu(
                                 context: context,
@@ -1122,12 +1130,12 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
                             menuBuilder: (pos) => _gutterMenu(
                               controller,
                               filePath,
-                              ((pos.dy - 8) / _lineHeight).floor().clamp(0, lines.length - 1),
+                              controller.folds.lineOfRow(((pos.dy - 8) / _lineHeight).floor().clamp(0, controller.folds.rowCount - 1)),
                             ),
-                            child: _buildGutter(lines.length, diagByLine: diagByLine, controller: controller),
+                            child: _buildGutter(lines.length, diagByLine: diagByLine, controller: controller, highlighter: highlighter),
                           ),
                           _buildGitDiffStripe(
-                            lines.length,
+                            controller.folds,
                             hunks: isPrimary ? _diffHunks : const [],
                             onHunkTap: (hunk) {
                               if (isPrimary) {
@@ -1149,18 +1157,18 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
                               child: GestureDetector(
                                 behavior: HitTestBehavior.opaque,
                                 onDoubleTapDown: (details) {
-                                  final pos = _positionAt(details.localPosition, lines, highlighter);
+                                  final pos = _positionAt(details.localPosition, lines, highlighter, controller.folds);
                                   controller.selectWord(pos);
                                   imeBridge?.syncState();
                                 },
                                 onPanStart: (details) {
                                   focusNode.requestFocus();
-                                  final pos = _positionAt(details.localPosition, lines, highlighter);
+                                  final pos = _positionAt(details.localPosition, lines, highlighter, controller.folds);
                                   controller.setCursor(pos);
                                   imeBridge?.syncState();
                                 },
                                 onPanUpdate: (details) {
-                                  final pos = _positionAt(details.localPosition, lines, highlighter);
+                                  final pos = _positionAt(details.localPosition, lines, highlighter, controller.folds);
                                   controller.setCursor(pos, extendSelection: true);
                                   imeBridge?.syncState();
                                 },
@@ -1174,7 +1182,7 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
                                   if (event.buttons != kPrimaryButton) return;
                                   focusNode.requestFocus();
                                   imeBridge?.attach();
-                                  final pos = _positionAt(event.localPosition, lines, highlighter);
+                                  final pos = _positionAt(event.localPosition, lines, highlighter, controller.folds);
                                   controller.setCursor(pos);
                                   imeBridge?.syncState();
                                 },
@@ -1184,29 +1192,31 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
                                 constraints: BoxConstraints(minWidth: viewport.maxWidth),
                                 child: SizedBox(
                                   width: _contentWidth(controller),
-                                  height: lines.length * _lineHeight + 2 * _padV,
+                                  height: controller.folds.rowCount * _lineHeight + 2 * _padV,
                                   child: VisibleLines(
-                                    lineCount: lines.length,
+                                    lineCount: controller.folds.rowCount,
                                     lineHeight: _lineHeight,
                                     topPadding: _padV,
                                     builder: (context, first, last) {
-                                      final guides = showGuides ? _indentLevelsRange(lines, first, last) : null;
+                                      // 第 first..last 个可见行对应的文档行(收起的段跳过)
+                                      final rowLines = [for (var r = first; r <= last; r++) controller.folds.lineOfRow(r)];
+                                      final guides = showGuides ? _indentLevelsForLines(lines, rowLines) : null;
                                       return Stack(
                                         clipBehavior: Clip.none,
                                         children: [
-                                          for (var i = first; i <= last; i++)
+                                          for (var k = 0; k < rowLines.length; k++)
                                             Positioned(
-                                              key: ValueKey(i),
-                                              top: _padV + i * _lineHeight,
+                                              key: ValueKey(rowLines[k]),
+                                              top: _padV + (first + k) * _lineHeight,
                                               left: _padH,
                                               height: _lineHeight,
                                               child: _buildCodeLine(
-                                                i,
-                                                lines[i],
-                                                guideLevel: guides?[i - first] ?? 0,
+                                                rowLines[k],
+                                                lines[rowLines[k]],
+                                                guideLevel: guides?[k] ?? 0,
                                                 controller: controller,
                                                 highlighter: highlighter,
-                                                diagnostics: diagByLine[i] ?? const [],
+                                                diagnostics: diagByLine[rowLines[k]] ?? const [],
                                               ),
                                             ),
                                         ],
@@ -1359,43 +1369,102 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
     return math.max(58, 2 + 14 + 10 + digits * _gutterDigitWidth + 8).ceilToDouble();
   }
 
+  /// 鼠标在哪个窗格的行号栏上:展开着的段的折叠箭头只在这时显示(IntelliJ 新 UI 的做法),收起的段一直显示。
+  final ValueNotifier<CodeEditorController?> _gutterHover = ValueNotifier(null);
+
+  /// 折叠箭头那一栏的宽度。
+  static const double foldMarkerWidth = 14;
+
   Widget _buildGutter(
     int totalLines, {
     required Map<int, List<EditorDiagnostic>> diagByLine,
     required CodeEditorController controller,
+    required DocumentHighlighter highlighter,
   }) {
     final bookmarks = controller.bookmarks;
     final showNumbers = _appearance.showLineNumbers;
-    return Container(
-      // 关掉行号后仍留出书签 / 诊断标记的位置。
-      width: showNumbers ? _gutterWidthFor(totalLines) : 30,
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      color: _appearance.colorScheme.background,
-      child: SizedBox(
-        height: totalLines * _lineHeight,
-        child: VisibleLines(
-          lineCount: totalLines,
-          lineHeight: _lineHeight,
-          topPadding: 8,
-          builder: (context, first, last) => Stack(
-            children: [
-              for (var index = first; index <= last; index++)
-                Positioned(
-                  key: ValueKey(index),
-                  top: index * _lineHeight,
-                  left: 0,
-                  right: 0,
-                  height: _lineHeight,
-                  child: _gutterRow(index, diagByLine[index] ?? const [], bookmarks, showNumbers),
-                ),
-            ],
+    final folds = controller.folds;
+    return MouseRegion(
+      onEnter: (_) => _gutterHover.value = controller,
+      onExit: (_) {
+        if (_gutterHover.value == controller) _gutterHover.value = null;
+      },
+      child: Container(
+        // 关掉行号后仍留出书签 / 诊断标记的位置。
+        width: (showNumbers ? _gutterWidthFor(totalLines) : 30) + foldMarkerWidth,
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        color: _appearance.colorScheme.background,
+        child: SizedBox(
+          height: folds.rowCount * _lineHeight,
+          child: VisibleLines(
+            lineCount: folds.rowCount,
+            lineHeight: _lineHeight,
+            topPadding: 8,
+            builder: (context, first, last) {
+              final rowLines = [for (var r = first; r <= last; r++) folds.lineOfRow(r)];
+              final regions = rowLines.isEmpty ? const <FoldRange>[] : highlighter.foldsIn(rowLines.first, rowLines.last + 1);
+              final byStart = {for (final r in regions) r.start: r};
+              // 语法树稳定了:核对收起的段(花括号删了的展开、结束行跟上)。不能在构建时改状态,放到这一帧之后
+              if (folds.hasCollapsed && highlighter.treeSettled && rowLines.isNotEmpty) {
+                final from = rowLines.first, to = rowLines.last + 1;
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (!controller.isDisposed) controller.reconcileFolds(highlighter.foldsIn(from, to), from, to);
+                });
+              }
+              return Stack(
+                children: [
+                  for (var k = 0; k < rowLines.length; k++)
+                    Positioned(
+                      key: ValueKey(rowLines[k]),
+                      top: (first + k) * _lineHeight,
+                      left: 0,
+                      right: 0,
+                      height: _lineHeight,
+                      child: _gutterRow(
+                        rowLines[k],
+                        diagByLine[rowLines[k]] ?? const [],
+                        bookmarks,
+                        showNumbers,
+                        fold: _foldMarker(controller, rowLines[k], byStart[rowLines[k]]),
+                      ),
+                    ),
+                ],
+              );
+            },
           ),
         ),
       ),
     );
   }
 
-  Widget _gutterRow(int index, List<EditorDiagnostic> lineDiags, Map<int, String?> bookmarks, bool showNumbers) {
+  /// 行号栏里的折叠箭头:收起的段一直显示 ›,展开着的段鼠标在行号栏上时显示 ⌄。点一下收起 / 展开。
+  Widget _foldMarker(CodeEditorController controller, int line, FoldRange? region) {
+    if (controller.folds.isCollapsed(line)) {
+      return _foldArrow(Icons.chevron_right, () => controller.expandFold(line), key: const ValueKey('fold-collapsed'));
+    }
+    if (region == null) return const SizedBox(width: foldMarkerWidth);
+    return ValueListenableBuilder<CodeEditorController?>(
+      valueListenable: _gutterHover,
+      builder: (context, hovered, _) => hovered == controller
+          ? _foldArrow(Icons.expand_more, () => controller.collapseFold(region), key: const ValueKey('fold-expanded'))
+          : const SizedBox(width: foldMarkerWidth),
+    );
+  }
+
+  Widget _foldArrow(IconData icon, VoidCallback onTap, {Key? key}) => MouseRegion(
+        key: key,
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onTap,
+          child: SizedBox(
+            width: foldMarkerWidth,
+            child: Icon(icon, size: 14, color: _appearance.colorScheme.lineNumber),
+          ),
+        ),
+      );
+
+  Widget _gutterRow(int index, List<EditorDiagnostic> lineDiags, Map<int, String?> bookmarks, bool showNumbers, {Widget? fold}) {
     final hasError = lineDiags.any((d) => d.isError);
     final hasWarning = lineDiags.any((d) => d.isWarning);
     final hasBookmark = bookmarks.containsKey(index);
@@ -1455,7 +1524,8 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
             ),
           if (showNumbers)
             Text('${index + 1}', style: _gutterNumberStyle),
-          const SizedBox(width: 6),
+          const SizedBox(width: 4),
+          fold ?? const SizedBox(width: foldMarkerWidth),
         ],
       ),
     );
@@ -1465,6 +1535,21 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
 
   /// [first]..[last] 每行的缩进层级(按 4 列一级,tab 记 4 列)。空行取上下非空行中较小的层级,
   /// 这样代码块中间的空行也有连续的参考线。只看可见行及其邻近的非空行,不扫整个文件。
+  /// [rowLines](按可见行排、收起的段之间不连续)每行的缩进层级:按连续的几段分别算。
+  static List<int> _indentLevelsForLines(List<String> lines, List<int> rowLines) {
+    final out = <int>[];
+    var k = 0;
+    while (k < rowLines.length) {
+      var j = k;
+      while (j + 1 < rowLines.length && rowLines[j + 1] == rowLines[j] + 1) {
+        j++;
+      }
+      out.addAll(_indentLevelsRange(lines, rowLines[k], rowLines[j]));
+      k = j + 1;
+    }
+    return out;
+  }
+
   static List<int> _indentLevelsRange(List<String> lines, int first, int last) {
     if (last < first) return const [];
     int? levelOf(int i) => lines[i].trim().isEmpty ? null : _indentOf(lines[i]);
@@ -1571,10 +1656,11 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
   }
 
   void _jumpToLine(CodeEditorController controller, int line, {int col = 0}) {
-    controller.setCursor(EditorPosition(line, col));
+    controller.setCursor(EditorPosition(line, col)); // 落在收起的段里会先展开
     final scroll = identical(controller, _controller) ? _verticalScroll : widget.secondaryTab?.verticalScroll;
     if (scroll == null || !scroll.hasClients) return;
-    final target = (line * _lineHeight - scroll.position.viewportDimension / 3).clamp(0.0, scroll.position.maxScrollExtent);
+    final row = controller.folds.rowOfLine(line);
+    final target = (row * _lineHeight - scroll.position.viewportDimension / 3).clamp(0.0, scroll.position.maxScrollExtent);
     scroll.jumpTo(target);
   }
 
@@ -1616,7 +1702,7 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
   }
 
   Widget _buildGitDiffStripe(
-    int totalLines, {
+    FoldState folds, {
     required List<GitLineDiff> hunks,
     required ValueChanged<GitLineDiff> onHunkTap,
   }) {
@@ -1626,14 +1712,14 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
       width: 5,
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: SizedBox(
-        height: totalLines * _lineHeight,
+        height: folds.rowCount * _lineHeight,
         child: VisibleLines(
-        lineCount: totalLines,
+        lineCount: folds.rowCount,
         lineHeight: _lineHeight,
         topPadding: 8,
         builder: (context, first, last) => Stack(
         children: [for (var index = first; index <= last; index++)
-          if (byLine[index + 1] case final hunk?)
+          if (byLine[folds.lineOfRow(index) + 1] case final hunk?)
             Positioned(
               key: ValueKey(index),
               top: index * _lineHeight,
@@ -1668,7 +1754,7 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
   Widget _buildMiniDiffOverlay() {
     if (_activeHunkOverlay == null) return const SizedBox.shrink();
     final hunk = _activeHunkOverlay!;
-    final topOffset = ((hunk.line - 1) * _lineHeight).clamp(0.0, 450.0);
+    final topOffset = (_controller.folds.rowOfLine(hunk.line - 1) * _lineHeight).clamp(0.0, 450.0);
 
     Color badgeColor = const Color(0xFF3574F0);
     if (hunk.kind == DiffHunkKind.added) badgeColor = const Color(0xFF59A869);
@@ -1864,12 +1950,25 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
               ),
             ),
 
-          // 2. Syntax Token Text
-          RichText(
-            text: TextSpan(style: _codeStyle.copyWith(color: _appearance.colorScheme.foreground), children: spans),
-            softWrap: false,
-            overflow: TextOverflow.clip,
-          ),
+          // 2. Syntax Token Text(收起的段:行尾接一个「...」块和结尾的括号,点一下展开)
+          if (controller.folds.collapsedEndAt(lineIndex) case final foldEnd?)
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                RichText(
+                  text: TextSpan(style: _codeStyle.copyWith(color: _appearance.colorScheme.foreground), children: spans),
+                  softWrap: false,
+                  overflow: TextOverflow.clip,
+                ),
+                _foldPlaceholder(controller, lineIndex, foldEnd),
+              ],
+            )
+          else
+            RichText(
+              text: TextSpan(style: _codeStyle.copyWith(color: _appearance.colorScheme.foreground), children: spans),
+              softWrap: false,
+              overflow: TextOverflow.clip,
+            ),
 
           // 3. Caret (Blinking Cursor)
           if (isCaretLine)
@@ -1920,6 +2019,39 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
   }
 
 
+
+  /// 收起的段在起始行行尾显示的「...」块(IntelliJ 的折叠占位),后面接上结束行开头的右括号 / 注释结尾。
+  Widget _foldPlaceholder(CodeEditorController controller, int start, int end) {
+    final lines = controller.lines;
+    final last = end < lines.length ? lines[end].trimLeft() : '';
+    final closes = ['}', ')', ']', '*/', '</', '>'].any(last.startsWith);
+    return MouseRegion(
+      key: const ValueKey('fold-placeholder'),
+      cursor: SystemMouseCursors.click,
+      // 按下就展开:外面的代码区有双击选词,用点击手势要等双击判定超时(约 300 ms)才轮到这里
+      child: Listener(
+        behavior: HitTestBehavior.opaque,
+        onPointerDown: (e) {
+          if (e.buttons == kPrimaryButton) controller.expandFold(start);
+        },
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 2),
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              decoration: BoxDecoration(
+                color: _appearance.colorScheme.foreground.withValues(alpha: 0.10),
+                borderRadius: BorderRadius.circular(3),
+              ),
+              child: Text('...', style: _codeStyle.copyWith(color: _appearance.colorScheme.foreground.withValues(alpha: 0.7))),
+            ),
+            if (closes) Text(last, style: _codeStyle.copyWith(color: _appearance.colorScheme.foreground), softWrap: false),
+          ],
+        ),
+      ),
+    );
+  }
 
   /// 编辑区最右边的错误条(IntelliJ 的 error stripe):错误 / 警告在整个文件里的位置。
   /// 用户要求窄一点:8px,标记条两边各留 1px。

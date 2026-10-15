@@ -263,3 +263,74 @@ fn dump_samples() {
         println!("[{lang}] {out}");
     }
 }
+
+fn decode_folds(b: &[u8]) -> Vec<(u32, u32)> {
+    let u = |o: usize| u32::from_le_bytes(b[o..o + 4].try_into().unwrap());
+    assert_eq!(b[0], 1, "tree ready");
+    (0..u(8) as usize).map(|i| (u(12 + i * 8), u(16 + i * 8))).collect()
+}
+
+fn folds_of(lang: &str, src: &[&str]) -> Vec<(u32, u32)> {
+    let doc = Document::open(lang, joined(src)).unwrap();
+    wait_parsed(&doc);
+    decode_folds(&doc.folds(0, src.len()))
+}
+
+#[test]
+fn java_folds() {
+    let src = [
+        "import a.B;",         // 0
+        "import a.C;",         // 1
+        "/**",                 // 2
+        " * Doc.",             // 3
+        " */",                 // 4
+        "class A {",           // 5
+        "  void f() {",        // 6
+        "    if (x) {",        // 7
+        "      g();",          // 8
+        "    }",               // 9
+        "  }",                 // 10
+        "  // one",            // 11
+        "  // two",            // 12
+        "  int x; // trailing",// 13
+        "  int[] a = {1,",     // 14
+        "    2};",             // 15
+        "}",                   // 16
+    ];
+    assert_eq!(
+        folds_of("java", &src),
+        vec![(0, 1), (2, 4), (5, 16), (6, 10), (7, 9), (11, 12), (14, 15)]
+    );
+}
+
+#[test]
+fn python_blocks_fold_from_the_header_line() {
+    let src = ["import os", "import sys", "def f(x):", "    if x:", "        return 1", "    return 2", "", "y = 1"];
+    assert_eq!(folds_of("python", &src), vec![(0, 1), (2, 5), (3, 4)]);
+}
+
+#[test]
+fn folds_only_report_regions_starting_in_range_and_dedupe_same_start() {
+    let src = ["class A {", "  void f() {", "    g(() -> {", "      h();", "    });", "  }", "}"];
+    let doc = Document::open("java", joined(&src)).unwrap();
+    wait_parsed(&doc);
+    assert_eq!(decode_folds(&doc.folds(1, 3)), vec![(1, 5), (2, 4)]);
+    let all = decode_folds(&doc.folds(0, src.len()));
+    assert_eq!(all, vec![(0, 6), (1, 5), (2, 4)]);
+}
+
+#[test]
+fn every_language_has_some_folds() {
+    let cases: &[(&str, &[&str])] = &[
+        ("dart", &["import 'a.dart';", "import 'b.dart';", "class A {", "  void f() {", "    g();", "  }", "}"]),
+        ("javascript", &["function f() {", "  return {", "    a: 1,", "  };", "}"]),
+        ("typescript", &["interface I {", "  a: string;", "}", "function f() {", "  g();", "}"]),
+        ("tsx", &["function f() {", "  return (", "    <div>", "      hi", "    </div>", "  );", "}"]),
+        ("go", &["package main", "import (", "  \"fmt\"", ")", "func main() {", "  fmt.Println()", "}"]),
+        ("rust", &["use a::b;", "use a::c;", "impl A {", "    fn f() {", "        g();", "    }", "}"]),
+    ];
+    for (lang, src) in cases {
+        let f = folds_of(lang, src);
+        assert!(f.len() >= 2, "{lang}: {f:?}");
+    }
+}

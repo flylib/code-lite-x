@@ -77,6 +77,32 @@ class DocumentHighlighter {
     repaint.dispose();
   }
 
+  /// 折叠范围按 256 行一块缓存(语法树一变就清空)。
+  final Map<int, List<FoldRange>> _foldChunks = {};
+  static const _foldChunk = 256;
+
+  /// 语法树已建好、后台也没在重解析(折叠范围可信,可以拿来核对收起的段)。
+  bool get treeSettled {
+    final t = _tree;
+    if (t == null) return false;
+    final st = t.status;
+    return st & 1 == 0 && st >> 1 > 0;
+  }
+
+  /// 从第 [from, to) 行开始的折叠范围(起始行升序);没有语法树时为空。
+  List<FoldRange> foldsIn(int from, int to) {
+    final tree = _tree;
+    if (tree == null || to <= from) return const [];
+    final out = <FoldRange>[];
+    for (var c = from ~/ _foldChunk; c * _foldChunk < to; c++) {
+      final chunk = _foldChunks[c] ??= tree.folds(c * _foldChunk, (c + 1) * _foldChunk) ?? const [];
+      for (final r in chunk) {
+        if (r.start >= from && r.start < to) out.add(r);
+      }
+    }
+    return out;
+  }
+
   /// 第 [line] 行的样式标识:同一行文字着色不同时(块注释里外、语法树给的 token 不同)排版缓存要区分。
   String styleKeyAt(int line) {
     final t = _treeLineAt(line);
@@ -111,6 +137,7 @@ class DocumentHighlighter {
       return;
     }
     _treeLines.clear();
+    _foldChunks.clear();
     _watchTree();
   }
 
@@ -132,6 +159,7 @@ class DocumentHighlighter {
       if (st >> 1 != _treeGeneration) {
         _treeGeneration = st >> 1;
         _treeLines.clear();
+        _foldChunks.clear();
         repaint.value++;
       }
       if (st & 1 == 0) {

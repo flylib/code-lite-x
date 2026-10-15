@@ -46,9 +46,13 @@ abstract final class KeymapIds {
   static const git = 'ActivateVersionControlToolWindow';
   static const hideAll = 'HideAllWindows';
   static const gotoFile = 'GotoFile';
+  static const collapseRegion = 'CollapseRegion';
+  static const expandRegion = 'ExpandRegion';
+  static const collapseAll = 'CollapseAllRegions';
+  static const expandAll = 'ExpandAllRegions';
 }
 
-/// 目前支持配置的操作:打开 / 收起各个工具窗、Go to File。默认键位取自 IntelliJ。
+/// 目前支持配置的操作:打开 / 收起各个工具窗、Go to File、代码折叠。默认键位取自 IntelliJ。
 const List<KeymapAction> keymapActions = [
   KeymapAction(id: KeymapIds.project, title: '项目', group: '工具窗', mac: ['meta 1'], other: ['alt 1']),
   KeymapAction(id: KeymapIds.commit, title: 'Commit', group: '工具窗', mac: ['meta 0'], other: ['alt 0']),
@@ -60,6 +64,10 @@ const List<KeymapAction> keymapActions = [
   KeymapAction(id: KeymapIds.git, title: 'Git 提交与日志', group: '工具窗', mac: ['meta 9'], other: ['alt 9']),
   KeymapAction(id: KeymapIds.hideAll, title: '隐藏 / 恢复所有工具窗', group: '工具窗', mac: ['shift meta F12'], other: ['ctrl shift F12']),
   KeymapAction(id: KeymapIds.gotoFile, title: '按文件名打开(Go to File)', group: '导航', mac: ['shift meta O'], other: ['ctrl shift N']),
+  KeymapAction(id: KeymapIds.collapseRegion, title: '折叠', group: '代码折叠', mac: ['meta MINUS'], other: ['ctrl MINUS']),
+  KeymapAction(id: KeymapIds.expandRegion, title: '展开', group: '代码折叠', mac: ['meta EQUALS'], other: ['ctrl EQUALS']),
+  KeymapAction(id: KeymapIds.collapseAll, title: '全部折叠', group: '代码折叠', mac: ['shift meta MINUS'], other: ['ctrl shift MINUS']),
+  KeymapAction(id: KeymapIds.expandAll, title: '全部展开', group: '代码折叠', mac: ['shift meta EQUALS'], other: ['ctrl shift EQUALS']),
 ];
 
 KeymapAction? keymapActionById(String id) => keymapActions.where((a) => a.id == id).firstOrNull;

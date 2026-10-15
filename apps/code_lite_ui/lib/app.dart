@@ -411,6 +411,10 @@ class _Workbench extends StatelessWidget {
       KeymapIds.git: () => layout.selectBottomTab(BottomToolTab.git),
       KeymapIds.hideAll: layout.toggleHideAll,
       KeymapIds.gotoFile: () => _gotoFile(context),
+      KeymapIds.collapseRegion: () => context.sessionRead.activeTab?.controller.collapseRegionAtCaret(),
+      KeymapIds.expandRegion: () => context.sessionRead.activeTab?.controller.expandRegionAtCaret(),
+      KeymapIds.collapseAll: () => context.sessionRead.activeTab?.controller.collapseAllRegions(),
+      KeymapIds.expandAll: () => context.sessionRead.activeTab?.controller.expandAllFolds(),
     };
     return {
       for (final e in actions.entries)
@@ -1019,7 +1023,8 @@ Future<void> openFileAt(WorkspaceStore workspace, EditorSessionManager sessions,
   WidgetsBinding.instance.addPostFrameCallback((_) {
     final scroll = tab.verticalScroll;
     if (!scroll.hasClients) return;
-    final target = (line * sessions.appearance.lineHeight - scroll.position.viewportDimension / 3).clamp(0.0, scroll.position.maxScrollExtent);
+    final row = tab.controller.folds.rowOfLine(line); // 上面收起的段不占地方
+    final target = (row * sessions.appearance.lineHeight - scroll.position.viewportDimension / 3).clamp(0.0, scroll.position.maxScrollExtent);
     scroll.jumpTo(target);
   });
 }

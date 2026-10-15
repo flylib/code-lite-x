@@ -156,7 +156,11 @@ class BlameColumn extends StatelessWidget {
     required this.menuBuilder,
     this.loading = false,
     this.lineHeight = _lineHeight,
+    this.lineOfRow,
   });
+
+  /// 第几个可见行是文档的第几行(代码折叠收起了几段时和编辑区对齐);null = 一一对应。
+  final int Function(int row)? lineOfRow;
 
   /// 与编辑区一致的行高(随字号变化)。
   final double lineHeight;
@@ -191,7 +195,8 @@ class BlameColumn extends StatelessWidget {
     }
     return ContextMenuRegion(
       menuBuilder: (pos) {
-        final line = ((pos.dy - 8) / lineHeight).floor().clamp(0, totalLines - 1);
+        final row = ((pos.dy - 8) / lineHeight).floor().clamp(0, totalLines - 1);
+        final line = lineOfRow?.call(row) ?? row;
         return menuBuilder(line, d?.at(line));
       },
       child: Container(
@@ -226,10 +231,10 @@ class BlameColumn extends StatelessWidget {
                           right: 0,
                           height: lineHeight,
                           child: Container(
-                            color: blameBackground(d.at(i), d, appearance),
+                            color: blameBackground(d.at(lineOfRow?.call(i) ?? i), d, appearance),
                             padding: const EdgeInsets.symmetric(horizontal: 8),
                             alignment: Alignment.centerLeft,
-                            child: Text(blameLabel(d.at(i), appearance), maxLines: 1, overflow: TextOverflow.ellipsis, style: _style),
+                            child: Text(blameLabel(d.at(lineOfRow?.call(i) ?? i), appearance), maxLines: 1, overflow: TextOverflow.ellipsis, style: _style),
                           ),
                         ),
                     ],

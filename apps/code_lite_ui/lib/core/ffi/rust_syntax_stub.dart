@@ -12,6 +12,8 @@ class SyntaxTreeDoc {
 
   SyntaxSlice? highlight(int from, int to) => null;
 
+  List<FoldRange>? folds(int from, int to) => null;
+
   void close() {}
 }
 
@@ -21,4 +23,20 @@ class SyntaxSlice {
   final int generation;
   final int from;
   final List<Uint32List?> lines;
+}
+
+/// 一段可折叠的范围:收起时 [start] 行留着,[start]+1 ..= [end] 行藏起来。
+class FoldRange {
+  const FoldRange(this.start, this.end);
+  final int start;
+  final int end;
+
+  @override
+  bool operator ==(Object other) => other is FoldRange && other.start == start && other.end == end;
+
+  @override
+  int get hashCode => Object.hash(start, end);
+
+  @override
+  String toString() => 'FoldRange($start..$end)';
 }

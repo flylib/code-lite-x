@@ -328,6 +328,79 @@ impl Document {
     }
 }
 
+impl Document {
+    /// 从第 [from, to) 行开始的折叠范围:`(起始行, 结束行)`,隐藏的是 起始行+1 ..= 结束行。
+    /// 同一行开始的只留最大的那段。格式:头部 = 是否有语法树(u8)、3 字节填充、generation(u32)、段数(u32);每段两个 u32。小端。
+    pub fn folds(&self, from: usize, to: usize) -> Vec<u8> {
+        let st = self.state.lock().unwrap();
+        let n = st.line_starts.len() - 1;
+        let from = from.min(n);
+        let to = to.clamp(from, n);
+        let mut out = vec![0u8; 12];
+        out[4..8].copy_from_slice(&(st.generation as u32).to_le_bytes());
+        let (Some(g), Some(tree)) = (st.grammar.as_ref(), st.tree.as_ref()) else {
+            return out;
+        };
+        out[0] = 1;
+        let text = st.text.as_bytes();
+        let names = g.folds.capture_names();
+        let mut best: std::collections::BTreeMap<usize, usize> = Default::default();
+        let mut cursor = QueryCursor::new();
+        // 往前多看一行:Python 的语句块从上一行(冒号那行)算起
+        cursor.set_byte_range(st.line_starts[from.saturating_sub(1)]..st.line_starts[to]);
+        let mut it = cursor.captures(&g.folds, tree.root_node(), text);
+        // 每行第一个非空白字符的字节列(判断连续注释是不是独占一行)
+        let indent = |row: usize| {
+            let ls = st.line_starts[row.min(n)];
+            text[ls..].iter().take_while(|&&b| b == b' ' || b == b'\t').count()
+        };
+        while let Some((m, i)) = it.next() {
+            let c = m.captures[*i];
+            let node = c.node;
+            let (start, end) = match names[c.index as usize] {
+                "fold.header" => match node.prev_sibling() {
+                    Some(p) => (p.start_position().row, node.end_position().row),
+                    None => (node.start_position().row, node.end_position().row),
+                },
+                "fold.group" => {
+                    // 只从一组的第一个开始:前一个兄弟是同类、而且紧挨着(下一行)就跳过
+                    let own_line = |x: tree_sitter::Node| x.start_position().column == indent(x.start_position().row);
+                    if !own_line(node) {
+                        continue;
+                    }
+                    if let Some(p) = node.prev_sibling() {
+                        if p.kind() == node.kind() && p.end_position().row + 1 >= node.start_position().row && own_line(p) {
+                            continue;
+                        }
+                    }
+                    let mut last = node;
+                    while let Some(nx) = last.next_sibling() {
+                        if nx.kind() == node.kind() && nx.start_position().row <= last.end_position().row + 1 && own_line(nx) {
+                            last = nx;
+                        } else {
+                            break;
+                        }
+                    }
+                    (node.start_position().row, last.end_position().row)
+                }
+                _ => (node.start_position().row, node.end_position().row),
+            };
+            // 结尾正好在下一行行首(节点包含了换行)时,结束行退一行
+            let end = if end > start && node.end_position().column == 0 { end - 1 } else { end };
+            if end > start && start >= from && start < to {
+                let e = best.entry(start).or_insert(end);
+                *e = (*e).max(end);
+            }
+        }
+        out[8..12].copy_from_slice(&(best.len() as u32).to_le_bytes());
+        for (s, e) in best {
+            out.extend_from_slice(&(s as u32).to_le_bytes());
+            out.extend_from_slice(&(e as u32).to_le_bytes());
+        }
+        out
+    }
+}
+
 /// 头部 16 字节:版本 1、是否有语法树、2 字节填充、generation(u32)、起始行(u32)、行数(u32)。
 /// 每行:是否脏(u8)、token 数(u32),每个 token:起止 UTF-16 列(u32 ×2)、种类(u8)。小端。
 fn header(ready: bool, generation: u64, from: usize, count: usize) -> Vec<u8> {

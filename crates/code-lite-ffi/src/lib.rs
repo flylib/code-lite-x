@@ -405,6 +405,19 @@ pub unsafe extern "C" fn codelite_syntax_highlight(doc: *mut std::sync::Arc<code
     Box::into_raw(boxed) as *mut u8
 }
 
+/// 从第 [from, to) 行开始的折叠范围,二进制(格式见 `code_lite_syntax::Document::folds`),用 [codelite_bytes_free] 释放。
+#[no_mangle]
+pub unsafe extern "C" fn codelite_syntax_folds(doc: *mut std::sync::Arc<code_lite_syntax::Document>, from: u32, to: u32, out_len: *mut usize) -> *mut u8 {
+    if out_len.is_null() {
+        return std::ptr::null_mut();
+    }
+    *out_len = 0;
+    let Some(d) = doc.as_ref() else { return std::ptr::null_mut() };
+    let boxed = d.folds(from as usize, to as usize).into_boxed_slice();
+    *out_len = boxed.len();
+    Box::into_raw(boxed) as *mut u8
+}
+
 /// 关闭文档(后台解析会自己停下)。
 #[no_mangle]
 pub unsafe extern "C" fn codelite_syntax_close(doc: *mut std::sync::Arc<code_lite_syntax::Document>) {

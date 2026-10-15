@@ -48,7 +48,12 @@ void main() {
         KeymapIds.git: '⌘9',
         KeymapIds.hideAll: '⇧⌘F12',
         KeymapIds.gotoFile: '⇧⌘O',
+        KeymapIds.collapseRegion: '⌘-',
+        KeymapIds.expandRegion: '⌘=',
+        KeymapIds.collapseAll: '⇧⌘-',
+        KeymapIds.expandAll: '⇧⌘=',
       });
+      expect(KeymapStore(mac: false).labelOf(KeymapIds.collapseRegion), 'Ctrl+-');
       expect(KeymapStore(mac: false).labelOf(KeymapIds.gotoFile), 'Ctrl+Shift+N');
       expect(KeymapStore(mac: false).labelOf(KeymapIds.project), 'Alt+1');
     });

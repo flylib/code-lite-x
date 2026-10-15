@@ -24,6 +24,7 @@ class _Fns {
         edit = lib.lookupFunction<_EditC, _EditDart>('codelite_syntax_edit'),
         status = lib.lookupFunction<_StatusC, _StatusDart>('codelite_syntax_status'),
         highlight = lib.lookupFunction<_HighlightC, _HighlightDart>('codelite_syntax_highlight'),
+        folds = lib.providesSymbol('codelite_syntax_folds') ? lib.lookupFunction<_HighlightC, _HighlightDart>('codelite_syntax_folds') : null,
         closePtr = lib.lookup<NativeFunction<Void Function(Pointer<Void>)>>('codelite_syntax_close'),
         alloc = lib.lookupFunction<_AllocC, _AllocDart>('codelite_string_alloc'),
         freeInput = lib.lookupFunction<_FreeBufC, _FreeBufDart>('codelite_buffer_free'),
@@ -33,6 +34,9 @@ class _Fns {
   final _EditDart edit;
   final _StatusDart status;
   final _HighlightDart highlight;
+
+  /// 旧库没有折叠:null。
+  final _HighlightDart? folds;
   final Pointer<NativeFunction<Void Function(Pointer<Void>)>> closePtr;
   late final _CloseDart close = closePtr.asFunction<_CloseDart>();
   final _AllocDart alloc;
@@ -129,6 +133,26 @@ class SyntaxTreeDoc implements Finalizable {
     }
   }
 
+  /// 从第 [from, to) 行开始的折叠范围(起始行、结束行,隐藏 起始行+1..=结束行);语法树还没建好时返回 null。
+  List<FoldRange>? folds(int from, int to) {
+    final fn = _f.folds;
+    if (_ptr == nullptr || fn == null) return null;
+    final out = fn(_ptr, from, to, _f.outLen);
+    final len = _f.outLen.value;
+    if (out == nullptr) return null;
+    try {
+      final b = out.asTypedList(len);
+      if (len < 12 || b[0] != 1) return null;
+      final d = ByteData.sublistView(b);
+      final n = d.getUint32(8, Endian.little);
+      return [
+        for (var i = 0; i < n; i++) FoldRange(d.getUint32(12 + i * 8, Endian.little), d.getUint32(16 + i * 8, Endian.little)),
+      ];
+    } finally {
+      _f.freeBytes(out, len);
+    }
+  }
+
   void close() {
     if (_ptr == nullptr) return;
     _f.finalizer.detach(this);
@@ -172,4 +196,20 @@ class SyntaxSlice {
     }
     return SyntaxSlice(generation, from, lines);
   }
+}
+
+/// 一段可折叠的范围:收起时 [start] 行留着,[start]+1 ..= [end] 行藏起来。
+class FoldRange {
+  const FoldRange(this.start, this.end);
+  final int start;
+  final int end;
+
+  @override
+  bool operator ==(Object other) => other is FoldRange && other.start == start && other.end == end;
+
+  @override
+  int get hashCode => Object.hash(start, end);
+
+  @override
+  String toString() => 'FoldRange($start..$end)';
 }

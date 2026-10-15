@@ -93,11 +93,13 @@ CodeLiteX 是一款高性能的原生跨平台代码编辑器，内置 Git 管�
 **快捷键**
 - 快捷键可配置，默认键位同 IntelliJ（macOS「Mac OS X 10.5+」；其它平台「Default」），存储格式和 action id 也用 IntelliJ 的（`meta 1`、`ActivateProjectToolWindow`），所以能直接「从 IntelliJ 导入」：读最新 `IntelliJIdea*` 配置目录的 `options/mac/keymap.xml`（当前配置名）+ `keymaps/*.xml`（用户改的）+ 安装包 `lib/app.jar` 里的自带配置，沿 parent 链解析；macOS 键位继承 `$default` 时 Ctrl 换成 ⌘（IntelliJ 自己也这么换）。设置 ▸ Keymap 可加（按下组合键录入，冲突的从原操作移走）、删、恢复默认。设置文件只存改过的（`keymap.overrides`）。
 - 第一批是打开 / 收起工具窗：⌘1 项目、⌘0 Commit、⌘7 结构、⌘9 Git、⌥F12 终端、⇧⌘F12 隐藏 / 恢复所有工具窗；PR、Opening Projects、Maven 默认无快捷键。再按一次同一个键收起（同 IntelliJ）。活动条按钮的提示跟着显示当前快捷键（`core/keymap/`、`features/settings/keymap_page.dart`）。
+- 代码折叠（同 IntelliJ）：⌘- 折叠光标所在的段、⌘= 展开、⇧⌘- 全部折叠、⇧⌘= 全部展开（其它平台 Ctrl）；action id `CollapseRegion` / `ExpandRegion` / `CollapseAllRegions` / `ExpandAllRegions`。
 
 **窗口**
 - macOS 左上角是真的关闭 / 最小化 / 缩放按钮（系统红绿灯），不要弹窗。
 
 **待确认（先按猜测做了，用户还没明确表态）**
+- 代码折叠：展开着的段的箭头只在鼠标移到行号栏时出现（IntelliJ 新 UI 默认），收起的一直显示；打开文件时不自动折叠 import（IntelliJ 默认会折叠）。收起的行尾显示「...」块和结尾的括号，按下就展开。
 - 底部工具窗现在横跨左右两条活动条之间的整个宽度，左侧的项目面板也因此停在终端上方，不再是从上到底的整列（照 IntelliJ 截图做的）。用户如果想要左侧整列，就做成选项。
 - 构建工具窗（Maven）的默认位置：最初用户选的是「左侧竖条」，后来参考 IntelliJ 截图改成了默认在右侧。已经存过布局的用户按存的来。
 
