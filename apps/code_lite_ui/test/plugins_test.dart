@@ -368,6 +368,15 @@ void main() {
       expect(find.text('已安装'), findsOneWidget);
       expect(find.text('停用'), findsOneWidget);
       expect(find.textContaining('需要 definitely-missing-tool-xyz'), findsOneWidget);
+      // 操作按钮在卡片右下角、靠右:在说明文字下面,右边贴着卡片右侧
+      final card = find.byKey(const ValueKey('plugin-test.lua'));
+      // 已安装的有「停用」「卸载」两个,最右的是「卸载」
+      final button = find.descendant(of: card, matching: find.widgetWithText(OutlinedButton, '卸载'));
+      final cardBox = tester.getRect(card), buttonBox = tester.getRect(button);
+      expect(tester.getRect(find.descendant(of: card, matching: find.widgetWithText(OutlinedButton, '停用'))).right, lessThan(buttonBox.left));
+      expect(buttonBox.top, greaterThan(tester.getRect(find.descendant(of: card, matching: find.text('Lua'))).bottom + 10));
+      expect(cardBox.right - buttonBox.right, lessThan(20));
+      expect(cardBox.bottom - buttonBox.bottom, lessThan(20));
       await tester.tap(find.text('只看已安装'));
       await tester.pump();
       expect(find.text('Fake Lang'), findsNothing);

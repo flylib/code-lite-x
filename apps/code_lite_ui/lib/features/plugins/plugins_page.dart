@@ -131,8 +131,6 @@ class _PluginTile extends StatelessWidget {
                   child: Text(chip, style: TextStyle(color: chipColor, fontSize: 11)),
                 ),
               ],
-              const Spacer(),
-              ..._actions(context, status, task),
             ],
           ),
           const SizedBox(height: 4),
@@ -158,6 +156,9 @@ class _PluginTile extends StatelessWidget {
               ],
             ),
           ),
+          // 操作按钮放在卡片右下角,靠右对齐
+          const SizedBox(height: 6),
+          Row(mainAxisAlignment: MainAxisAlignment.end, children: _actions(context, status, task)),
         ],
       ),
     );
