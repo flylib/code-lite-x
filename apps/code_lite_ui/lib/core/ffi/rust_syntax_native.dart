@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:ffi';
+import 'dart:isolate';
 import 'dart:typed_data';
 
 import 'codelite_bindings.dart' show codeliteLibraryPath;
@@ -212,4 +213,71 @@ class FoldRange {
 
   @override
   String toString() => 'FoldRange($start..$end)';
+}
+
+/// 文件路径 → 语法名(`code_lite_syntax::NAMES`);没有对应语法返回 null。
+String? syntaxGrammarForPath(String path) {
+  final dot = path.lastIndexOf('.');
+  final ext = dot < 0 ? '' : path.substring(dot + 1).toLowerCase();
+  return switch (ext) {
+    'java' => 'java',
+    'dart' => 'dart',
+    'py' || 'pyi' || 'pyw' => 'python',
+    'go' => 'go',
+    'rs' => 'rust',
+    'js' || 'mjs' || 'cjs' || 'jsx' => 'javascript',
+    'ts' || 'mts' || 'cts' => 'typescript',
+    'tsx' => 'tsx',
+    _ => null,
+  };
+}
+
+typedef _OutlineC = Pointer<Uint8> Function(Pointer<Uint8> grammar, Pointer<Uint8> text, Size len);
+typedef _OutlineDart = Pointer<Uint8> Function(Pointer<Uint8> grammar, Pointer<Uint8> text, int len);
+typedef _FreeStrC = Void Function(Pointer<Uint8> ptr);
+typedef _FreeStrDart = void Function(Pointer<Uint8> ptr);
+
+/// 结构视图的大纲交给 Rust 的语法树(没有语言服务器时用,代替正则大纲):在后台 isolate 里解析,不卡界面。
+/// 格式同 `lspParseDocumentSymbols`。没有 Rust 库、库太旧、或这种文件没有语法时返回 null。
+Future<List<Map<String, dynamic>>?> rustOutline(String path, String text) async {
+  final grammar = syntaxGrammarForPath(path);
+  final lib = codeliteLibraryPath();
+  if (grammar == null || lib == null) return null;
+  final out = await Isolate.run(() => _outline(lib, grammar, text));
+  if (out == null) return null;
+  final decoded = jsonDecode(out);
+  return decoded is List ? decoded.cast<Map<String, dynamic>>() : null;
+}
+
+String? _outline(String libraryPath, String grammar, String text) {
+  final lib = DynamicLibrary.open(libraryPath);
+  if (!lib.providesSymbol('codelite_syntax_outline')) return null;
+  final outline = lib.lookupFunction<_OutlineC, _OutlineDart>('codelite_syntax_outline');
+  final alloc = lib.lookupFunction<_AllocC, _AllocDart>('codelite_string_alloc');
+  final freeBuf = lib.lookupFunction<_FreeBufC, _FreeBufDart>('codelite_buffer_free');
+  final freeStr = lib.lookupFunction<_FreeStrC, _FreeStrDart>('codelite_string_free');
+  Pointer<Uint8> put(List<int> bytes) {
+    final p = alloc(bytes.length);
+    p.asTypedList(bytes.length + 1)
+      ..setAll(0, bytes)
+      ..[bytes.length] = 0;
+    return p;
+  }
+
+  final g = utf8.encode(grammar), t = utf8.encode(text);
+  final pg = put(g), pt = put(t);
+  try {
+    final res = outline(pg, pt, t.length);
+    if (res == nullptr) return null;
+    var len = 0;
+    while (res[len] != 0) {
+      len++;
+    }
+    final json = utf8.decode(Uint8List.fromList(res.asTypedList(len)), allowMalformed: true);
+    freeStr(res);
+    return json;
+  } finally {
+    freeBuf(pg, g.length);
+    freeBuf(pt, t.length);
+  }
 }

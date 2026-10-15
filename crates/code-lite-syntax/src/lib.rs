@@ -7,6 +7,7 @@
 //! - 第一次解析(打开文件)也在后台:7 千行约 30 ms,不卡界面;解析完之前界面全用 Dart 的分词。
 
 pub mod grammar;
+pub mod outline;
 
 use std::ops::Range;
 use std::sync::{Arc, Mutex};

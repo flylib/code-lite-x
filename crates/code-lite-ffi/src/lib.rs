@@ -418,6 +418,17 @@ pub unsafe extern "C" fn codelite_syntax_folds(doc: *mut std::sync::Arc<code_lit
     Box::into_raw(boxed) as *mut u8
 }
 
+/// 结构视图的大纲(没有语言服务器时用,见 `code_lite_syntax::outline`):解析 [text] 一次,返回 JSON,用 [codelite_string_free] 释放。
+/// 不认识的语法返回空指针。不碰共享状态,可以在 Dart 的后台 isolate 里调。
+#[no_mangle]
+pub unsafe extern "C" fn codelite_syntax_outline(grammar: *const c_char, text: *const u8, len: usize) -> *mut c_char {
+    let Some(name) = c_str_to_str(grammar) else { return std::ptr::null_mut() };
+    match code_lite_syntax::outline::outline(name, bytes_arg(text, len)) {
+        Some(json) => str_to_c_char(&json),
+        None => std::ptr::null_mut(),
+    }
+}
+
 /// 关闭文档(后台解析会自己停下)。
 #[no_mangle]
 pub unsafe extern "C" fn codelite_syntax_close(doc: *mut std::sync::Arc<code_lite_syntax::Document>) {

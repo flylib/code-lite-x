@@ -154,7 +154,7 @@ cargo build --release --offline -p code-lite-app
 * `lib/core/github/`：GitHub Pull Request 服务（`github_service.dart`），经本机 `gh` 命令行（`gh pr` / `gh api`）读写 PR、评审与评论，应用不保存 token；
 * `lib/core/plugins/`：插件框架（声明式 `plugin.json` + 独立进程）。`plugin_manifest.dart` 定义清单格式（语言、着色规则、语言服务器、构建工具 `buildTools`、安装步骤；`bundled: true` 为随 IDE 自带、默认启用、只能停用不能卸载），`builtin_catalog.dart` 是随 IDE 打包的插件目录（以后由插件市场提供同格式索引），`plugin_host_io.dart` 负责下载解压 / 运行安装命令 / 展开变量（装到 `~/.codelitex/plugins/<id>`，走系统代理），`plugin_manager.dart` 管理安装状态、新语言提示，并把语言服务器启动方式交给 LSP；
 * `lib/core/state/`：应用状态。**一个进程可同时打开多个项目**：`project_manager.dart`（`ProjectManager`）管打开列表 / 当前项目 / 关闭，列表存 `~/.codelitex/open_projects.json`，启动只加载当前项目，其余首次切到时才加载；`project_context.dart`（`ProjectContext`）是**每个项目一份**的状态包（自己的 `ApiClient`——含独立的 Rust 终端上下文、语言服务器、Git——以及编辑会话、工作区、终端、Git 日志、分支、PR、构建工具窗）。切换项目只是换显示哪一份，其它项目留在内存里照常运行，关闭才释放。窗口布局、设置、插件、编辑器外观是全局共享的。新写的异步 store 要混入 `DisposeSafeNotifier`（`dispose_safe.dart`），因为项目随时可能被关闭；
-* `lib/core/lsp/`：Dart 实现的 LSP 客户端与文件大纲（outline）；Rust 侧不再有 LSP / 代码图谱；
+* `lib/core/lsp/`：Dart 实现的 LSP 客户端与文件大纲（outline；没有语言服务器时先用 Rust 语法树的大纲 `rustOutline`，再退回正则大纲）；Rust 侧不再有 LSP / 代码图谱；
 * `lib/core/build_tools/`：构建工具的模块树与命令拼装（`build_model.dart`）。插件清单的 `buildTools.model` 按名字选 IDE 内置读取器（目前 `maven`：`maven_reader.dart` 读 pom.xml 的 `<modules>`，`xml_lite.dart` 是不依赖外部包的极简 XML 解析）；
 * `lib/core/client/`：高层业务客户端（`api_client.dart`），封装异步 Future/Stream，并在 FFI 动态库未加载时无缝回退至离线 Mock 逻辑；
 * `lib/core/theme/`：全局主题与样式（`intellij_theme.dart`），锁定 JetBrains Darcula 经典配比；

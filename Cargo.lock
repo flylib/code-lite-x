@@ -118,6 +118,7 @@ dependencies = [
 name = "code-lite-syntax"
 version = "0.1.0"
 dependencies = [
+ "serde_json",
  "streaming-iterator",
  "tree-sitter",
  "tree-sitter-dart",

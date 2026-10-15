@@ -11,6 +11,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import '../ffi/rust_syntax.dart' show rustOutline;
 import 'lsp_common.dart';
 
 export 'lsp_common.dart' show LspDiagnosticsEvent, LspTextChange, LspLaunch, LspLaunchResolver;
@@ -291,9 +292,14 @@ class LspService {
   // 大纲
   // =========================================================================
 
-  /// LSP documentSymbol;服务端不可用、超时或返回空时退回正则大纲。
+  /// LSP documentSymbol;服务端不可用、超时或返回空时退回语法树大纲(Rust 的 tree-sitter,
+  /// Java / Dart / JS / TS / Python / Go / Rust),再不行用正则大纲。
   Future<List<Map<String, dynamic>>> documentSymbols(String relPath, String text) async {
-    List<Map<String, dynamic>> fallback() {
+    Future<List<Map<String, dynamic>>> fallback() async {
+      try {
+        final tree = await rustOutline(relPath, text);
+        if (tree != null) return tree;
+      } catch (_) {}
       try {
         return lspRegexOutline(text, lspFallbackLanguageFor(relPath));
       } catch (_) {
@@ -302,11 +308,11 @@ class LspService {
     }
 
     try {
-      if (_disposed) return fallback();
+      if (_disposed) return await fallback();
       final lang = languageIdFor(relPath);
-      if (lang == null) return fallback();
+      if (lang == null) return await fallback();
       final server = _serverFor(lang);
-      if (server == null || server.fallback) return fallback();
+      if (server == null || server.fallback) return await fallback();
 
       // 服务端只认识已打开的文档(tsserver 尤其如此):未打开就临时打开,用完关闭。
       _Doc? temp;
@@ -331,9 +337,9 @@ class LspService {
       }
 
       final symbols = lspParseDocumentSymbols(result, languageId: lang);
-      return symbols.isEmpty ? fallback() : symbols;
+      return symbols.isEmpty ? await fallback() : symbols;
     } catch (_) {
-      return fallback();
+      return await fallback();
     }
   }
 

@@ -334,3 +334,23 @@ fn every_language_has_some_folds() {
         assert!(f.len() >= 2, "{lang}: {f:?}");
     }
 }
+
+#[test]
+#[ignore]
+fn dump_trees() {
+    let samples: &[(&str, &str)] = &[
+        ("dart", "class A extends B {\n  int n = 0, m;\n  final String s;\n  A(this.s);\n  A.named();\n  void f(int p) { }\n  int get g => 1;\n}\nvoid top() {}\nenum E { a, b }\nmixin M {}\nextension X on A {}\n"),
+        ("typescript", "class A { n: number = 0; m(p: string): void {} constructor() {} }\nfunction f() {}\nconst g = () => 1;\ninterface I { a: string; b(): void }\ntype T = string;\nenum E { A, B }\nexport class C {}\n"),
+        ("javascript", "class A { m() {} }\nfunction f() {}\nconst g = () => 1;\nexport default function h() {}\nmodule.exports = {};\n"),
+        ("python", "class A:\n    x = 1\n    def m(self):\n        pass\ndef f():\n    pass\nY = 2\n"),
+        ("go", "package p\ntype S struct { A int }\ntype I interface { M() }\nfunc (s *S) M() {}\nfunc F() {}\nconst C = 1\nvar V = 2\n"),
+        ("rust", "struct S { a: i32 }\nenum E { A, B }\ntrait T { fn m(&self); }\nimpl T for S { fn m(&self) {} }\nfn f() {}\nmod m {}\nconst C: i32 = 1;\ntype X = i32;\n"),
+    ];
+    for (lang, src) in samples {
+        let g = grammar::get(lang).unwrap();
+        let mut p = Parser::new();
+        p.set_language(&g.language).unwrap();
+        let t = p.parse(src, None).unwrap();
+        println!("[{lang}] {}", t.root_node().to_sexp());
+    }
+}

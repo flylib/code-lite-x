@@ -40,3 +40,8 @@ class FoldRange {
   @override
   String toString() => 'FoldRange($start..$end)';
 }
+
+String? syntaxGrammarForPath(String path) => null;
+
+/// web 预览没有 Rust 库:结构视图用正则大纲。
+Future<List<Map<String, dynamic>>?> rustOutline(String path, String text) async => null;
