@@ -245,11 +245,12 @@ class _GroupNameDialogState extends State<_GroupNameDialog> {
           controller: _controller,
           autofocus: true,
           style: const TextStyle(color: IntelliJTheme.textPrimary, fontSize: 12),
+          // 白色边框(不用主题的紫色),不放提示文字
           decoration: InputDecoration(
             border: const OutlineInputBorder(),
+            enabledBorder: const OutlineInputBorder(borderSide: BorderSide(color: Colors.white)),
+            focusedBorder: const OutlineInputBorder(borderSide: BorderSide(color: Colors.white, width: 1.5)),
             isDense: true,
-            hintText: '比如 bcpoker',
-            hintStyle: _muted,
             errorText: name.isEmpty || ok ? null : '已经有叫「$name」的项目组了',
           ),
           onChanged: (_) => setState(() {}),
