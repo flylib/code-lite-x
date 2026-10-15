@@ -67,7 +67,8 @@ void main() {
             onSwitch: (p) => events.add('switch ${p.name}'),
             onClose: (p) => events.add('close ${p.name}'),
             onCloseOthers: (p) => events.add('closeOthers ${p.name}'),
-            onOpenFolder: () => events.add('open'),
+            onOpenPath: (path) => events.add('open ${path.split('/').last}'),
+            onCloseGroup: (g) => events.add('closeGroup ${g.name}'),
           ),
         ),
       ),
@@ -95,13 +96,178 @@ void main() {
     await tester.pump();
   }
 
-  testWidgets('empty: a hint instead of a list, and the + button still works', (tester) async {
+  Future<void> newGroup(WidgetTester tester, String name) async {
+    await tester.tap(find.byKey(const ValueKey('open-projects-add')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const ValueKey('group-name-field')), name);
+    await tester.pump();
+    await tester.runAsync(() async {
+      await tester.tap(find.text('创建'));
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    });
+    await tester.pumpAndSettle();
+  }
+
+  /// 鼠标按住 [from] 拖到 [to] 松开。
+  Future<void> dragTo(WidgetTester tester, Finder from, Finder to) async {
+    final g = await tester.startGesture(tester.getCenter(from), kind: PointerDeviceKind.mouse);
+    for (var i = 1; i <= 10; i++) {
+      await g.moveTo(Offset.lerp(tester.getCenter(from), tester.getCenter(to), i / 10)!);
+      await tester.pump();
+    }
+    await tester.runAsync(() async {
+      await g.up();
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    });
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('empty: a hint instead of a list; + creates a project group', (tester) async {
     await show(tester);
     expect(find.text('Opening'), findsOneWidget);
     expect(find.text('没有打开的项目'), findsOneWidget);
     expect(find.byKey(const ValueKey('open-projects-count')), findsNothing);
+    expect(find.byTooltip('新建项目组…'), findsOneWidget);
+    await newGroup(tester, '  bcpoker ');
+    expect(manager.groups.single.name, 'bcpoker', reason: '名字去掉首尾空白');
+    expect(find.text('bcpoker'), findsOneWidget);
+    expect(find.text('把项目拖到这里'), findsOneWidget, reason: '空组给个提示');
+    expect(openDisk['groups'], [
+      {'name': 'bcpoker', 'members': <String>[]},
+    ]);
+
+    // 重名(不分大小写)不让建
     await tester.tap(find.byKey(const ValueKey('open-projects-add')));
-    expect(events, ['open']);
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const ValueKey('group-name-field')), 'BCPoker');
+    await tester.pump();
+    expect(find.text('已经有叫「BCPoker」的项目组了'), findsOneWidget);
+    expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, '创建')).onPressed, isNull);
+    await tester.tap(find.text('取消'));
+    await tester.pumpAndSettle();
+    expect(manager.groups.length, 1);
+    await finish(tester);
+  });
+
+  testWidgets('drag a project onto a group to put it in, drag it out to take it out', (tester) async {
+    await tester.runAsync(() async {
+      await manager.open(a);
+      await manager.open(b);
+      await manager.createGroup('bcpoker');
+    });
+    await show(tester);
+    await dragTo(tester, find.byKey(ValueKey('open-project-$a')), find.byKey(const ValueKey('group-bcpoker')));
+    expect(manager.groupOf(a)?.name, 'bcpoker');
+    expect(find.text('1/1'), findsOneWidget, reason: '打开数 / 成员数');
+    // 组里的排在组标题下面、往里缩
+    expect(tester.getTopLeft(find.text('alpha')).dy, greaterThan(tester.getTopLeft(find.text('bcpoker')).dy));
+    expect(tester.getTopLeft(find.text('alpha')).dx, greaterThan(tester.getTopLeft(find.text('beta')).dx));
+    expect((openDisk['groups'] as List).single['members'], [a]);
+
+    // 拖到组外的空白处:移出
+    await dragTo(tester, find.byKey(ValueKey('open-project-$a')), find.text('beta'));
+    expect(manager.groupOf(a), isNull);
+    expect(find.text('把项目拖到这里'), findsOneWidget);
+    await finish(tester);
+  });
+
+  testWidgets('a closed member stays in the group, grayed; clicking it reopens; groups survive a restart', (tester) async {
+    await tester.runAsync(() async {
+      await manager.open(a);
+      await manager.open(b);
+      final g = await manager.createGroup('bcpoker');
+      await manager.moveToGroup(a, g);
+      await manager.moveToGroup(b, g);
+      await manager.close(manager.find(a)!);
+    });
+    await show(tester);
+    expect(find.byKey(ValueKey('closed-member-$a')), findsOneWidget);
+    expect(find.text('1/2'), findsOneWidget);
+    await tester.tap(find.byKey(ValueKey('closed-member-$a')));
+    expect(events, ['open alpha']);
+
+    // 收起组:成员都藏起来
+    await tester.runAsync(() => manager.setGroupCollapsed(manager.groups.single, true));
+    await tester.pump();
+    expect(find.text('alpha'), findsNothing);
+    expect(find.text('beta'), findsNothing);
+
+    // 重启:组、成员、收起状态都还在;目录没了的成员去掉
+    Directory(a).deleteSync(recursive: true);
+    await tester.pumpWidget(const SizedBox());
+    await tester.runAsync(() async {
+      manager.dispose();
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    });
+    manager = newManager();
+    await tester.runAsync(() => manager.restore());
+    expect(manager.groups.single.name, 'bcpoker');
+    expect(manager.groups.single.members, [b]);
+    expect(manager.groups.single.collapsed, isTrue);
+    await show(tester);
+    await finish(tester);
+  });
+
+  testWidgets('menus: move to group, rename, open all, close all, delete (projects stay open)', (tester) async {
+    await tester.runAsync(() async {
+      await manager.open(a);
+      await manager.open(b);
+      await manager.createGroup('bcpoker');
+      await manager.createGroup('other');
+    });
+    await show(tester);
+
+    await tester.tap(find.byKey(ValueKey('open-project-$a')), buttons: kSecondaryButton);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('移到项目组'));
+    await tester.pumpAndSettle();
+    await tester.runAsync(() async {
+      await tester.tap(find.widgetWithText(MenuItemButton, 'bcpoker'));
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    });
+    await tester.pumpAndSettle();
+    expect(manager.groupOf(a)?.name, 'bcpoker');
+
+    Future<void> groupMenu(String name, String item) async {
+      await tester.tap(find.byKey(ValueKey('group-$name')), buttons: kSecondaryButton);
+      await tester.pumpAndSettle();
+      await tester.runAsync(() async {
+        await tester.tap(find.text(item));
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      });
+      await tester.pumpAndSettle();
+    }
+
+    await groupMenu('bcpoker', '全部关闭');
+    expect(events, ['closeGroup bcpoker']);
+
+    await groupMenu('bcpoker', '重命名…');
+    await tester.enterText(find.byKey(const ValueKey('group-name-field')), 'other');
+    await tester.pump();
+    expect(find.text('已经有叫「other」的项目组了'), findsOneWidget);
+    await tester.enterText(find.byKey(const ValueKey('group-name-field')), 'bcpoker2');
+    await tester.pump();
+    await tester.runAsync(() async {
+      await tester.tap(find.text('重命名'));
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    });
+    await tester.pumpAndSettle();
+    expect(manager.groupOf(a)?.name, 'bcpoker2');
+
+    // 关掉成员后「全部打开」把它放回列表(先不加载,切过去才加载)
+    await tester.runAsync(() => manager.close(manager.find(a)!));
+    await tester.pump();
+    await tester.runAsync(() async {
+      await manager.openGroup(manager.groups.first);
+    });
+    await tester.pump();
+    expect(manager.find(a), isNotNull);
+    expect(manager.activeProject?.path, a);
+
+    await groupMenu('bcpoker2', '删除项目组(项目不关)');
+    expect(manager.groups.map((g) => g.name), ['other']);
+    expect(manager.find(a), isNotNull, reason: '删组不关项目');
+    expect(manager.groupOf(a), isNull);
     await finish(tester);
   });
 

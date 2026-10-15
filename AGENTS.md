@@ -85,6 +85,7 @@ CodeLiteX 是一款高性能的原生跨平台代码编辑器，内置 Git 管�
 **项目**
 - 一个进程同时打开多个项目，都留在内存里，切换只是换显示哪一个。「Opening Projects」列表里点 × 才真正关闭，关闭时有未保存的修改要问。
 - 标题栏的项目下拉：直接打字就开始搜索、过滤项目（IntelliJ 的做法）。
+- 打开项目面板标题叫「Opening」。**项目组**（同 IntelliJ 的 Project Group）：标题栏的 ＋ 只用来新建项目组（打开项目走标题栏项目下拉 / File 菜单）；把项目拖到组上归进去，拖到组外移出（右键菜单也能移）；组**记住成员**，项目关掉后在组里显示成灰色，点一下重新打开；组的右键菜单有全部打开 / 全部关闭 / 重命名 / 删除（删组不关项目）。
 
 **Git**
 - merge / rebase 有冲突时，标题栏出现两个按钮：一个弹出冲突文件列表，一个 × 中止这次合并。
@@ -165,7 +166,7 @@ cargo build --release --offline -p code-lite-app
 * `lib/features/pull_requests/`：左侧 Pull Requests 工具窗（列表/筛选/详情）、PR 并排差异标签（行内评审评论、右键菜单）与 Timeline 标签；
 * `lib/features/build_tools/`：左侧构建工具窗（Maven 等）。项目根有插件声明的标记文件（pom.xml）时活动条才出现按钮；模块树 → Lifecycle → 任务，双击在新终端标签里运行（有 mvnw 用 `./mvnw`，子模块带 `-f`）；
 * `lib/features/tool_window/`：侧边工具窗的位置与标题栏。`LayoutStore` 里每个 `SideTool`（项目 / Commit / PR / 结构 / Opening Projects / 构建）可以放在左侧或右侧（`ToolSide`），每侧再分上 / 下两块（`ToolSlot`），上下都开着时拆分显示（`side_split_view.dart`）；标题栏 ⋮ ▸ 移动到 ▸ 四个位置。右活动条（`RightStripeWidget`）始终显示，顶上是通知，下面是停靠在右侧的工具窗；构建工具窗（Maven）默认在右侧（同 IntelliJ）。底部工具窗横跨两条活动条之间的整个宽度，左右工具窗停在它上面。位置存在设置文件的 `layout` 里；
-* `lib/features/projects/`：左侧「Opening Projects」工具窗（打开的项目列表，点击切换，× 真正关闭）；
+* `lib/features/projects/`：左侧「Opening」工具窗（打开的项目列表，点击切换，× 真正关闭；项目组 `ProjectGroup` 存在 `open_projects.json` 的 `groups` 里，拖拽归组）；
 * `lib/features/search/`：全局搜索模态框（`global_search_modal.dart`，支持 `Cmd+Shift+F` 快速唤起）。
 
 ### 状态流转与交互规范

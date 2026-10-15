@@ -379,7 +379,8 @@ class _Workbench extends StatelessWidget {
                               onSwitch: (p) => manager.activate(p),
                               onClose: (p) => _closeProject(context, manager, p),
                               onCloseOthers: (p) => _closeOtherProjects(context, manager, p),
-                              onOpenFolder: () => _openFolder(context, manager),
+                              onOpenPath: (path) => _openProject(context, manager, path),
+                              onCloseGroup: (g) => _closeGroup(context, manager, g),
                             ),
                           SideTool.build => BuildToolsPanel(store: buildTools, onOpenFile: workspace.openFile),
                 },
@@ -973,6 +974,16 @@ Future<void> _closeOtherProjects(BuildContext context, ProjectManager manager, O
   for (final e in manager.projects) {
     if (identical(e, keep)) continue;
     if (!context.mounted || !await _confirmClose(context, e)) return; // 取消就停在这里,已经关掉的不管
+    await manager.close(e);
+  }
+}
+
+/// 关掉项目组里打开着的项目(逐个问未保存的改动,取消就停下)。组和成员都留着。
+Future<void> _closeGroup(BuildContext context, ProjectManager manager, ProjectGroup group) async {
+  for (final path in [...group.members]) {
+    final e = manager.find(path);
+    if (e == null) continue;
+    if (!context.mounted || !await _confirmClose(context, e)) return;
     await manager.close(e);
   }
 }

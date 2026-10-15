@@ -28,6 +28,29 @@ class OpenProject {
   bool get isLoaded => context != null;
 }
 
+/// 项目组(IntelliJ 的 Project Group):把几个项目归到一个名字下,比如 bcpoker 下的各个服务。
+/// 组记住成员的路径,项目关掉了也还在组里(显示成灰色,点一下重新打开)。一个项目只属于一个组。
+class ProjectGroup {
+  ProjectGroup(this.name, {List<String>? members, this.collapsed = false}) : members = members ?? [];
+
+  String name;
+  final List<String> members;
+  bool collapsed;
+
+  Map<String, dynamic> toJson() => {'name': name, 'members': members, if (collapsed) 'collapsed': true};
+
+  static ProjectGroup? fromJson(Object? j) {
+    if (j is! Map) return null;
+    final name = j['name'];
+    if (name is! String || name.trim().isEmpty) return null;
+    return ProjectGroup(
+      name,
+      members: [for (final m in (j['members'] as List? ?? const [])) if (m is String && m.isNotEmpty) m],
+      collapsed: j['collapsed'] == true,
+    );
+  }
+}
+
 /// 打开项目列表的存储:`~/.codelitex/open_projects.json`。读写可替换(测试)。
 class OpenProjectsStore {
   OpenProjectsStore({Future<Map<String, dynamic>> Function()? load, Future<void> Function(Map<String, dynamic>)? save})
@@ -37,14 +60,19 @@ class OpenProjectsStore {
   final Future<Map<String, dynamic>> Function() _load;
   final Future<void> Function(Map<String, dynamic>) _save;
 
-  Future<({List<String> open, String? active})> read() async {
+  Future<({List<String> open, String? active, List<ProjectGroup> groups})> read() async {
     final j = await _load();
     final open = [for (final p in (j['open'] as List? ?? const [])) if (p is String && p.isNotEmpty) p];
     final active = j['active'];
-    return (open: open, active: active is String ? active : null);
+    final groups = [for (final g in (j['groups'] as List? ?? const [])) ProjectGroup.fromJson(g)].nonNulls.toList();
+    return (open: open, active: active is String ? active : null, groups: groups);
   }
 
-  Future<void> write(List<String> open, String? active) => _save({'open': open, if (active != null) 'active': active});
+  Future<void> write(List<String> open, String? active, [List<ProjectGroup> groups = const []]) => _save({
+        'open': open,
+        if (active != null) 'active': active,
+        if (groups.isNotEmpty) 'groups': [for (final g in groups) g.toJson()],
+      });
 }
 
 /// 同时打开多个项目:一个进程、多个项目都留在内存里(IntelliJ 的做法)。
@@ -85,6 +113,7 @@ class ProjectManager extends ChangeNotifier {
   final Future<bool> Function(String path) _directoryExists;
 
   final List<OpenProject> _projects = [];
+  final List<ProjectGroup> _groups = [];
   OpenProject? _active;
   ProjectContext? _empty;
   List<String> _recent = const [];
@@ -92,6 +121,18 @@ class ProjectManager extends ChangeNotifier {
 
   /// 打开的项目,按打开的先后(列表里的顺序)。
   List<OpenProject> get projects => List.unmodifiable(_projects);
+
+  /// 项目组(按建的先后)。
+  List<ProjectGroup> get groups => List.unmodifiable(_groups);
+
+  /// [path] 所在的项目组。
+  ProjectGroup? groupOf(String path) {
+    final p = normalize(path);
+    for (final g in _groups) {
+      if (g.members.contains(p)) return g;
+    }
+    return null;
+  }
 
   /// 正在看的项目;一个都没打开时为 null。
   OpenProject? get activeProject => _active;
@@ -143,6 +184,15 @@ class ProjectManager extends ChangeNotifier {
     final recent = await _loadRecentStore();
     _recent = [for (final p in recent) if (await _directoryExists(p)) p];
     final saved = await _store.read();
+    _groups
+      ..clear()
+      ..addAll(saved.groups);
+    for (final g in _groups) {
+      final kept = [for (final m in g.members) if (await _directoryExists(m)) normalize(m)];
+      g.members
+        ..clear()
+        ..addAll(kept.toSet());
+    }
     var paths = <String>[
       for (final p in saved.open)
         if (await _directoryExists(p)) normalize(p),
@@ -262,7 +312,70 @@ class ProjectManager extends ChangeNotifier {
     }
   }
 
-  Future<void> _persist() => _store.write([for (final e in _projects) e.path], _active?.path);
+  Future<void> _persist() => _store.write([for (final e in _projects) e.path], _active?.path, _groups);
+
+  // ---------------------------------------------------------------------------
+  // 项目组
+  // ---------------------------------------------------------------------------
+
+  /// 名字是否可用(非空、不和已有的组重名,不分大小写)。[except] 是正在改名的那个组。
+  bool groupNameAvailable(String name, {ProjectGroup? except}) {
+    final n = name.trim().toLowerCase();
+    return n.isNotEmpty && !_groups.any((g) => !identical(g, except) && g.name.toLowerCase() == n);
+  }
+
+  /// 新建项目组;名字不可用时返回 null。
+  Future<ProjectGroup?> createGroup(String name) async {
+    if (!groupNameAvailable(name)) return null;
+    final g = ProjectGroup(name.trim());
+    _groups.add(g);
+    _notify();
+    await _persist();
+    return g;
+  }
+
+  Future<bool> renameGroup(ProjectGroup group, String name) async {
+    if (!_groups.contains(group) || !groupNameAvailable(name, except: group)) return false;
+    group.name = name.trim();
+    _notify();
+    await _persist();
+    return true;
+  }
+
+  /// 删掉项目组:里面的项目不关,只是不再归组。
+  Future<void> deleteGroup(ProjectGroup group) async {
+    if (!_groups.remove(group)) return;
+    _notify();
+    await _persist();
+  }
+
+  /// 把 [path] 归到 [group](从原来的组里移出);[group] 为 null 就是移出项目组。
+  Future<void> moveToGroup(String path, ProjectGroup? group) async {
+    final p = normalize(path);
+    final from = groupOf(p);
+    if (identical(from, group)) return;
+    from?.members.remove(p);
+    if (group != null && _groups.contains(group)) group.members.add(p);
+    _notify();
+    await _persist();
+  }
+
+  Future<void> setGroupCollapsed(ProjectGroup group, bool collapsed) async {
+    if (group.collapsed == collapsed) return;
+    group.collapsed = collapsed;
+    _notify();
+    await _persist();
+  }
+
+  /// 打开组里还没打开的项目(先放进列表、第一次切过去才加载,同启动恢复),并切到组里第一个。
+  Future<void> openGroup(ProjectGroup group) async {
+    for (final m in group.members) {
+      if (find(m) == null && await _directoryExists(m)) _projects.add(OpenProject(m));
+    }
+    _notify();
+    final first = group.members.map(find).nonNulls.firstOrNull;
+    if (first != null && !await activate(first)) await _persist();
+  }
 
   @override
   void dispose() {
