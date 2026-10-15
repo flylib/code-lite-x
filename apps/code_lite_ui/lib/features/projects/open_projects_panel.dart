@@ -51,7 +51,7 @@ class OpenProjectsPanel extends StatelessWidget {
                   children: [
                     const Flexible(
                       child: Text(
-                        'Opening Projects',
+                        'Opening',
                         overflow: TextOverflow.ellipsis,
                         maxLines: 1,
                         style: TextStyle(color: IntelliJTheme.textHigh, fontSize: 13, fontWeight: FontWeight.w600),

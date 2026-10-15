@@ -97,7 +97,7 @@ void main() {
 
   testWidgets('empty: a hint instead of a list, and the + button still works', (tester) async {
     await show(tester);
-    expect(find.text('Opening Projects'), findsOneWidget);
+    expect(find.text('Opening'), findsOneWidget);
     expect(find.text('没有打开的项目'), findsOneWidget);
     expect(find.byKey(const ValueKey('open-projects-count')), findsNothing);
     await tester.tap(find.byKey(const ValueKey('open-projects-add')));

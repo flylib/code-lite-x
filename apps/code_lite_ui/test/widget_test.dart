@@ -46,15 +46,15 @@ void main() {
     await tester.pump();
 
     expect(find.byTooltip('Opening Projects'), findsOneWidget);
-    expect(find.text('Opening Projects'), findsNothing, reason: '面板默认不显示');
+    expect(find.text('Opening'), findsNothing, reason: '面板默认不显示');
     await tester.tap(find.byTooltip('Opening Projects'));
     await tester.pump();
-    expect(find.text('Opening Projects'), findsOneWidget);
+    expect(find.text('Opening'), findsOneWidget);
     expect(find.text('没有打开的项目'), findsOneWidget);
     // 再点一次收起,和别的工具窗一样
     await tester.tap(find.byTooltip('Opening Projects'));
     await tester.pump();
-    expect(find.text('Opening Projects'), findsNothing);
+    expect(find.text('Opening'), findsNothing);
   });
 
   testWidgets('right activity stripe has no Cargo tool window any more', (WidgetTester tester) async {
