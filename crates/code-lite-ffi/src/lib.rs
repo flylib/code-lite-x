@@ -352,6 +352,68 @@ pub unsafe extern "C" fn codelite_line_diff(
     Box::into_raw(boxed) as *mut u8
 }
 
+// ---------------------------------------------------------------------------
+// 语法树(tree-sitter,见 `code_lite_syntax`)。每个打开的文档一个句柄,不挂在项目上下文上:
+// 编辑器按文档开关,和项目无关。句柄是 `Arc<Document>` 装箱后的指针,关闭时释放。
+// ---------------------------------------------------------------------------
+
+unsafe fn bytes_arg<'a>(p: *const u8, n: usize) -> &'a str {
+    if p.is_null() || n == 0 {
+        return "";
+    }
+    std::str::from_utf8(std::slice::from_raw_parts(p, n)).unwrap_or("")
+}
+
+/// 打开一个文档:[grammar] 是语法名(`java`、`dart`、`tsx`…),[text] 是 UTF-8、每行后面都带 `\n`。
+/// 不认识的语法返回空指针。第一次解析在后台线程里做。
+#[no_mangle]
+pub unsafe extern "C" fn codelite_syntax_open(grammar: *const c_char, text: *const u8, len: usize) -> *mut std::sync::Arc<code_lite_syntax::Document> {
+    if grammar.is_null() {
+        return std::ptr::null_mut();
+    }
+    let name = CStr::from_ptr(grammar).to_string_lossy();
+    match code_lite_syntax::Document::open(&name, bytes_arg(text, len).to_string()) {
+        Some(d) => Box::into_raw(Box::new(d)),
+        None => std::ptr::null_mut(),
+    }
+}
+
+/// 把第 [start] 行起的 [old_count] 行换成 [text](每行带 `\n`)。在 3 ms 预算内同步重解析,超了交给后台。
+#[no_mangle]
+pub unsafe extern "C" fn codelite_syntax_edit(doc: *mut std::sync::Arc<code_lite_syntax::Document>, start: u32, old_count: u32, text: *const u8, len: usize) {
+    if let Some(d) = doc.as_ref() {
+        d.edit(start as usize, old_count as usize, bytes_arg(text, len));
+    }
+}
+
+/// `generation << 1 | 后台还在解析`。
+#[no_mangle]
+pub unsafe extern "C" fn codelite_syntax_status(doc: *mut std::sync::Arc<code_lite_syntax::Document>) -> u64 {
+    doc.as_ref().map_or(0, |d| d.status())
+}
+
+/// 第 [from, to) 行的着色,二进制(格式见 `code_lite_syntax::Document::highlight`),用 [codelite_bytes_free] 释放。
+#[no_mangle]
+pub unsafe extern "C" fn codelite_syntax_highlight(doc: *mut std::sync::Arc<code_lite_syntax::Document>, from: u32, to: u32, out_len: *mut usize) -> *mut u8 {
+    if out_len.is_null() {
+        return std::ptr::null_mut();
+    }
+    *out_len = 0;
+    let Some(d) = doc.as_ref() else { return std::ptr::null_mut() };
+    let boxed = d.highlight(from as usize, to as usize).into_boxed_slice();
+    *out_len = boxed.len();
+    Box::into_raw(boxed) as *mut u8
+}
+
+/// 关闭文档(后台解析会自己停下)。
+#[no_mangle]
+pub unsafe extern "C" fn codelite_syntax_close(doc: *mut std::sync::Arc<code_lite_syntax::Document>) {
+    if !doc.is_null() {
+        let d = Box::from_raw(doc);
+        d.close();
+    }
+}
+
 /// 全局搜索 / 替换(见 `code_lite_fs::project_search`)。
 /// 请求:`{"op":"search"|"replace","root","query","replacement","options":{...}}`;返回结果 JSON,用 [codelite_string_free] 释放。
 /// 不用上下文、不碰共享状态,可以在任意线程(Dart 的后台 isolate)里调;内部用多线程并行。

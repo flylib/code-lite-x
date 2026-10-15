@@ -1,0 +1,19 @@
+[package]
+name = "code-lite-syntax"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+# 语法树(tree-sitter):只收常用的编程语言,每种语言的语法包编进动态库都要占地方
+# (见 docs/rust-core.md 第 6 项的评估)。JSON / YAML / XML / Markdown 等仍用 Dart 的逐行分词。
+[dependencies]
+tree-sitter = "0.25.10"
+streaming-iterator = "0.1.9"
+tree-sitter-java = "0.23.5"
+tree-sitter-dart = "0.2.0"
+tree-sitter-javascript = "0.25.0"
+tree-sitter-typescript = "0.23.2"
+tree-sitter-python = "0.25.0"
+tree-sitter-go = "0.25.0"
+tree-sitter-rust = "0.24.2"

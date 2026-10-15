@@ -1,0 +1,24 @@
+import 'dart:typed_data';
+
+/// web 预览没有 Rust 库:没有语法树,着色全用 Dart 的逐行分词。
+class SyntaxTreeDoc {
+  SyntaxTreeDoc._();
+
+  static SyntaxTreeDoc? open(String grammar, List<String> lines) => null;
+
+  void edit(int start, int oldCount, List<String> newLines) {}
+
+  int get status => 0;
+
+  SyntaxSlice? highlight(int from, int to) => null;
+
+  void close() {}
+}
+
+/// [from] 起每一行的着色:扁平的 `[起列, 止列, 种类, …]`(UTF-16 列);`null` = 这行语法树还没跟上。
+class SyntaxSlice {
+  const SyntaxSlice(this.generation, this.from, this.lines);
+  final int generation;
+  final int from;
+  final List<Uint32List?> lines;
+}

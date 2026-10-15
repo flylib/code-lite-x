@@ -14,3 +14,4 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 code-lite-terminal = { path = "../code-lite-terminal" }
 code-lite-fs = { path = "../code-lite-fs" }
+code-lite-syntax = { path = "../code-lite-syntax" }

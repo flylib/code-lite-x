@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "crates/code-lite-core",
     "crates/code-lite-fs",
+    "crates/code-lite-syntax",
     "crates/code-lite-terminal",
     "crates/code-lite-app",
     "crates/code-lite-ffi",

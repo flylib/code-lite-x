@@ -341,7 +341,11 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
   /// 关掉的文档(controller 已释放)不能再被缓存攥着:高亮缓存一个 2 万行的文件就有约 30 MB。
   /// 以前只有缓存里超过两个文档时才清理,关掉标签、甚至换了项目之后旧文档还一直留着。
   void _dropClosedDocuments() {
-    _highlighters.removeWhere((controller, _) => controller.isDisposed);
+    _highlighters.removeWhere((controller, hl) {
+      if (!controller.isDisposed) return false;
+      hl.dispose(); // 连带关掉 Rust 里的语法树
+      return true;
+    });
     _blame.removeWhere((controller, session) {
       if (!controller.isDisposed) return false;
       session.dispose(controller);
@@ -363,16 +367,24 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
     _dropClosedDocuments();
     // 只保留当前两侧在用的文档:关掉的标签不再占着缓存。
     if (_highlighters.length > 2 && !_highlighters.containsKey(controller)) {
-      _highlighters.removeWhere((c, _) => c != _controller && c != widget.secondaryTab?.controller);
+      _highlighters.removeWhere((c, hl) {
+        if (c == _controller || c == widget.secondaryTab?.controller) return false;
+        hl.dispose();
+        return true;
+      });
     }
-    return _highlighters.putIfAbsent(controller, DocumentHighlighter.new)..update(lang, lines, scheme: _appearance.colorScheme);
+    return _highlighterOf(controller)..update(lang, lines, scheme: _appearance.colorScheme, path: filePath);
   }
+
+  /// 编辑器的高亮带语法树(tree-sitter,在 Rust 里);语法树后台解析完时重画这个窗格。
+  DocumentHighlighter _highlighterOf(CodeEditorController controller) =>
+      _highlighters.putIfAbsent(controller, () => DocumentHighlighter(treeSitter: true));
 
   static LanguageSpec languageOf(String filePath, List<String> lines) =>
       languages.detect(filePath, firstLine: lines.isEmpty ? null : lines.first);
 
   TextPainter _painterFor(DocumentHighlighter hl, int line, String lineText) {
-    final key = '${hl.language?.id}\u0000${hl.startStateAt(line)}\u0000$lineText';
+    final key = '${hl.language?.id}\u0000${hl.styleKeyAt(line)}\u0000$lineText';
     final cached = _linePainters.remove(key);
     if (cached != null) return _linePainters[key] = cached; // 重新插入 = 标为最近使用
     if (_linePainters.length >= 512) {
@@ -444,6 +456,10 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
 
   @override
   void dispose() {
+    for (final hl in _highlighters.values) {
+      hl.dispose();
+    }
+    _highlighters.clear();
     _appearance.removeListener(_onAppearanceChanged);
     _savedSub?.cancel();
     for (final p in _linePainters.values) {
@@ -728,7 +744,7 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
     required bool isPrimary,
   }) {
     return ListenableBuilder(
-      listenable: Listenable.merge([_appearance, controller]),
+      listenable: Listenable.merge([_appearance, controller, _highlighterOf(controller).repaint]),
       builder: (context, _) => _buildPane(
         controller: controller,
         verticalScroll: verticalScroll,

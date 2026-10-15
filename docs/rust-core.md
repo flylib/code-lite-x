@@ -16,7 +16,9 @@ Flutter(Dart)管界面和交互;**计算量大、数据量大、或要和操作�
 | 3 | 项目文件索引 + 按文件名快速打开(Go to File) | ✅ | `code_lite_fs::file_index`:每个项目一份文件清单常驻 Rust 上下文(只存相对路径字符串),第一次用时后台线程建,每次打开 Go to File 后台重扫;打字时 `nucleo-matcher` 模糊匹配(rayon 分块并行),无 `/` 只匹配文件名、有 `/` 匹配路径,同分路径短的在前,返回匹配字符的 UTF-16 下标供高亮。查询很快,界面线程直接调:4 千个文件 < 0.3 ms(含 `/` 的路径匹配约 3 ms),1.8 万个文件 < 1.4 ms;建清单 120~540 ms 在后台。界面 `goto_file_dialog.dart`,快捷键 ⇧⌘O(可配)。全局搜索仍自己遍历目录:它和文件清单的范围不同(搜索跳过所有点目录),遍历只占 80 ms 里的几 ms,不值得耦合 | `d963e3c` |
 | 4 | 文件监视 | ✅ | `code_lite_fs::watcher`(`notify`,macOS 上 FSEvents),每个项目一个,随上下文释放。`target/`、`node_modules/`、`.git` 等目录和编辑器 / 保存用的临时文件在 Rust 里就丢掉;其余按路径攒着,界面每 300 ms 取一批(`codelite_watch_poll`),取时看磁盘分出改了 / 新建 / 删掉,并**就地更新 Go to File 的文件清单**(不重扫)。界面:改了的已打开文件和磁盘对一下,有新建 / 删除时文件树自动刷新(以前不会)。模拟一次编译(target/ 写 5000 个文件 + 改 10 个源文件):交给 Dart 的事件 10024 个 → 10 个。一次变太多(切大分支)时报 overflow,整体重来。Rust 不可用时退回 Dart 的监视 | `38faff9` |
 | 5 | 差异对比(Commit / Merge / PR) | ✅ | `codelite_line_diff`(`code_lite_fs::line_diff`,`imara-diff` 的 histogram 算法 + 行级后处理):两边各拼成一段 `\n` 连起来的 UTF-8 加行数传过去,回来是各段改动的行号区间;Dart 的 `lineHunks` / `sideBySideDiff` 由它排出左右对齐的行(Commit、PR 的并排差异和三方合并共用),行的配对规则不变。原来 Dart 的 Myers 回溯时每步复制整个状态数组,改动一多就爆:2 万行改 2000 处 1 s / 2.4 GB、2 万行整体改写 24 s / 3.3 GB、5 万行整体改写 > 60 s,还都在界面线程上;现在这些都是 3~8 ms、多占几 MB(release 库实测),所以仍同步调用。没有 Rust 库时用 Dart 那份(`dartLineHunks`),测试里两份对照校验 | `258a969` |
-| 6 | 语法解析(tree-sitter) | ⏸ 评估完,等决定 | **能编译**:25 种语言的语法包都在 crates.io,和 `tree-sitter` 0.25 的 ABI 兼容(要先联网下载进缓存,之后可离线)。**包会变大**:全装动态库 3.3 MB → 33 MB(Swift / C# 各约 5.5 MB,C++ / Kotlin / TypeScript 各约 3.5 MB,Java / JS / Python 各约 0.6 MB)。**高亮不会更快**,现在 Dart 的逐行分词已经更快:7 千行的 Java / Dart 文件全量 5 ms vs tree-sitter 25~31 ms,敲一个字 0.02 ms vs 0.5~4 ms,画一屏两边都约 0.13 ms;而且每次按键都要把改动同步给 Rust。**收益只在准确度和新功能**:按语法树区分方法调用 / 类型 / 字段 / 参数、代码折叠、没有语言服务器时更准的结构视图(现在退回正则大纲)。见下方「tree-sitter 评估」 | |
+| 6 | 语法着色(tree-sitter) | ✅ | 新 crate `code-lite-syntax`:Java / Dart / JavaScript / TypeScript(含 tsx)/ Python / Go / Rust 七种语言,每个打开的文档在 Rust 里存一份文本 + 语法树(`codelite_syntax_*`)。改几行就把那几行告诉 Rust,在 3 ms 预算内同步增量重解析(敲一个字通常 1 ms 内),超了交给后台线程;打开文件的第一次解析也在后台(7 千行约 10~45 ms),期间和后台重解析中改过的行先用 Dart 的逐行分词,解析完自动重画。着色规则 = 各语言自带的 highlights 查询 + 我们补的(`crates/code-lite-syntax/queries/`),按 IntelliJ 的习惯归类:字段(声明、`this.x`、`System.out`)紫色、方法声明 / 调用、字符串插值里不是字符串;其余分类和 Dart 分词保持一致(`int` 算类型等),免得解析完的那一刻颜色跳。各语言自带规则的优先级写法不统一,逐个拿样例对照定了「先写的 / 后写的生效」。实测(release 库,7 千行文件):敲一个字 + 重画平均约 1 ms、最坏约 4 ms;动态库 3.3 MB → 10.5 MB。JSON / YAML / XML / Markdown / Kotlin 等仍只用 Dart 分词(Kotlin 的语法包没带着色规则) | |
+| 6b | 代码折叠 | ⏳ | 用同一棵语法树给折叠范围(类、方法、块、多行注释 / import 段),编辑器加行号栏的折叠箭头和隐藏行 | |
+| 6c | 没有语言服务器时的结构视图 | ⏳ | 用语法树(各语言的 tags 查询)出大纲,代替现在的正则大纲 | |
 
 ## tree-sitter 评估(2026-10-15)
 
@@ -27,7 +29,7 @@ Flutter(Dart)管界面和交互;**计算量大、数据量大、或要和操作�
 | Dart 逐行分词(现在) | 4.3~5 ms | 0.02 ms(只重算 1 行) | 0.14~0.25 ms |
 | tree-sitter 解析 + 高亮查询 | 25~31 ms 解析 + 7~11 ms 编译查询 | 0.6~4 ms 增量重解析 | 0.13 ms |
 
-结论:tree-sitter 换来的是「懂语法」而不是速度,值不值得取决于要不要折叠、更细的着色和不靠语言服务器的结构视图;要做的话只装常用语言能把体积压在 +5~8 MB。
+结论(已按此实现,见第 6 项):tree-sitter 换来的是「懂语法」而不是速度,值不值得取决于要不要折叠、更细的着色和不靠语言服务器的结构视图;要做的话只装常用语言能把体积压在 +5~8 MB。
 
 ## 不交给 Rust 的(及原因)
 
