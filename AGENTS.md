@@ -9,7 +9,7 @@ No previous sessions found.
 # CodeLiteX (Code Editor + Git Management IDE)
 
 CodeLiteX 是一款高性能的原生跨平台代码编辑器，内置 Git 管理，并提供全局搜索与交互终端；LSP 与文件大纲（outline）在 Flutter 侧实现（`apps/code_lite_ui/lib/core/lsp/`）。
-工作空间根目录 `/Users/dev/rust/code-lite-x/` 下包含 Rust Core 原生能力层与 Flutter 桌面端交互层：
+工作空间根目录 `/Volumes/space/projects/code-lite-x/` 下包含 Rust Core 原生能力层与 Flutter 桌面端交互层：
 
 | 模块 / 目录 | 角色 | 技术栈 | 交付产物 | 架构定位 |
 | :--- | :--- | :--- | :--- | :--- |
@@ -26,7 +26,7 @@ CodeLiteX 是一款高性能的原生跨平台代码编辑器，内置 Git 管�
 ## 核心开发与工作准则
 
 1. **代码搜索与架构梳理规范**：优先使用 **CodeGraph MCP 工具** 与 **Ripgrep (grep_search)**，避免漫无目的的盲目扫描与读文件循环。
-   - `codegraph_explore` / `codegraph_search`：快速获取符号逐字源码与架构上下文（调用时附带 `projectPath: "/Users/dev/rust/code-lite-x"`）；
+   - `codegraph_explore` / `codegraph_search`：快速获取符号逐字源码与架构上下文（调用时附带 `projectPath: "/Volumes/space/projects/code-lite-x"`）；
    - `codegraph_callers` / `codegraph_callees`：追踪上下游调用链路；
    - `codegraph_impact`：精准评估修改符号时的影响面（Blast Radius）；
    - 检索接口 URL、文本配置、i18n、样式或未建立索引的脚本统一使用 **Grep**。
@@ -109,7 +109,7 @@ CodeLiteX 是一款高性能的原生跨平台代码编辑器，内置 Git 管�
 
 ## 常用命令速查
 
-### 全栈一键命令（根目录 `/Users/dev/rust/code-lite-x/`）
+### 全栈一键命令（根目录 `/Volumes/space/projects/code-lite-x/`）
 ```bash
 # 1. 执行 Rust 全工作区离线单元测试与集成测试 (必须 0 failed)
 export PATH="$HOME/.cargo/bin:$PATH" && cargo test --offline --workspace
@@ -212,6 +212,6 @@ crates/
 4. **CodeGraph 知识图谱自动同步准则**：
    - 每次代码改动与验证完成后，必须立即同步 CodeGraph 代码索引：
      ```bash
-     /Users/dev/.nvm/versions/node/v24.15.0/bin/codegraph sync /Users/dev/rust/code-lite-x
+     /Users/dev/.nvm/versions/node/v24.15.0/bin/codegraph sync /Volumes/space/projects/code-lite-x
      ```
    - 并在 MCP 中确认图谱状态（`codegraph_status`），确保后续代码理解、符号跳转与调用链始终处于最新、最准确的 AST 状态。
