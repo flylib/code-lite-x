@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import '../platform/workspace_io.dart' as io;
 import '../plugins/plugin_manager.dart';
 import '../client/api_client.dart';
+import '../lsp/lsp.dart' show LspService;
 import 'layout_store.dart';
 import 'project_context.dart';
 import 'session_snapshot.dart';
@@ -31,20 +32,27 @@ class OpenProject {
 /// 项目组(IntelliJ 的 Project Group):把几个项目归到一个名字下,比如 bcpoker 下的各个服务。
 /// 组记住成员的路径,项目关掉了也还在组里(显示成灰色,点一下重新打开)。一个项目只属于一个组。
 class ProjectGroup {
-  ProjectGroup(this.name, {List<String>? members, this.collapsed = false}) : members = members ?? [];
+  ProjectGroup(this.name, {String? id, List<String>? members, this.collapsed = false})
+      : id = id ?? 'g${DateTime.now().microsecondsSinceEpoch.toRadixString(36)}',
+        members = members ?? [];
+
+  /// 不随改名变的标识:组里的 Java 项目共用一个 jdtls,它的索引缓存按这个放(改名不用重建索引)。
+  final String id;
 
   String name;
   final List<String> members;
   bool collapsed;
 
-  Map<String, dynamic> toJson() => {'name': name, 'members': members, if (collapsed) 'collapsed': true};
+  Map<String, dynamic> toJson() => {'id': id, 'name': name, 'members': members, if (collapsed) 'collapsed': true};
 
   static ProjectGroup? fromJson(Object? j) {
     if (j is! Map) return null;
     final name = j['name'];
     if (name is! String || name.trim().isEmpty) return null;
+    final id = j['id'];
     return ProjectGroup(
       name,
+      id: id is String && id.isNotEmpty ? id : null,
       members: [for (final m in (j['members'] as List? ?? const [])) if (m is String && m.isNotEmpty) m],
       collapsed: j['collapsed'] == true,
     );
@@ -95,6 +103,8 @@ class ProjectManager extends ChangeNotifier {
         _loadRecentStore = loadRecent ?? io.loadRecentProjects,
         _saveRecentStore = saveRecent ?? io.saveRecentProjects,
         _directoryExists = directoryExists ?? io.directoryExists {
+    // 项目组里的 Java 项目共用一个语言服务器(按组的 id)
+    LspService.shareKeyFor = _shareKeyFor;
     services = ProjectServices(
       layout: layout,
       plugins: plugins,
@@ -107,6 +117,9 @@ class ProjectManager extends ChangeNotifier {
   }
 
   late final ProjectServices services;
+
+  /// 项目根目录 → 它所在项目组的 id(语言服务器的共用键)。
+  String? _shareKeyFor(String root) => groupOf(root)?.id;
   final OpenProjectsStore _store;
   final Future<List<String>> Function() _loadRecentStore;
   final Future<void> Function(List<String>) _saveRecentStore;
@@ -171,7 +184,19 @@ class ProjectManager extends ChangeNotifier {
   Future<void> clearRecent() => _setRecent(const []);
 
   void _notify() {
-    if (!_disposed) notifyListeners();
+    if (_disposed) return;
+    // 告诉各项目自己是不是在前台:后台久了的项目,语言服务器会被停掉(切回来再起)
+    for (final e in _projects) {
+      e.context?.client.lspSetActive(identical(e, _active));
+    }
+    notifyListeners();
+  }
+
+  /// [paths] 这些项目换了项目组:各自的 Java 语言服务器离开原来的组、接入新的。
+  void _regroup(Iterable<String> paths) {
+    for (final p in paths) {
+      unawaited(find(p)?.context?.client.lspReattachServer('java'));
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -345,6 +370,7 @@ class ProjectManager extends ChangeNotifier {
   /// 删掉项目组:里面的项目不关,只是不再归组。
   Future<void> deleteGroup(ProjectGroup group) async {
     if (!_groups.remove(group)) return;
+    _regroup(group.members);
     _notify();
     await _persist();
   }
@@ -356,6 +382,7 @@ class ProjectManager extends ChangeNotifier {
     if (identical(from, group)) return;
     from?.members.remove(p);
     if (group != null && _groups.contains(group)) group.members.add(p);
+    _regroup([p]);
     _notify();
     await _persist();
   }
@@ -380,6 +407,7 @@ class ProjectManager extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    if (LspService.shareKeyFor == _shareKeyFor) LspService.shareKeyFor = null; // 方法引用按 == 比较
     for (final e in _projects) {
       e.context?.dispose();
     }

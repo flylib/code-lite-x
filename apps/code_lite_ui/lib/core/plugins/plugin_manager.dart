@@ -67,11 +67,16 @@ class PluginManager extends ChangeNotifier {
     if (_clients.contains(client)) return;
     _clients.add(client);
     client.lspLaunchResolver = (group) => launchFor(group, projectRoot: client.rootPath);
+    // 项目组共用的服务端:缓存(${dataDir})按组放,不跟着组里第一个项目
+    client.lspSharedLaunchResolver = (group, dataRoot) => launchFor(group, projectRoot: dataRoot);
   }
 
   /// 项目关闭时摘掉它的客户端。
   void detach(ApiClient client) {
-    if (_clients.remove(client)) client.lspLaunchResolver = null;
+    if (_clients.remove(client)) {
+      client.lspLaunchResolver = null;
+      client.lspSharedLaunchResolver = null;
+    }
   }
 
   final PluginHost host;

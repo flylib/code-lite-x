@@ -15,6 +15,7 @@ class LspService {
     this.initializeTimeout = const Duration(seconds: 30),
     this.jdtlsDataRoot,
     this.launchResolver,
+    this.sharedLaunchResolver,
   });
 
   final String? jdtlsDataRoot;
@@ -45,6 +46,16 @@ class LspService {
   }
 
   Future<void> reloadServer(String group) async {}
+
+  Future<void> reattachServer(String group) async {}
+
+  void setActive(bool active) {}
+
+  final LspLaunch? Function(String group, String dataRoot)? sharedLaunchResolver;
+
+  static String? Function(String root)? shareKeyFor;
+  static Duration idleTimeout = const Duration(minutes: 15);
+  static Duration idleCheckInterval = const Duration(minutes: 1);
 
   /// web 没有语言服务器:返回 false,调用方改用整篇 [didChange]。
   Future<bool> didChangeIncremental(String relPath, List<LspTextChange> changes) async => false;

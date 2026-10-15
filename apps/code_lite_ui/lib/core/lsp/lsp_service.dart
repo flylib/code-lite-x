@@ -6,6 +6,10 @@
 //     (崩溃重启走同一条路径),请求则排队等待;
 //   - 找不到服务端、崩溃超过 3 次或初始化超时:该语言转入降级(括号诊断 + 正则大纲),绝不让 UI 卡住;
 //   - 公共方法从不抛异常,也不往 stdout 打日志(Finder 启动的 app 没有终端,stdout 只会是噪音)。
+//   - 省内存(jdtls 一个项目就要五六百 MB):
+//       · Java 服务端启动时补上让 JVM 把空闲内存还给系统的参数([withJvmMemoryFlags]);
+//       · 项目切走超过 [idleTimeout] 没回来,停掉它的服务端进程(挂起),切回来 / 有请求时再起,按当前内容重放打开的文档;
+//       · 同一个项目组里的 Java 项目共用一个 jdtls(多个工作区目录),诊断按路径分回各自的项目。
 
 import 'dart:async';
 import 'dart:convert';
@@ -16,7 +20,7 @@ import 'lsp_common.dart';
 
 export 'lsp_common.dart' show LspDiagnosticsEvent, LspTextChange, LspLaunch, LspLaunchResolver;
 
-enum _State { starting, running, missing, crashed }
+enum _State { starting, running, missing, crashed, suspended }
 
 /// 一个打开的文档(本地真相;服务端重启后据此重放)。
 class _Doc {
@@ -75,11 +79,26 @@ class _Proc {
   }
 }
 
-/// 一个服务端分组的生命周期状态。
+/// 一个服务端分组的生命周期状态。可以被几个项目(几个 [LspService])共用,见 [clients]。
 class _Server {
   _Server(this.group);
 
   final String group;
+
+  /// 共用这个进程的项目(每个项目一个 LspService);不共用时只有创建它的那个。
+  final List<LspService> clients = [];
+
+  /// 共用键(项目组的 id);不共用时为 null。
+  String? shareKey;
+
+  /// 定时看一眼是不是该挂起了(所有项目都切走超过 [LspService.idleTimeout])。
+  Timer? idleTimer;
+
+  /// 没有项目在用了:不再启动 / 重启。
+  bool get closed => clients.isEmpty;
+
+  /// 启动参数、工作目录取自第一个项目。
+  LspService get host => clients.first;
   _State state = _State.starting;
   List<String> argv = const [];
   int restarts = 0;
@@ -103,6 +122,7 @@ class _Server {
   final List<void Function(_Proc? proc)> queue = [];
 
   bool get fallback => state == _State.missing || state == _State.crashed;
+  bool get suspended => state == _State.suspended;
 
   _Proc? get ready => state == _State.running && proc != null && proc!.initialized && !proc!.exited ? proc : null;
 }
@@ -115,8 +135,77 @@ class LspService {
     this.initializeTimeout = const Duration(seconds: 30),
     this.jdtlsDataRoot,
     this.launchResolver,
+    this.sharedLaunchResolver,
   }) : _overrides = serverOverrides ?? const {} {
     _resolvedRoot = _tryResolve(root);
+  }
+
+  /// 项目组共用的服务端怎么启动:第二个参数是这个组的缓存目录名用的路径(插件按它展开 `${dataDir}`)。
+  /// 没有时退回 [launchResolver](缓存放在第一个项目名下)。
+  final LspLaunch? Function(String group, String dataRoot)? sharedLaunchResolver;
+
+  // -------------------------------------------------------------------------
+  // 省内存:共用 / 挂起(进程级设置,由 ProjectManager 接上)
+  // -------------------------------------------------------------------------
+
+  /// 项目根目录 → 共用键(它所在项目组的 id);不在组里返回 null。ProjectManager 设置。
+  static String? Function(String root)? shareKeyFor;
+
+  /// 哪些分组的服务端可以被项目组共用。jdtls 支持一个进程管多个工作区目录(Maven / Gradle 项目各自导入)。
+  static const Set<String> sharedGroups = {'java'};
+
+  /// 项目切走多久后停掉它的服务端。
+  static Duration idleTimeout = const Duration(minutes: 15);
+
+  /// 多久检查一次(测试里调小)。
+  static Duration idleCheckInterval = const Duration(minutes: 1);
+
+  /// 正在共用的服务端:`分组|共用键` → 服务端。
+  static final Map<String, _Server> _shared = {};
+
+  /// 这个项目现在是不是正在显示的那个(ProjectManager 切换时设置)。
+  bool _active = true;
+  DateTime _inactiveSince = DateTime.now();
+
+  /// 项目切到前台 / 后台。切回来时把挂起的服务端重新拉起。
+  void setActive(bool active) {
+    if (_disposed || active == _active) return;
+    _active = active;
+    if (!active) {
+      _inactiveSince = DateTime.now();
+      return;
+    }
+    for (final server in _servers.values) {
+      if (server.suspended) _wake(server);
+    }
+  }
+
+  /// Java 服务端(jdtls)的 JVM 参数:换成 ParallelGC 并调低垃圾回收的时间占比,空闲时把堆还给系统
+  /// (默认的 G1 撑大了就不太还);不用内存映射读 jar,依赖多的项目常驻内存少一截。同 VS Code 的 Java 插件。
+  static const List<String> jvmMemoryFlags = [
+    '-XX:+UseParallelGC',
+    '-XX:GCTimeRatio=4',
+    '-XX:AdaptiveSizePolicyWeight=90',
+    '-Dsun.zip.disableMemoryMapping=true',
+  ];
+
+  /// 给 Java 服务端的启动命令补上 [jvmMemoryFlags]:直接跑 `java` 的(插件)插在 java 后面,
+  /// Homebrew 的 `jdtls` 启动脚本用 `--jvm-arg=`;已经指定了垃圾回收器 / 同名参数的不重复加。其它命令原样返回。
+  static List<String> withJvmMemoryFlags(List<String> argv) {
+    if (argv.isEmpty) return argv;
+    final exe = argv.first.split(RegExp(r'[/\\]')).last.toLowerCase();
+    final isJava = exe == 'java' || exe == 'java.exe';
+    final isScript = exe == 'jdtls' || exe == 'jdtls.bat' || exe == 'jdtls.cmd';
+    if (!isJava && !isScript) return argv;
+    String bare(String a) => a.startsWith('--jvm-arg=') ? a.substring(10) : a;
+    final given = argv.map(bare).toList();
+    final hasGc = given.any((a) => RegExp(r'^-XX:\+Use\w*GC$').hasMatch(a));
+    final missing = [
+      for (final f in jvmMemoryFlags)
+        if (!(f.endsWith('GC') && hasGc) && !given.any((a) => a.split('=').first == f.split('=').first)) f,
+    ];
+    if (missing.isEmpty) return argv;
+    return [argv.first, ...isJava ? missing : missing.map((f) => '--jvm-arg=$f'), ...argv.sublist(1)];
   }
 
   /// 工作区根目录(绝对路径)。
@@ -178,6 +267,8 @@ class LspService {
       }
       final proc = server.ready;
       if (proc != null) _sendDidOpen(proc, relPath, _docs[relPath]!);
+      // 挂起着:拉起来(启动后重放全部打开的文档)
+      if (server.suspended) _wake(server);
       // 仍在启动中:initialize 成功后统一重放。
     } catch (_) {}
   }
@@ -258,13 +349,29 @@ class LspService {
 
   /// 重启某个分组的语言服务器(插件装好 / 卸载 / 启停之后):按新的启动方式重新拉起,
   /// 并为该分组已打开的文档重放 didOpen;没有可用服务端时这些文档转入降级诊断。
+  ///
+  /// 共用的服务端:旧进程先摘掉登记(之后接入的项目开新的),等共用它的项目都各自重启过(插件管理器对每个项目都会调一次)
+  /// 才关掉 —— 整个组只重启一次。
   Future<void> reloadServer(String group) async {
     if (_disposed) return;
-    final old = _servers.remove(group);
-    if (old != null) {
-      old.retired = true;
-      await _shutdown(old);
+    final old = _servers[group];
+    if (old != null && old.shareKey != null && identical(_shared['$group|${old.shareKey}'], old)) {
+      _shared.remove('$group|${old.shareKey}');
     }
+    await _rejoin(group, retire: true);
+  }
+
+  /// 项目换了项目组(或组删了):离开现在共用的服务端,接入新组的(或自己单开一个)。
+  Future<void> reattachServer(String group) async {
+    if (_disposed) return;
+    final current = _servers[group];
+    if (current != null && current.shareKey == _shareKey(group)) return; // 没变
+    await _rejoin(group, retire: false);
+  }
+
+  Future<void> _rejoin(String group, {required bool retire}) async {
+    final old = _servers.remove(group);
+    if (old != null) await _leave(old, retire: retire);
     _Server? server;
     for (final e in _docs.entries) {
       final lang = e.value.languageId;
@@ -272,6 +379,31 @@ class LspService {
       server ??= _serverFor(lang);
       if (server == null || server.fallback) _emitFallback(e.key, e.value.text, lang);
     }
+  }
+
+  /// 这个项目不再用 [server]:最后一个离开的关掉进程;别的项目还在用时只撤回自己的文档和工作区目录。
+  Future<void> _leave(_Server server, {bool retire = false}) async {
+    server.clients.remove(this);
+    if (server.closed) {
+      server.retired = true;
+      server.idleTimer?.cancel();
+      final key = '${server.group}|${server.shareKey}';
+      if (identical(_shared[key], server)) _shared.remove(key);
+      await _shutdown(server);
+      return;
+    }
+    final proc = server.ready;
+    if (proc == null) return; // 没在跑:下次启动时本来就不会带上这个项目
+    for (final e in _docs.entries) {
+      final lang = e.value.languageId;
+      if (lang == null || lspServerGroupFor(lang) != server.group) continue;
+      proc.notify('textDocument/didClose', {
+        'textDocument': {'uri': _uriFor(e.key)},
+      });
+    }
+    proc.notify('workspace/didChangeWorkspaceFolders', {
+      'event': {'added': const [], 'removed': [_folder()]},
+    });
   }
 
   Future<void> didClose(String relPath) async {
@@ -361,7 +493,10 @@ class LspService {
             _State.starting || _State.running => 'running',
             _State.missing => 'missing',
             _State.crashed => 'crashed',
+            _State.suspended => 'suspended',
           },
+          if (s.shareKey != null) 'shared': s.shareKey,
+          'projects': s.clients.length,
           'initialized': s.ready != null,
           'restarts': s.restarts,
           if (s.source != null) 'source': s.source,
@@ -380,8 +515,9 @@ class LspService {
     if (_disposed) return;
     _disposed = true;
     try {
-      await Future.wait(_servers.values.map(_shutdown));
+      await Future.wait([for (final s in _servers.values) _leave(s)]);
     } catch (_) {}
+    _servers.clear();
     try {
       await _events.close();
     } catch (_) {}
@@ -422,9 +558,28 @@ class LspService {
     if (group == null) return null;
     final existing = _servers[group];
     if (existing != null) return existing;
-    final server = _Server(group);
+    // 同一个项目组的已经开着一个:接进去(把这个项目的目录加进它的工作区)
+    final key = _shareKey(group);
+    if (key != null) {
+      final shared = _shared['$group|$key'];
+      if (shared != null && !shared.retired && !shared.closed) {
+        shared.clients.add(this);
+        _servers[group] = shared;
+        shared.ready?.notify('workspace/didChangeWorkspaceFolders', {
+          'event': {'added': [_folder()], 'removed': const []},
+        });
+        if (shared.suspended) _wake(shared);
+        return shared;
+      }
+    }
+    final server = _Server(group)..shareKey = key;
+    server.clients.add(this);
     _servers[group] = server;
-    final launch = _overrides.isEmpty ? launchResolver?.call(group) : null;
+    if (key != null) _shared['$group|$key'] = server;
+    final launch = _overrides.isEmpty
+        ? (key != null && sharedLaunchResolver != null ? sharedLaunchResolver!(group, _sharedDataRoot(key)) : null) ??
+            launchResolver?.call(group)
+        : null;
     if (launch != null && launch.argv.isNotEmpty && _findExecutable(launch.argv.first) != null) {
       server
         ..argv = launch.argv
@@ -447,8 +602,44 @@ class LspService {
     return server;
   }
 
+  /// [group] 这个分组在这个项目里用的共用键;不共用返回 null。
+  String? _shareKey(String group) => sharedGroups.contains(group) ? shareKeyFor?.call(root) : null;
+
+  /// 项目组的服务端缓存目录名用的路径(只用来起名字,不是真的目录)。
+  static String _sharedDataRoot(String key) => '/codelitex-project-group/group-$key';
+
+  Map<String, String> _folder() {
+    final name = root.split(RegExp(r'[/\\]')).lastWhere((s) => s.isNotEmpty, orElse: () => root);
+    return {'uri': Uri.file(root).toString(), 'name': name};
+  }
+
+  /// 挂起的服务端重新拉起(切回项目 / 有请求 / 打开文件)。
+  void _wake(_Server server) {
+    if (!server.suspended || server.closed) return;
+    server.state = _State.starting;
+    unawaited(server.host._start(server));
+  }
+
+  /// 每隔一会儿看一眼:共用这个服务端的项目都切走超过 [idleTimeout] 了,就停掉进程(挂起)。
+  void _armIdle(_Server server) {
+    server.idleTimer?.cancel();
+    server.idleTimer = Timer.periodic(idleCheckInterval, (_) => unawaited(_checkIdle(server)));
+  }
+
+  static Future<void> _checkIdle(_Server server) async {
+    if (server.closed || server.state != _State.running) return;
+    final now = DateTime.now();
+    for (final c in server.clients) {
+      if (c._active || now.difference(c._inactiveSince) < idleTimeout) return;
+    }
+    server.state = _State.suspended;
+    server.idleTimer?.cancel();
+    server.idleTimer = null;
+    await server.host._shutdown(server);
+  }
+
   Future<void> _start(_Server server) async {
-    if (_disposed) return;
+    if (server.closed) return;
     server.state = _State.starting;
     final Process process;
     try {
@@ -461,8 +652,9 @@ class LspService {
           env['JAVA_HOME'] = javaHome;
           env['PATH'] = '$javaHome/bin${Platform.isWindows ? ';' : ':'}${env['PATH']}';
         }
-        if (!argv.contains('-data')) argv = [...argv, '-data', _jdtlsDataDir()];
+        if (!argv.contains('-data')) argv = [...argv, '-data', _jdtlsDataDir(server.shareKey)];
       }
+      if (server.group == 'java') argv = withJvmMemoryFlags(argv);
       process = await Process.start(
         argv.first,
         argv.sublist(1),
@@ -477,7 +669,7 @@ class LspService {
     }
     final proc = _Proc(process);
     server.proc = proc;
-    if (_disposed) {
+    if (server.closed || server.retired) {
       process.kill(ProcessSignal.sigkill);
       return;
     }
@@ -508,8 +700,8 @@ class LspService {
 
     // jdtls 首次打开大 Maven / Gradle 项目要先建索引,initialize 应答明显更慢。
     final timeout = server.initializeTimeout ?? (server.group == 'java' ? const Duration(minutes: 3) : initializeTimeout);
-    final result = await proc.request('initialize', _initializeParams(), timeout);
-    if (_disposed || server.proc != proc || proc.exited) return; // 退出由 _onExit 处理
+    final result = await proc.request('initialize', _initializeParams(server), timeout);
+    if (server.closed || server.proc != proc || proc.exited) return; // 退出由 _onExit 处理
     if (result is! Map) {
       // 初始化超时或报错:服务端没救了,直接降级,不再重试。
       server.lastError = 'initialize failed or timed out';
@@ -523,11 +715,14 @@ class LspService {
     proc.notify('initialized', <String, Object?>{});
     proc.initialized = true;
     server.state = _State.running;
-    // 按当前内容重放该分组的全部打开文档(首次启动与崩溃重启共用)。
-    for (final e in _docs.entries) {
-      final lang = e.value.languageId;
-      if (lang != null && lspServerGroupFor(lang) == server.group) _sendDidOpen(proc, e.key, e.value);
+    // 按当前内容重放该分组的全部打开文档(首次启动、崩溃重启、挂起后拉起共用;共用时是每个项目的)。
+    for (final c in server.clients) {
+      for (final e in c._docs.entries) {
+        final lang = e.value.languageId;
+        if (lang != null && lspServerGroupFor(lang) == server.group) c._sendDidOpen(proc, e.key, e.value);
+      }
     }
+    _armIdle(server);
     final queued = List.of(server.queue);
     server.queue.clear();
     for (final op in queued) {
@@ -538,7 +733,7 @@ class LspService {
   void _onExit(_Server server, _Proc proc, int code) {
     proc.exited = true;
     proc.failPending();
-    if (_disposed || server.retired || server.proc != proc || server.fallback) return;
+    if (server.closed || server.retired || server.proc != proc || server.fallback || server.suspended) return;
     final tail = proc.stderrTail.isEmpty ? '' : ': ${proc.stderrTail.last}';
     server.lastError = 'exited with code $code$tail';
     // rustup 代理在组件未安装时以错误退出:本质是「没装」,不必反复重启。
@@ -551,7 +746,7 @@ class LspService {
   }
 
   void _onCrash(_Server server) {
-    if (_disposed || server.retired) return;
+    if (server.closed || server.retired) return;
     server.restarts++;
     if (server.restarts > maxRestarts) {
       server.state = _State.crashed;
@@ -561,16 +756,18 @@ class LspService {
     server.state = _State.starting;
     final delay = Duration(milliseconds: 200 * (1 << (server.restarts - 1)));
     Timer(delay, () {
-      if (!_disposed && server.state == _State.starting) unawaited(_start(server));
+      if (!server.closed && server.state == _State.starting) unawaited(server.host._start(server));
     });
   }
 
   /// 转入降级:排队请求以 null 结束,并为该分组已打开的文档补发降级诊断。
   void _enterFallback(_Server server) {
     _failQueue(server);
-    for (final e in _docs.entries) {
-      final lang = e.value.languageId;
-      if (lang != null && lspServerGroupFor(lang) == server.group) _emitFallback(e.key, e.value.text, lang);
+    for (final c in server.clients) {
+      for (final e in c._docs.entries) {
+        final lang = e.value.languageId;
+        if (lang != null && lspServerGroupFor(lang) == server.group) c._emitFallback(e.key, e.value.text, lang);
+      }
     }
   }
 
@@ -585,7 +782,7 @@ class LspService {
   }
 
   Future<Object?> _request(_Server server, String method, Object? params) {
-    if (server.fallback || _disposed) return Future.value(null);
+    if (server.fallback || _disposed || server.closed) return Future.value(null);
     final c = Completer<Object?>();
     void op(_Proc? proc) {
       if (proc == null) {
@@ -602,6 +799,7 @@ class LspService {
       op(proc);
     } else {
       server.queue.add(op);
+      if (server.suspended) _wake(server);
     }
     return c.future.timeout(server.requestTimeout ?? requestTimeout, onTimeout: () => null);
   }
@@ -617,17 +815,15 @@ class LspService {
     });
   }
 
-  Map<String, Object?> _initializeParams() {
+  Map<String, Object?> _initializeParams(_Server server) {
     final rootUri = Uri.file(root).toString();
-    final name = root.split(RegExp(r'[/\\]')).lastWhere((s) => s.isNotEmpty, orElse: () => root);
     return {
       'processId': pid,
       'clientInfo': {'name': 'CodeLiteX'},
       'rootPath': root,
       'rootUri': rootUri,
-      'workspaceFolders': [
-        {'uri': rootUri, 'name': name},
-      ],
+      // 共用时是组里每个项目的目录
+      'workspaceFolders': [for (final c in server.clients) c._folder()],
       'capabilities': {
         'general': {
           'positionEncodings': ['utf-16'],
@@ -666,9 +862,12 @@ class LspService {
       final id = msg['id'];
       if (method is String) {
         if (id != null) {
-          _answerServerRequest(proc, id, method, msg['params']);
+          _answerServerRequest(server, proc, id, method, msg['params']);
         } else if (method == 'textDocument/publishDiagnostics') {
-          _onPublishDiagnostics(msg['params']);
+          // 共用时每个项目只认自己目录下的文件
+          for (final c in List.of(server.clients)) {
+            c._onPublishDiagnostics(msg['params']);
+          }
         }
         return;
       }
@@ -680,7 +879,7 @@ class LspService {
   }
 
   /// 服务端 → 客户端的请求必须应答,否则 rust-analyzer / gopls 等会一直等待。
-  void _answerServerRequest(_Proc proc, Object id, String method, Object? params) {
+  void _answerServerRequest(_Server server, _Proc proc, Object id, String method, Object? params) {
     Object? result;
     switch (method) {
       case 'workspace/configuration':
@@ -693,9 +892,7 @@ class LspService {
       case 'window/showDocument':
         result = null;
       case 'workspace/workspaceFolders':
-        result = [
-          {'uri': Uri.file(root).toString(), 'name': root},
-        ];
+        result = [for (final c in server.clients) c._folder()];
       case 'workspace/applyEdit':
         result = {'applied': false};
       default:
@@ -839,9 +1036,11 @@ class LspService {
   }
 
   /// jdtls 的工作区缓存(索引、项目导入结果):每个项目一份,放在 ~/.codelitex/jdtls 下,不写进项目目录。
-  String _jdtlsDataDir() {
+  /// 项目组共用的服务端一个组一份([shareKey])。
+  String _jdtlsDataDir([String? shareKey]) {
     final home = Platform.environment['HOME'] ?? Platform.environment['USERPROFILE'] ?? Directory.systemTemp.path;
     final parent = jdtlsDataRoot ?? '$home/.codelitex/jdtls';
+    final root = shareKey == null ? this.root : _sharedDataRoot(shareKey);
     final name = root.split(RegExp(r'[/\\]')).lastWhere((s) => s.isNotEmpty, orElse: () => 'workspace');
     final safe = name.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
     // 同名项目在不同位置时用路径哈希区分

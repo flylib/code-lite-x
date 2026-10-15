@@ -394,7 +394,7 @@ class _LspStatusChipState extends State<LspStatusChip> {
 
   static bool _sameServer(Map<String, dynamic>? a, Map<String, dynamic>? b) {
     if (a == null || b == null) return a == b;
-    for (final k in const ['state', 'initialized', 'command', 'error', 'source']) {
+    for (final k in const ['state', 'initialized', 'command', 'error', 'source', 'projects', 'shared']) {
       if (a[k] != b[k]) return false;
     }
     return true;
@@ -409,8 +409,16 @@ class _LspStatusChipState extends State<LspStatusChip> {
     final (IconData icon, Color color, String label, String tip) = switch (s['state']) {
       'missing' => (Icons.extension_off_outlined, IntelliJTheme.textMuted, '未安装 $name', '没有找到 $name。可在 CodeLiteX ▸ Plugins… 安装对应的语言插件;目前只做括号配对检查。'),
       'crashed' => (Icons.error_outline, IntelliJTheme.diagError, '$name 已退出', '$name 反复崩溃,已停用,只做括号配对检查。${error == null ? '' : '\n$error'}'),
+      'suspended' => (Icons.pause_circle_outline, IntelliJTheme.textMuted, '$name 已暂停', '项目在后台太久,$name 已停下省内存;打开文件或切回来时会重新启动'),
       _ when s['initialized'] != true => (Icons.sync, IntelliJTheme.textMuted, '$name 启动中…', '$name 正在启动(大项目首次打开需要建索引)'),
-      _ => (Icons.check_circle_outline, IntelliJTheme.gitGreen, name, '$name 运行中${s['source'] != null ? '(插件 ${s['source']})' : ''}\n${s['command']}'),
+      _ => (
+          Icons.check_circle_outline,
+          IntelliJTheme.gitGreen,
+          name,
+          '$name 运行中${s['source'] != null ? '(插件 ${s['source']})' : ''}'
+              '${s['shared'] != null && (s['projects'] as int? ?? 1) > 1 ? '\n和项目组里的 ${s['projects']} 个项目共用一个进程' : ''}'
+              '\n${s['command']}'
+        ),
     };
     return Tooltip(
       message: tip,

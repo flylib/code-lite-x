@@ -86,6 +86,7 @@ CodeLiteX 是一款高性能的原生跨平台代码编辑器，内置 Git 管�
 - 一个进程同时打开多个项目，都留在内存里，切换只是换显示哪一个。「Opening Projects」列表里点 × 才真正关闭，关闭时有未保存的修改要问。
 - 标题栏的项目下拉：直接打字就开始搜索、过滤项目（IntelliJ 的做法）。
 - 打开项目面板标题叫「Opening」。**项目组**（同 IntelliJ 的 Project Group）：标题栏的 ＋ 只用来新建项目组（打开项目走标题栏项目下拉 / File 菜单）；把项目拖到组上归进去，拖到组外移出（右键菜单也能移）；组**记住成员**，项目关掉后在组里显示成灰色，点一下重新打开；组的右键菜单有全部打开 / 全部关闭 / 重命名 / 删除（删组不关项目）。
+- **语言服务器省内存**（jdtls 一个项目五六百 MB）：① Java 服务端启动时自动补 `-XX:+UseParallelGC -XX:GCTimeRatio=4 -XX:AdaptiveSizePolicyWeight=90 -Dsun.zip.disableMemoryMapping=true`（同 VS Code 的 Java 插件；对已装插件和 Homebrew 的 `jdtls` 都生效，`LspService.withJvmMemoryFlags`）；② 项目在后台超过 15 分钟，停掉它的语言服务器（状态栏「已暂停」），切回来 / 打开文件 / 有请求时再起，按当前内容重放；③ **同一项目组里的 Java 项目共用一个 jdtls**（多工作区目录，按组 id 共用，缓存一个组一份，改名不重建索引；移进 / 移出组时该项目换到对应的进程）。
 
 **Git**
 - merge / rebase 有冲突时，标题栏出现两个按钮：一个弹出冲突文件列表，一个 × 中止这次合并。
@@ -155,7 +156,7 @@ cargo build --release --offline -p code-lite-app
 * `lib/core/github/`：GitHub Pull Request 服务（`github_service.dart`），经本机 `gh` 命令行（`gh pr` / `gh api`）读写 PR、评审与评论，应用不保存 token；
 * `lib/core/plugins/`：插件框架（声明式 `plugin.json` + 独立进程）。`plugin_manifest.dart` 定义清单格式（语言、着色规则、语言服务器、构建工具 `buildTools`、安装步骤；`bundled: true` 为随 IDE 自带、默认启用、只能停用不能卸载），`builtin_catalog.dart` 是随 IDE 打包的插件目录（以后由插件市场提供同格式索引），`plugin_host_io.dart` 负责下载解压 / 运行安装命令 / 展开变量（装到 `~/.codelitex/plugins/<id>`，走系统代理），`plugin_manager.dart` 管理安装状态、新语言提示，并把语言服务器启动方式交给 LSP；
 * `lib/core/state/`：应用状态。**一个进程可同时打开多个项目**：`project_manager.dart`（`ProjectManager`）管打开列表 / 当前项目 / 关闭，列表存 `~/.codelitex/open_projects.json`，启动只加载当前项目，其余首次切到时才加载；`project_context.dart`（`ProjectContext`）是**每个项目一份**的状态包（自己的 `ApiClient`——含独立的 Rust 终端上下文、语言服务器、Git——以及编辑会话、工作区、终端、Git 日志、分支、PR、构建工具窗）。切换项目只是换显示哪一份，其它项目留在内存里照常运行，关闭才释放。窗口布局、设置、插件、编辑器外观是全局共享的。新写的异步 store 要混入 `DisposeSafeNotifier`（`dispose_safe.dart`），因为项目随时可能被关闭；
-* `lib/core/lsp/`：Dart 实现的 LSP 客户端与文件大纲（outline；没有语言服务器时先用 Rust 语法树的大纲 `rustOutline`，再退回正则大纲）；Rust 侧不再有 LSP / 代码图谱；
+* `lib/core/lsp/`：Dart 实现的 LSP 客户端与文件大纲（outline；没有语言服务器时先用 Rust 语法树的大纲 `rustOutline`，再退回正则大纲）。服务端进程可以被项目组共用（`LspService.shareKeyFor` / `_shared`），后台久了挂起（`setActive`、`idleTimeout`）；Rust 侧不再有 LSP / 代码图谱；
 * `lib/core/build_tools/`：构建工具的模块树与命令拼装（`build_model.dart`）。插件清单的 `buildTools.model` 按名字选 IDE 内置读取器（目前 `maven`：`maven_reader.dart` 读 pom.xml 的 `<modules>`，`xml_lite.dart` 是不依赖外部包的极简 XML 解析）；
 * `lib/core/client/`：高层业务客户端（`api_client.dart`），封装异步 Future/Stream，并在 FFI 动态库未加载时无缝回退至离线 Mock 逻辑；
 * `lib/core/theme/`：全局主题与样式（`intellij_theme.dart`），锁定 JetBrains Darcula 经典配比；

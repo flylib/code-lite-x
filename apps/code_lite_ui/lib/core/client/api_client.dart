@@ -35,7 +35,7 @@ class ApiClient {
         _root = initialRoot,
         _git = GitService(initialRoot),
         _github = GitHubService(initialRoot) {
-    _lsp = LspService(initialRoot, launchResolver: _launchFor);
+    _lsp = LspService(initialRoot, launchResolver: _launchFor, sharedLaunchResolver: _sharedLaunchFor);
     _ffi.initialize(initialRoot);
     _attachLsp();
   }
@@ -51,6 +51,21 @@ class ApiClient {
   // 转发给当前的 resolver:之后再设置 / 更换 resolver 不必重建 LspService。
   LspLaunch? _launchFor(String group) => lspLaunchResolver?.call(group);
 
+  /// 项目组共用的语言服务器怎么启动(由 PluginManager 设置):第二个参数决定缓存目录(一个组一份)。
+  LspLaunch? Function(String group, String dataRoot)? lspSharedLaunchResolver;
+  LspLaunch? _sharedLaunchFor(String group, String dataRoot) => lspSharedLaunchResolver?.call(group, dataRoot);
+
+  bool _lspActive = true;
+
+  /// 项目切到前台 / 后台:后台超过一段时间没回来,它的语言服务器会被停掉,切回来再起。
+  void lspSetActive(bool active) {
+    _lspActive = active;
+    _lsp.setActive(active);
+  }
+
+  /// 项目换了项目组:离开原来共用的语言服务器,接入新组的。
+  Future<void> lspReattachServer(String group) => _lsp.reattachServer(group);
+
   /// 插件装好 / 卸载之后,让对应分组的语言服务器按新的启动方式重启。
   Future<void> lspReloadServer(String group) => _lsp.reloadServer(group);
 
@@ -64,7 +79,7 @@ class ApiClient {
     _github = GitHubService(path);
     // 旧项目的语言服务器在后台关掉,不阻塞切换。
     final oldLsp = _lsp;
-    _lsp = LspService(path, launchResolver: _launchFor);
+    _lsp = LspService(path, launchResolver: _launchFor, sharedLaunchResolver: _sharedLaunchFor)..setActive(_lspActive);
     _attachLsp();
     oldLsp.dispose();
     return _ffi.reinitialize(path);

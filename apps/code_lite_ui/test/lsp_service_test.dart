@@ -21,6 +21,9 @@ bool cfgOk = false, progressOk = false, unknownOk = false;
 String rootPath = '';
 late List<String> args;
 
+/// 工作区目录数(initialize 的 workspaceFolders,随 didChangeWorkspaceFolders 增减):验证项目组共用。
+int folders = 0;
+
 /// --incremental 模式下服务端自己保存的文档内容(按收到的范围逐项应用)。
 final Map<String, List<String>> docs = {};
 
@@ -84,6 +87,7 @@ void handle(Map msg) {
   switch (method) {
     case 'initialize':
       rootPath = Uri.parse(params['rootUri'] as String).toFilePath();
+      folders = (params['workspaceFolders'] as List?)?.length ?? 0;
       send({
         'id': id,
         'result': {
@@ -105,7 +109,7 @@ void handle(Map msg) {
       docs[doc['uri'] as String] = (doc['text'] as String).split('\n');
       if (args.contains('-data')) {
         // 以 jdtls 方式启动:回报收到的 -data 目录与 JAVA_HOME
-        publish(doc['uri'] as String, 'data=${args[args.indexOf('-data') + 1]} java=${Platform.environment['JAVA_HOME'] ?? ''}');
+        publish(doc['uri'] as String, 'data=${args[args.indexOf('-data') + 1]} folders=$folders java=${Platform.environment['JAVA_HOME'] ?? ''}');
         return;
       }
       publish(doc['uri'] as String, 'echo: ${(doc['text'] as String).split('\n').first}');
@@ -148,6 +152,9 @@ void handle(Map msg) {
           },
         ],
       });
+    case 'workspace/didChangeWorkspaceFolders':
+      final event = params['event'] as Map;
+      folders += (event['added'] as List).length - (event['removed'] as List).length;
     case 'shutdown':
       if (!args.contains('--ignore-exit')) send({'id': id, 'result': null});
     case 'exit':
@@ -728,6 +735,32 @@ int main(int argc, char **argv) {
   // 集成:假语言服务端
   // =========================================================================
 
+  group('JVM memory flags', () {
+    test('java gets them after the binary, the jdtls script as --jvm-arg, other commands untouched', () {
+      expect(LspService.withJvmMemoryFlags(['/jdk/bin/java', '-Xmx1G', '-jar', 'x.jar']), [
+        '/jdk/bin/java',
+        ...LspService.jvmMemoryFlags,
+        '-Xmx1G',
+        '-jar',
+        'x.jar',
+      ]);
+      expect(LspService.withJvmMemoryFlags(['/opt/homebrew/bin/jdtls']), [
+        '/opt/homebrew/bin/jdtls',
+        for (final f in LspService.jvmMemoryFlags) '--jvm-arg=$f',
+      ]);
+      expect(LspService.withJvmMemoryFlags(['dart', 'fake.dill']), ['dart', 'fake.dill']);
+    });
+
+    test('a GC or flag already given is not added twice', () {
+      final argv = LspService.withJvmMemoryFlags(['java', '-XX:+UseG1GC', '-XX:GCTimeRatio=9', '-jar', 'x.jar']);
+      expect(argv.where((a) => a.contains('GC') && a.startsWith('-XX:+Use')), ['-XX:+UseG1GC']);
+      expect(argv.where((a) => a.startsWith('-XX:GCTimeRatio')), ['-XX:GCTimeRatio=9']);
+      expect(argv, contains('-Dsun.zip.disableMemoryMapping=true'));
+      final twice = LspService.withJvmMemoryFlags(LspService.withJvmMemoryFlags(['java', '-jar', 'x.jar']));
+      expect(twice.length, 3 + LspService.jvmMemoryFlags.length);
+    });
+  });
+
   group('LspService with a fake server', () {
     final dart = _findDart();
     late Directory tmp;
@@ -886,6 +919,129 @@ int main(int argc, char **argv) {
       expect(st2['pid'], isNot(pid1));
       expect(await _pidAlive(pid1), isFalse, reason: '旧进程已停,也不会被自动重启');
       await _waitFor(() async => events, (e) => e.where((x) => x.path == 'src/p.rs').length > before);
+      await lsp.dispose();
+      await sub.cancel();
+    }, skip: dart == null ? 'no dart binary found' : false, timeout: const Timeout(Duration(seconds: 60)));
+
+    test('project group: Java projects share one server; diagnostics go back to the right project', () async {
+      final dataRoot = Directory('${tmp.path}/jdtls-shared')..createSync();
+      final rootA = await Directory('${tmp.path}/svc-a').create();
+      final rootB = await Directory('${tmp.path}/svc-b').create();
+      final rootC = await Directory('${tmp.path}/other').create();
+      LspService.shareKeyFor = (r) => r == rootC.path ? null : 'g1';
+      addTearDown(() => LspService.shareKeyFor = null);
+      LspService make(Directory r) => LspService(r.path, serverOverrides: {'java': serverCmd}, jdtlsDataRoot: dataRoot.path);
+      final a = make(rootA), b = make(rootB), c = make(rootC);
+      final ea = <LspDiagnosticsEvent>[], eb = <LspDiagnosticsEvent>[];
+      final subs = [a.diagnostics.listen(ea.add), b.diagnostics.listen(eb.add)];
+
+      await a.didOpen('A.java', 'class A {}\n');
+      final st = await _waitFor(() => _serverStatus(a), (s) => s['initialized'] == true);
+      await b.didOpen('B.java', 'class B {}\n');
+      await c.didOpen('C.java', 'class C {}\n');
+      final stB = await _waitFor(() => _serverStatus(b), (s) => s['initialized'] == true);
+      final stC = await _waitFor(() => _serverStatus(c), (s) => s['initialized'] == true);
+      expect(stB['pid'], st['pid'], reason: '同组共用一个进程');
+      expect(stB['projects'], 2);
+      expect(stB['shared'], 'g1');
+      expect(stC['pid'], isNot(st['pid']), reason: '不在组里的自己一个');
+
+      await _waitFor(() async => eb, (e) => e.any((x) => x.path == 'B.java'));
+      final msgB = eb.firstWhere((x) => x.path == 'B.java').diagnostics.single['message'] as String;
+      expect(msgB, contains('folders=2'), reason: 'B 的目录加进了共用服务端的工作区');
+      expect(RegExp(r'data=(\S+)').firstMatch(msgB)!.group(1), contains('group-g1'), reason: '缓存按组放');
+      expect(ea.where((x) => x.path == 'B.java'), isEmpty, reason: '别的项目的诊断不串过来');
+      expect(eb.where((x) => x.path == 'A.java'), isEmpty);
+
+      // 一个项目关掉:进程还在给另一个用;最后一个关掉才停
+      final pid = st['pid'] as int;
+      await a.dispose();
+      expect(await _pidAlive(pid), isTrue);
+      await b.didChange('B.java', 'class B { int x; }\n');
+      await b.dispose();
+      expect(await _pidAlive(pid), isFalse);
+      await c.dispose();
+      for (final s in subs) {
+        await s.cancel();
+      }
+    }, skip: dart == null ? 'no dart binary found' : false, timeout: const Timeout(Duration(seconds: 60)));
+
+    test('project group: reloading (plugin changed) restarts the shared server once; leaving a group gets its own', () async {
+      final rootA = await Directory('${tmp.path}/re-a').create();
+      final rootB = await Directory('${tmp.path}/re-b').create();
+      var key = <String, String?>{rootA.path: 'g2', rootB.path: 'g2'};
+      LspService.shareKeyFor = (r) => key[r];
+      addTearDown(() => LspService.shareKeyFor = null);
+      final dataRoot = '${tmp.path}/jdtls-re';
+      final a = LspService(rootA.path, serverOverrides: {'java': serverCmd}, jdtlsDataRoot: dataRoot);
+      final b = LspService(rootB.path, serverOverrides: {'java': serverCmd}, jdtlsDataRoot: dataRoot);
+      await a.didOpen('A.java', 'class A {}\n');
+      await b.didOpen('B.java', 'class B {}\n');
+      final old = (await _waitFor(() => _serverStatus(b), (s) => s['initialized'] == true && s['projects'] == 2))['pid'] as int;
+
+      // 插件管理器对每个项目各调一次:整个组只重启一次
+      await a.reloadServer('java');
+      await b.reloadServer('java');
+      final sa = await _waitFor(() => _serverStatus(a), (s) => s['initialized'] == true);
+      final sb = await _waitFor(() => _serverStatus(b), (s) => s['initialized'] == true);
+      expect(sa['pid'], sb['pid']);
+      expect(sa['pid'], isNot(old));
+      expect(await _pidAlive(old), isFalse);
+
+      // B 移出项目组:自己开一个,A 那个照旧
+      key = {rootA.path: 'g2', rootB.path: null};
+      await b.reattachServer('java');
+      final sb2 = await _waitFor(() => _serverStatus(b), (s) => s['initialized'] == true);
+      expect(sb2['pid'], isNot(sa['pid']));
+      expect(sb2['shared'], isNull);
+      expect((await _serverStatus(a))['projects'], 1);
+      expect(await _pidAlive(sa['pid'] as int), isTrue);
+      await a.dispose();
+      await b.dispose();
+    }, skip: dart == null ? 'no dart binary found' : false, timeout: const Timeout(Duration(seconds: 60)));
+
+    test('idle: a project in the background long enough has its server stopped; coming back restarts it', () async {
+      final saved = (LspService.idleTimeout, LspService.idleCheckInterval);
+      LspService.idleTimeout = const Duration(milliseconds: 300);
+      LspService.idleCheckInterval = const Duration(milliseconds: 50);
+      addTearDown(() {
+        LspService.idleTimeout = saved.$1;
+        LspService.idleCheckInterval = saved.$2;
+      });
+      final lsp = LspService(root.path, serverOverrides: {'rust': serverCmd});
+      final events = <LspDiagnosticsEvent>[];
+      final sub = lsp.diagnostics.listen(events.add);
+      await lsp.didOpen('src/idle.rs', 'fn idle() {}\n');
+      final st = await _waitFor(() => _serverStatus(lsp), (s) => s['initialized'] == true);
+      final pid = st['pid'] as int;
+
+      // 在前台:不挂起
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+      expect(await _pidAlive(pid), isTrue);
+
+      lsp.setActive(false);
+      final suspended = await _waitFor(() => _serverStatus(lsp), (s) => s['state'] == 'suspended');
+      expect(suspended['state'], 'suspended');
+      expect(await _pidAlive(pid), isFalse, reason: '进程停了,内存还给系统');
+      final before = events.length;
+      await lsp.didChange('src/idle.rs', 'fn changed() {}\n');
+      expect(events.length, before, reason: '挂起时不换成降级诊断,原来的留着');
+
+      // 后台里有请求(比如结构视图):拉起来,按当前内容重放
+      final symbols = await lsp.documentSymbols('src/idle.rs', 'fn changed() {}\n');
+      expect(_names(symbols).first, 'Widget');
+      final woke = await _waitFor(() => _serverStatus(lsp), (s) => s['initialized'] == true);
+      expect(woke['pid'], isNot(pid));
+      expect(woke['restarts'], 0, reason: '挂起不算崩溃');
+      await _waitFor(() async => events, (e) => e.any((x) => x.diagnostics.any((d) => d['message'] == 'echo: fn changed() {}')));
+
+      // 再挂起一次,切回前台时拉起
+      final pid2 = woke['pid'] as int;
+      await _waitFor(() => _serverStatus(lsp), (s) => s['state'] == 'suspended');
+      expect(await _pidAlive(pid2), isFalse);
+      lsp.setActive(true);
+      final back = await _waitFor(() => _serverStatus(lsp), (s) => s['initialized'] == true);
+      expect(back['state'], 'running');
       await lsp.dispose();
       await sub.cancel();
     }, skip: dart == null ? 'no dart binary found' : false, timeout: const Timeout(Duration(seconds: 60)));

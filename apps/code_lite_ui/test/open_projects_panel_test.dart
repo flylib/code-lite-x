@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:code_lite_ui/core/lsp/lsp.dart' show LspService;
 import 'package:code_lite_ui/core/plugins/plugin_host.dart';
 import 'package:code_lite_ui/core/plugins/plugin_manager.dart';
 import 'package:code_lite_ui/core/state/layout_store.dart';
@@ -133,7 +134,7 @@ void main() {
     expect(find.text('bcpoker'), findsOneWidget);
     expect(find.text('把项目拖到这里'), findsOneWidget, reason: '空组给个提示');
     expect(openDisk['groups'], [
-      {'name': 'bcpoker', 'members': <String>[]},
+      {'id': manager.groups.single.id, 'name': 'bcpoker', 'members': <String>[]},
     ]);
 
     // 重名(不分大小写)不让建
@@ -199,9 +200,13 @@ void main() {
       manager.dispose();
       await Future<void>.delayed(const Duration(milliseconds: 50));
     });
+    final id = manager.groups.single.id;
     manager = newManager();
     await tester.runAsync(() => manager.restore());
     expect(manager.groups.single.name, 'bcpoker');
+    expect(manager.groups.single.id, id, reason: 'id 不变:组里共用的 jdtls 缓存按它放');
+    expect(LspService.shareKeyFor!(b), id, reason: '组里的项目共用一个语言服务器');
+    expect(LspService.shareKeyFor!(c), isNull);
     expect(manager.groups.single.members, [b]);
     expect(manager.groups.single.collapsed, isTrue);
     await show(tester);
