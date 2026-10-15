@@ -1,6 +1,8 @@
 // GitService 的纯函数部分:git 命令行输出 → 与原 Rust FFI 一致的 JSON 结构(Map / List)。
 // 这里不碰进程与文件系统,单测可以直接喂字符串。
 
+import 'dart:convert';
+
 /// 空树对象(SHA-1 仓库),用于根提交与「无父提交」之间的 diff。
 const String emptyTree = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
 
@@ -103,14 +105,63 @@ String commandFailureDetail(String stdout, String stderr) {
 // 工作区状态 / 编辑器 gutter
 // ---------------------------------------------------------------------------
 
-/// 解析 `git status --porcelain=v1 -b`。返回 (分支名, changes);没有 `##` 行时分支为空串。
+/// git 输出里被引号包起来、用 C 风格转义的路径(`"powerjob/\\347\\203\\255.json"`):还原成原样。
+/// 默认配置下 git 会这样转义中文等非 ASCII 字符以及引号、制表符等;不是这种格式的原样返回。
+String unquoteGitPath(String s) {
+  if (s.length < 2 || !s.startsWith('"') || !s.endsWith('"')) return s;
+  final body = s.substring(1, s.length - 1);
+  final bytes = <int>[];
+  for (var i = 0; i < body.length; i++) {
+    final c = body[i];
+    if (c != '\\' || i + 1 >= body.length) {
+      bytes.addAll(utf8.encode(c));
+      continue;
+    }
+    final n = body[++i];
+    final oct = RegExp(r'^[0-7]{3}').firstMatch(body.substring(i));
+    if (oct != null) {
+      bytes.add(int.parse(oct.group(0)!, radix: 8)); // 一个字节;连起来是 UTF-8
+      i += 2;
+      continue;
+    }
+    bytes.add(switch (n) {
+      'n' => 0x0a,
+      't' => 0x09,
+      'r' => 0x0d,
+      'a' => 0x07,
+      'b' => 0x08,
+      'f' => 0x0c,
+      'v' => 0x0b,
+      _ => n.codeUnitAt(0), // \\ \" 等
+    });
+  }
+  return utf8.decode(bytes, allowMalformed: true);
+}
+
+/// 解析 `git status --porcelain=v1 -b`(带 `-z` 更好:路径原样输出,不转义)。
+/// 返回 (分支名, changes);没有 `##` 行时分支为空串。
 (String, List<Map<String, dynamic>>) parseStatusPorcelain(String raw) {
   var branch = '';
   final changes = <Map<String, dynamic>>[];
   Map<String, dynamic> change(String path, String status, bool staged) =>
       {'path': path, 'status': status, 'is_staged': staged};
 
-  for (final line in rustLines(raw)) {
+  // -z:每项以 NUL 结尾,重命名 / 复制的项后面再跟一个旧路径(跳过)
+  final z = raw.contains('\x00');
+  final entries = <String>[];
+  if (z) {
+    final parts = raw.split('\x00');
+    for (var i = 0; i < parts.length; i++) {
+      final e = parts[i];
+      if (e.isEmpty) continue;
+      entries.add(e);
+      if (e.length > 2 && !e.startsWith('##') && (e[0] == 'R' || e[0] == 'C' || e[1] == 'R' || e[1] == 'C')) i++;
+    }
+  } else {
+    entries.addAll(rustLines(raw));
+  }
+
+  for (final line in entries) {
     if (line.startsWith('##')) {
       var part = line;
       while (part.startsWith('##')) {
@@ -125,10 +176,13 @@ String commandFailureDetail(String stdout, String stderr) {
 
     final indexCode = line[0];
     final workCode = line[1];
-    var filePath = line.substring(3).trim();
-    // 重命名显示为 "old -> new",取新路径
-    final arrow = filePath.indexOf(' -> ');
-    if (arrow >= 0) filePath = filePath.substring(arrow + 4);
+    var filePath = z ? line.substring(3) : line.substring(3).trim();
+    if (!z) {
+      // 重命名显示为 "old -> new",取新路径;非 ASCII 等字符的路径被引号包起来转义过,还原
+      final arrow = filePath.indexOf(' -> ');
+      if (arrow >= 0) filePath = filePath.substring(arrow + 4);
+      filePath = unquoteGitPath(filePath);
+    }
 
     if (indexCode == '?' && workCode == '?') {
       changes.add(change(filePath, 'untracked', false));

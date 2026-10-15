@@ -81,7 +81,7 @@ class GitService {
   /// `{"branch": "...", "changes": [{"path","status","is_staged"}]}`;
   /// status ∈ modified / added / deleted / untracked / renamed。
   Future<Map<String, dynamic>> status() => _guard(() async {
-        final raw = await _run(['status', '--porcelain=v1', '-b']);
+        final raw = await _run(['status', '--porcelain=v1', '-b', '-z']);
         var (branch, changes) = parseStatusPorcelain(raw);
         if (branch.isEmpty) branch = await currentBranch() ?? 'HEAD';
         return {'branch': branch, 'changes': changes};
@@ -1097,7 +1097,7 @@ class GitService {
   Future<_GitOutput> _rawWithStdin(List<String> args, String? input) async {
     if (input == null) return _raw(args);
     try {
-      final proc = await Process.start('git', ['-C', root, ...args]);
+      final proc = await Process.start('git', ['-C', root, ..._defaults, ...args]);
       final stdout = <int>[];
       final stderr = <int>[];
       final outDone = proc.stdout.listen(stdout.addAll).asFuture<void>();
@@ -1112,12 +1112,15 @@ class GitService {
     }
   }
 
+  /// 每条 git 命令都带上:中文等非 ASCII 的路径原样输出,不转成 `"\\347\\203…"`。
+  static const List<String> _defaults = ['-c', 'core.quotePath=false'];
+
   /// 不检查退出码的原始调用。stdout 按 UTF-8 宽松解码(非法字节替换为 U+FFFD,与旧实现一致)。
   Future<_GitOutput> _raw(List<String> args, {Map<String, String>? env}) async {
     try {
       final r = await Process.run(
         'git',
-        ['-C', root, ...args],
+        ['-C', root, ..._defaults, ...args],
         environment: env,
         stdoutEncoding: null,
         stderrEncoding: null,
