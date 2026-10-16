@@ -4,8 +4,10 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme/intellij_theme.dart';
+import '../editor/blame.dart';
 import 'branch_store.dart';
 import 'conflicts_dialog.dart';
+import 'merge_model.dart' show MergeSide;
 import 'merge_window.dart';
 import 'repo_operation.dart';
 
@@ -160,6 +162,11 @@ class BranchActions {
       theirs: v['theirs'] as String? ?? '',
       yoursTitle: op?.branch ?? store.current ?? 'Yours',
       theirsTitle: (op?.kind == 'rebase' ? op?.onto : op?.incoming) ?? 'Theirs',
+      // 右键行号 ▸ Annotate:那一侧来自的提交的逐行修改记录(时间、作者)
+      loadBlame: (side) async => BlameData.fromResult(
+        await store.call('git.merge_blame', {'path': file.path, 'side': side == MergeSide.left ? 'yours' : 'theirs'}),
+        file.path,
+      ),
     );
     if (outcome == null || !context.mounted) return;
     switch (outcome.kind) {

@@ -1,4 +1,7 @@
+import 'package:code_lite_ui/features/editor/blame.dart';
+import 'package:code_lite_ui/features/git/merge_model.dart';
 import 'package:code_lite_ui/features/git/merge_window.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -251,5 +254,75 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
     expect(find.text('3 changes. 1 conflict.'), findsOneWidget);
+  });
+
+  testWidgets('right-click a side\'s line numbers ▸ Annotate: each line shows "date author"; Close Annotations hides it', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1500, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    BlameCommit commit(String hash, String author, DateTime t) => BlameCommit.fromJson({
+          'hash': hash * 40,
+          'author': author,
+          'email': '$author@x',
+          'time': t.millisecondsSinceEpoch ~/ 1000,
+          'summary': '$author edits',
+        }, 'src/A.java');
+    final base = commit('a', 'tester', DateTime(2026, 9, 1, 10));
+    final bob = commit('b', 'bob', DateTime(2026, 10, 9, 10));
+    final alice = commit('c', 'alice', DateTime(2026, 10, 13, 10));
+    final loaded = <MergeSide>[];
+    Future<BlameData?> load(MergeSide side) async {
+      loaded.add(side);
+      final mine = side == MergeSide.left;
+      final lines = (mine ? _yours : _theirs).split('\n')..removeLast();
+      final who = mine ? bob : alice;
+      return BlameData(
+        [for (final l in lines) l.contains('v =') || l.contains('import y') || l.contains('// end') ? who.hash : base.hash],
+        {base.hash: base, who.hash: who},
+      );
+    }
+
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: Builder(
+          builder: (context) => TextButton(
+            onPressed: () => showMergeWindow(context,
+                path: 'src/A.java', base: _base, yours: _yours, theirs: _theirs, yoursTitle: 'ktest', theirsTitle: 'feat/x', loadBlame: load),
+            child: const Text('open'),
+          ),
+        ),
+      ),
+    ));
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    Future<void> menu(String key, String item) async {
+      await tester.tapAt(tester.getCenter(find.byKey(ValueKey(key))), buttons: kSecondaryButton);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(item));
+      await tester.pumpAndSettle();
+    }
+
+    expect(find.byKey(const ValueKey('blame-left-0')), findsNothing);
+    await menu('nums-left-0', 'Annotate with Git Blame');
+    expect(loaded, [MergeSide.left]);
+    expect(find.text('2026/9/1  tester'), findsWidgets, reason: '左栏没改的行:共同祖先的作者');
+    expect(find.text('2026/10/9  bob'), findsWidgets, reason: '左栏改过的行:自己这边的作者');
+    expect(find.text('2026/10/13  alice'), findsNothing, reason: '右栏还没打开注释');
+    // 注释在左栏的文字和行号之间
+    expect(tester.getTopRight(find.byKey(const ValueKey('blame-left-0'))).dx,
+        lessThanOrEqualTo(tester.getTopLeft(find.byKey(const ValueKey('nums-left-0'))).dx + 200));
+    // 悬停看提交
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: tester.getCenter(find.byKey(const ValueKey('blame-left-3'))));
+    await tester.pump(const Duration(milliseconds: 600));
+    expect(find.byTooltip('bbbbbbbb  bob  2026/10/9\nbob edits'), findsWidgets, reason: 'bob 改的两行都带这个提示');
+    await mouse.removePointer();
+
+    await menu('nums-right-0', 'Annotate with Git Blame');
+    expect(find.text('2026/10/13  alice'), findsWidgets, reason: '右栏:合进来那边的作者');
+
+    await menu('nums-left-0', 'Close Annotations');
+    expect(find.text('2026/10/9  bob'), findsNothing);
+    expect(find.text('2026/10/13  alice'), findsWidgets, reason: '只关了左栏');
   });
 }

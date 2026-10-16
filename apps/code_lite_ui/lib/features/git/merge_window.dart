@@ -3,6 +3,9 @@ import 'package:flutter/services.dart';
 
 import '../../core/theme/intellij_theme.dart';
 import '../commit/diff_cells.dart';
+import '../editor/blame.dart';
+import '../editor/context_menu_region.dart';
+import '../editor/editor_appearance.dart';
 import 'merge_model.dart';
 
 const double _row = diffRowHeight;
@@ -47,6 +50,7 @@ Future<MergeOutcome?> showMergeWindow(
   required String theirs,
   required String yoursTitle,
   required String theirsTitle,
+  Future<BlameData?> Function(MergeSide side)? loadBlame,
 }) {
   return showDialog<MergeOutcome>(
     context: context,
@@ -56,17 +60,21 @@ Future<MergeOutcome?> showMergeWindow(
       model: MergeModel(base: base, left: yours, right: theirs),
       yoursTitle: yoursTitle,
       theirsTitle: theirsTitle,
+      loadBlame: loadBlame,
     ),
   );
 }
 
 class MergeWindow extends StatefulWidget {
-  const MergeWindow({super.key, required this.path, required this.model, required this.yoursTitle, required this.theirsTitle});
+  const MergeWindow({super.key, required this.path, required this.model, required this.yoursTitle, required this.theirsTitle, this.loadBlame});
 
   final String path;
   final MergeModel model;
   final String yoursTitle;
   final String theirsTitle;
+
+  /// 一侧的逐行修改记录(右键行号 ▸ Annotate);null 时菜单里没有这一项。
+  final Future<BlameData?> Function(MergeSide side)? loadBlame;
 
   @override
   State<MergeWindow> createState() => _MergeWindowState();
@@ -75,6 +83,92 @@ class MergeWindow extends StatefulWidget {
 class _MergeWindowState extends State<MergeWindow> {
   final ScrollController _scroll = ScrollController();
   MergeModel get m => widget.model;
+
+  // --- 两侧的修改记录(右键行号 ▸ Annotate:每行显示「时间 作者」,同 IntelliJ) ---------------------
+
+  /// 已经打开注释的一侧 → 它的 blame;值为 null 表示正在读。
+  final Map<MergeSide, BlameData?> _blame = {};
+  final Map<MergeSide, String> _blameError = {};
+
+  /// 注释显示「日期 作者」(默认外观:不显示提交号)。
+  final EditorAppearance _blameLook = EditorAppearance();
+
+  Future<void> _annotate(MergeSide side) async {
+    final load = widget.loadBlame;
+    if (load == null || _blame.containsKey(side)) return;
+    setState(() {
+      _blame[side] = null;
+      _blameError.remove(side);
+    });
+    final data = await load(side);
+    if (!mounted || !_blame.containsKey(side)) return;
+    setState(() {
+      if (data == null) {
+        _blame.remove(side);
+        _blameError[side] = '读取修改记录失败';
+      } else {
+        _blame[side] = data;
+      }
+    });
+  }
+
+  void _closeAnnotations(MergeSide side) => setState(() {
+        _blame.remove(side);
+        _blameError.remove(side);
+      });
+
+  /// 注释栏宽度:按最宽的一条(和编辑器的注释栏一样),读取中给个固定宽度。
+  double _blameWidth(MergeSide side) {
+    final d = _blame[side];
+    if (d == null) return 80;
+    var widest = 0.0;
+    for (final label in {for (final c in d.commits.values) blameLabel(c, _blameLook)}) {
+      final tp = TextPainter(text: TextSpan(text: label, style: _blameStyle), textDirection: TextDirection.ltr)..layout();
+      if (tp.width > widest) widest = tp.width;
+    }
+    return (widest + 16).ceilToDouble().clamp(60.0, 320.0);
+  }
+
+  static const TextStyle _blameStyle = TextStyle(color: IntelliJTheme.textPrimary, fontSize: 11.5);
+
+  /// 一侧这一行的注释格子;这一侧没打开注释时为 null。
+  Widget? _blameCell(MergeSide side, int? line, double width) {
+    if (!_blame.containsKey(side)) return null;
+    final d = _blame[side];
+    final c = line == null ? null : d?.at(line);
+    final label = d == null ? (line == 0 ? 'blame…' : '') : blameLabel(c, _blameLook);
+    Widget cell = Container(
+      key: ValueKey('blame-${side.name}-$line'),
+      width: width,
+      height: _row,
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      alignment: Alignment.centerLeft,
+      color: c == null || d == null ? null : blameBackground(c, d, _blameLook),
+      child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: d == null ? _blameStyle.copyWith(color: IntelliJTheme.textMuted) : _blameStyle),
+    );
+    if (c != null && !c.isUncommitted) {
+      cell = Tooltip(
+        message: '${c.short}  ${c.author}  ${blameDate(c.time)}\n${c.summary}',
+        waitDuration: const Duration(milliseconds: 400),
+        child: cell,
+      );
+    }
+    return cell;
+  }
+
+  /// 行号(和注释)上的右键菜单:Annotate with Git Blame / Close Annotations。
+  Widget _withBlameMenu(MergeSide side, Widget child) {
+    if (widget.loadBlame == null) return child;
+    return ContextMenuRegion(
+      menuBuilder: (_) => [
+        if (_blame.containsKey(side))
+          MenuItemButton(onPressed: () => _closeAnnotations(side), child: const Text('Close Annotations'))
+        else
+          MenuItemButton(onPressed: () => _annotate(side), child: const Text('Annotate with Git Blame')),
+      ],
+      child: child,
+    );
+  }
 
   /// 当前所在的改动块(上一处 / 下一处跳转的起点,行号栏旁高亮)。
   MergeChunk? _current;
@@ -93,6 +187,7 @@ class _MergeWindowState extends State<MergeWindow> {
   @override
   void dispose() {
     _scroll.dispose();
+    _blameLook.dispose();
     m.dispose();
     super.dispose();
   }
@@ -279,15 +374,21 @@ class _MergeWindowState extends State<MergeWindow> {
 
   Widget _headers() {
     Widget head(Widget child) => Container(height: 26, alignment: Alignment.centerLeft, padding: const EdgeInsets.symmetric(horizontal: 8), child: child);
-    Widget side(String title) => Row(children: [
+    Widget side(String title, MergeSide s) => Row(children: [
           const Icon(Icons.lock_outline, size: 13, color: IntelliJTheme.textMuted),
           const SizedBox(width: 4),
           Flexible(child: Text('Changes from $title', style: _title, overflow: TextOverflow.ellipsis)),
+          if (_blameError[s] case final e?) ...[
+            const SizedBox(width: 8),
+            Text(e, style: const TextStyle(color: IntelliJTheme.diagError, fontSize: 12)),
+          ],
         ]);
+    final leftBlame = _blame.containsKey(MergeSide.left) ? _blameWidth(MergeSide.left) : 0.0;
+    final rightBlame = _blame.containsKey(MergeSide.right) ? _blameWidth(MergeSide.right) : 0.0;
     return Row(
       children: [
-        Expanded(child: head(side(widget.yoursTitle))),
-        const SizedBox(width: _numWidth + _gutterWidth + _numWidth),
+        Expanded(child: head(side(widget.yoursTitle, MergeSide.left))),
+        SizedBox(width: leftBlame + _numWidth + _gutterWidth + _numWidth),
         Expanded(
           child: head(Row(children: [
             const Text('Result', style: _title),
@@ -295,8 +396,8 @@ class _MergeWindowState extends State<MergeWindow> {
             Flexible(child: Text(widget.path, style: _muted, overflow: TextOverflow.ellipsis)),
           ])),
         ),
-        const SizedBox(width: _gutterWidth + _numWidth),
-        Expanded(child: head(side(widget.theirsTitle))),
+        SizedBox(width: _gutterWidth + _numWidth + rightBlame),
+        Expanded(child: head(side(widget.theirsTitle, MergeSide.right))),
       ],
     );
   }
@@ -353,10 +454,16 @@ class _MergeWindowState extends State<MergeWindow> {
           child: Row(mainAxisAlignment: MainAxisAlignment.center, children: buttons),
         );
     final showButtons = c != null && r.firstOfChunk;
+    final leftBlame = _blameCell(MergeSide.left, r.left, _blame.containsKey(MergeSide.left) ? _blameWidth(MergeSide.left) : 0);
+    final rightBlame = _blameCell(MergeSide.right, r.right, _blame.containsKey(MergeSide.right) ? _blameWidth(MergeSide.right) : 0);
     return Row(
       children: [
         Expanded(child: diffCell(r.leftText, _bg(r, MergeSide.left, r.leftText != null), null)),
-        diffLineNumber(r.left, width: _numWidth),
+        // 左栏的注释和行号挨着(在文字和行号之间),右键行号打开 / 关掉
+        _withBlameMenu(
+          MergeSide.left,
+          Row(key: ValueKey('nums-left-${r.left}'), mainAxisSize: MainAxisSize.min, children: [if (leftBlame != null) leftBlame, diffLineNumber(r.left, width: _numWidth)]),
+        ),
         gutter([
           if (showButtons && c.pending(MergeSide.left)) ...[
             _ChunkButton(key: ValueKey('ignore-left-${m.chunks.indexOf(c)}'), icon: Icons.close, tooltip: '忽略左侧的这处改动', onTap: () => m.ignore(c, MergeSide.left)),
@@ -399,7 +506,10 @@ class _MergeWindowState extends State<MergeWindow> {
             _ChunkButton(key: ValueKey('ignore-right-${m.chunks.indexOf(c)}'), icon: Icons.close, tooltip: '忽略右侧的这处改动', onTap: () => m.ignore(c, MergeSide.right)),
           ],
         ]),
-        diffLineNumber(r.right, width: _numWidth),
+        _withBlameMenu(
+          MergeSide.right,
+          Row(key: ValueKey('nums-right-${r.right}'), mainAxisSize: MainAxisSize.min, children: [diffLineNumber(r.right, width: _numWidth), if (rightBlame != null) rightBlame]),
+        ),
         Expanded(child: diffCell(r.rightText, _bg(r, MergeSide.right, r.rightText != null), null)),
       ],
     );

@@ -90,7 +90,7 @@ CodeLiteX 是一款高性能的原生跨平台代码编辑器，内置 Git 管�
 
 **Git**
 - merge / rebase 有冲突时，标题栏出现两个按钮：一个弹出冲突文件列表，一个 × 中止这次合并。
-- 解决冲突用三栏 Merge 窗口（标题叫「Merge」，不叫「Open File」），中间的结果栏可以直接编辑。
+- 解决冲突用三栏 Merge 窗口（标题叫「Merge」，不叫「Open File」），中间的结果栏可以直接编辑。右键左 / 右两栏的行号 ▸ Annotate with Git Blame：在文字和行号之间显示每行的「日期 作者」（今天的显示 Today），悬停看提交号和提交说明，再右键 Close Annotations 关掉；两栏各开各的。注释取自那一侧来自的提交（合并：HEAD / MERGE_HEAD；变基两侧对调：REBASE_HEAD / HEAD；cherry-pick / revert 同理），`git.merge_blame`。
 
 **快捷键**
 - 快捷键可配置，默认键位同 IntelliJ（macOS「Mac OS X 10.5+」；其它平台「Default」），存储格式和 action id 也用 IntelliJ 的（`meta 1`、`ActivateProjectToolWindow`），所以能直接「从 IntelliJ 导入」：读最新 `IntelliJIdea*` 配置目录的 `options/mac/keymap.xml`（当前配置名）+ `keymaps/*.xml`（用户改的）+ 安装包 `lib/app.jar` 里的自带配置，沿 parent 链解析；macOS 键位继承 `$default` 时 Ctrl 换成 ⌘（IntelliJ 自己也这么换）。设置 ▸ Keymap 可加（按下组合键录入，冲突的从原操作移走）、删、恢复默认。设置文件只存改过的（`keymap.overrides`）。

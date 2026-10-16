@@ -326,6 +326,41 @@ void main() {
       expect(v['theirs'], 'main change\n');
     });
 
+    test('merge_blame: each side is annotated from the commit it came from (rebase swaps them); works from a sub-folder', () async {
+      // base 由 Tester 写;main 那边 Bob 改了第 2 行,feat 那边 Alice 改了第 2 行(冲突)
+      final d = initRepo();
+      write(d, 'svc/a.txt', 'one\ntwo\nthree\n');
+      commit(d, 'base');
+      git(d, ['switch', '-q', '-c', 'feat']);
+      write(d, 'svc/a.txt', 'one\nTWO by alice\nthree\n');
+      git(d, ['add', '-A']);
+      git(d, ['-c', 'user.name=Alice', 'commit', '-q', '-m', 'alice edits']);
+      git(d, ['switch', '-q', 'main']);
+      write(d, 'svc/a.txt', 'one\nTWO by bob\nthree\n');
+      git(d, ['add', '-A']);
+      git(d, ['-c', 'user.name=Bob', 'commit', '-q', '-m', 'bob edits']);
+
+      Future<List<String>> authors(GitService s, String side) async {
+        final r = await s.call('git.merge_blame', {'path': 'svc/a.txt', 'side': side});
+        expect(r['status'], 'ok', reason: '${r['error']}');
+        final commits = (r['commits'] as Map).cast<String, dynamic>();
+        return [for (final h in (r['lines'] as List)) (commits[h] as Map)['author'] as String];
+      }
+
+      final s = GitService('${d.path}/svc'); // 项目是仓库的子目录
+      await s.call('git.merge', {'name': 'feat'});
+      expect(await authors(s, 'yours'), ['Tester', 'Bob', 'Tester'], reason: '左边(自己的 main)');
+      expect(await authors(s, 'theirs'), ['Tester', 'Alice', 'Tester'], reason: '右边(合进来的 feat)');
+      expect((await s.call('git.merge_blame', {'path': 'svc/a.txt', 'side': 'middle'}))['status'], 'error');
+      expect((await s.call('git.abort_operation'))['status'], 'ok');
+
+      // 变基 feat 到 main 上:Yours 是自己的提交(Alice),Theirs 是上游(Bob)
+      git(d, ['switch', '-q', 'feat']);
+      await s.call('git.rebase_onto', {'name': 'main'});
+      expect(await authors(s, 'yours'), ['Tester', 'Alice', 'Tester']);
+      expect(await authors(s, 'theirs'), ['Tester', 'Bob', 'Tester']);
+    });
+
     test('a side without the file gives null; non-conflicted paths are refused', () async {
       final d = initRepo();
       write(d, 'f.txt', 'x\n');

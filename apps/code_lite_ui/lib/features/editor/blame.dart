@@ -83,6 +83,11 @@ class BlameData {
       if (rev != null) 'rev': rev,
       if (contents != null) 'contents': contents,
     });
+    return fromResult(res, path);
+  }
+
+  /// `git.blame` 一类调用的返回(`{status, lines, commits}`);失败返回 null。
+  static BlameData? fromResult(Map<String, dynamic> res, String path) {
     if (res['status'] != 'ok') return null;
     final raw = (res['commits'] as Map?) ?? const {};
     return BlameData(

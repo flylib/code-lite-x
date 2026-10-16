@@ -322,6 +322,8 @@ class GitService {
         return {};
       case 'git.merge_versions':
         return _mergeVersions(p.str('path'));
+      case 'git.merge_blame':
+        return _mergeBlame(p.str('path'), p.str('side'));
       case 'git.resolve_with':
         await _resolveWith(p.str('path'), p.str('content'));
         return {};
@@ -1330,6 +1332,27 @@ class GitService {
     final rebase = state['operation'] == 'rebase';
     final head = await stage(2), incoming = await stage(3);
     return {'base': await stage(1), 'yours': rebase ? incoming : head, 'theirs': rebase ? head : incoming};
+  }
+
+  /// 三方合并窗口里一侧的逐行修改记录(右键行号 ▸ Annotate):对那一侧来自的提交做 blame,
+  /// 行号和窗口里那一栏一一对应。[side] 是 'yours' / 'theirs';变基时两侧对调(同 [_mergeVersions])。
+  Future<Map<String, dynamic>> _mergeBlame(String path, String side) async {
+    if (side != 'yours' && side != 'theirs') throw GitException('无效的一侧: $side');
+    final state = await _conflictEntry(path);
+    final kind = state['operation'] as String?;
+    final incoming = switch (kind) {
+      'merge' => 'MERGE_HEAD',
+      'rebase' => 'REBASE_HEAD',
+      'cherry-pick' => 'CHERRY_PICK_HEAD',
+      'revert' => 'REVERT_HEAD^', // revert 合进来的是被撤销那个提交之前的样子
+      _ => null,
+    };
+    final head = (side == 'yours') != (kind == 'rebase');
+    final rev = head ? 'HEAD' : incoming;
+    if (rev == null) throw GitException('不知道这一侧来自哪个提交');
+    // 冲突路径相对仓库根;项目可能是仓库的子目录,所以在仓库根上跑
+    final top = (await _run(['rev-parse', '--show-toplevel'])).trim();
+    return {...await GitService(top)._blame(path, rev: rev), 'rev': rev};
   }
 
   /// 三方合并窗口的 Apply:把合并结果写进工作区的文件,并标记为已解决(git add)。
