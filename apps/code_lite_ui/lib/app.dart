@@ -16,6 +16,8 @@ import 'core/platform/workspace_io.dart' as io;
 import 'core/state/workspace_store.dart';
 import 'core/theme/intellij_theme.dart';
 import 'core/theme/island.dart';
+import 'features/make/make_panel.dart';
+import 'features/make/make_store.dart';
 import 'features/activity_stripe/activity_stripe_widget.dart';
 import 'features/bottom_tools/bottom_tools_widget.dart';
 import 'features/build_tools/build_tools_panel.dart';
@@ -172,6 +174,7 @@ class _Workbench extends StatelessWidget {
   BranchActions get branchActions => project.branchActions;
   PullRequestsStore get prs => project.prs;
   BuildToolsStore get buildTools => project.build;
+  MakeStore get make => project.make;
 
   @override
   Widget build(BuildContext context) {
@@ -234,9 +237,10 @@ class _Workbench extends StatelessWidget {
                   children: [
                     // 左活动条:订阅 layout,以及构建工具(检测到 Maven 等才出现它的按钮)。
                     ListenableBuilder(
-                      listenable: Listenable.merge([layout, buildTools, settings.keymap]),
+                      listenable: Listenable.merge([layout, buildTools, make, settings.keymap]),
                       builder: (context, _) => ActivityStripeWidget(
                         buildToolTitle: buildTools.hasProjects ? buildTools.title : null,
+                        showMake: make.hasMakefiles,
                         leftTool: layout.leftTool,
                         isLeftOpen: layout.isLeftOpen,
                         visibleTools: layout.visibleTools,
@@ -262,7 +266,7 @@ class _Workbench extends StatelessWidget {
                                 children: [
                                   // 侧边工具窗:layout 决定显示哪个(上下两块各一个时拆分显示),workspace 提供数据。
                                   _sideDock(ToolSide.left, layout, workspace, sessions),
-                                  Expanded(child: Island(child: _EditorRegion(client: client, gitLog: gitLog, prs: prs, plugins: plugins, browsers: browsers))),
+                                  Expanded(child: Island(child: _EditorRegion(client: client, gitLog: gitLog, prs: prs, make: make, plugins: plugins, browsers: browsers))),
                                   _sideDock(ToolSide.right, layout, workspace, sessions),
                                 ],
                               ),
@@ -297,9 +301,10 @@ class _Workbench extends StatelessWidget {
 
                     // 右活动条:始终显示(顶上是通知),停靠在右侧的工具窗按钮在下面。
                     ListenableBuilder(
-                      listenable: Listenable.merge([layout, buildTools, settings.keymap]),
+                      listenable: Listenable.merge([layout, buildTools, make, settings.keymap]),
                       builder: (context, _) => RightStripeWidget(
                         buildToolTitle: buildTools.hasProjects ? buildTools.title : null,
+                        showMake: make.hasMakefiles,
                         visibleTools: layout.visibleTools,
                         sideOf: layout.sideOf,
                         slotOf: layout.slotOf,
@@ -383,6 +388,11 @@ class _Workbench extends StatelessWidget {
                               onCloseGroup: (g) => _closeGroup(context, manager, g),
                             ),
                           SideTool.build => BuildToolsPanel(store: buildTools, onOpenFile: workspace.openFile),
+                          SideTool.make => MakePanel(
+                              store: make,
+                              onOpenFileAt: (path, line) => openFileAt(workspace, sessions, path, line),
+                              onOpenSettings: () => showSettingsDialog(context, settings, plugins: plugins, openBuildTools: true),
+                            ),
                 },
               ),
               ),
@@ -403,6 +413,7 @@ class _Workbench extends StatelessWidget {
     if (keymap == null) return const {};
     void side(SideTool tool) {
       if (tool == SideTool.build && !buildTools.hasProjects) return; // 项目里没有构建工具时没有这个窗
+      if (tool == SideTool.make && !make.hasMakefiles) return;
       layout.selectTool(tool);
     }
 
@@ -464,9 +475,10 @@ class _Workbench extends StatelessWidget {
 /// 编辑区。只订阅会话层 —— 换标签、分屏会重建这里,
 /// 但项目树、底部日志、右侧面板不动。
 class _EditorRegion extends StatelessWidget {
-  const _EditorRegion({required this.client, required this.gitLog, required this.prs, required this.plugins, required this.browsers});
+  const _EditorRegion({required this.client, required this.gitLog, required this.prs, required this.make, required this.plugins, required this.browsers});
 
   final ApiClient client;
+  final MakeStore make;
   final GitLogStore gitLog;
   final PullRequestsStore prs;
   final PluginManager plugins;
@@ -562,6 +574,8 @@ class _EditorRegion extends StatelessWidget {
             ],
           ),
           onOpenFile: workspace.openFile,
+          // Makefile 行号栏的 ▶:运行那个目标(同 IntelliJ)
+          onRunMakeTarget: (path, target) => make.runTarget(absoluteFilePath(client.rootPath, path), target),
           paneActionsBuilder: (path) => isHtmlFile(path) && !sessions.isSpecialTab(path)
               ? OpenInBrowserBar(
                   service: browsers,

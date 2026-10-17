@@ -73,6 +73,7 @@ CodeLiteX 是一款高性能的原生跨平台代码编辑器，内置 Git 管�
 - 右侧栏始终显示，顶上是通知，下面是停靠在右侧的工具窗按钮；展开时面板在编辑区和右侧栏之间。
 - 右侧面板和编辑区之间的分隔线要细，参考左侧，不要夹一条宽带。
 - 构建工具窗参考 IntelliJ 的 Maven 窗口：模块树 → Lifecycle / Plugins / Dependencies → 任务，双击运行。新的构建工具通过插件清单（`buildTools`）扩展。
+- **make 工具窗**（同 IntelliJ 的 make 插件，默认停在右侧下半块）：项目里有 Makefile（`Makefile` / `makefile` / `GNUmakefile` / `*.mk`，子目录里的也算）才出现按钮；树是 Makefile → 目标，双击 / 选中后 ▶ / 回车在新终端标签里跑 `make <目标>`（子目录的加 `-C`，非默认文件名加 `-f`）；工具栏：运行、重新加载、全部展开 / 折叠、按名字排序、显示 `.PHONY` 等特殊目标（默认隐藏）、设置。Makefile 编辑区的目标行在行号栏有绿色 ▶，点了运行。make 的路径在 设置 ▸ Build Tools ▸ Make（空 = PATH 里的 make，可浏览、检测版本）。文件树里 Makefile 用 M 图标。目标是 Dart 自己读的（`core/build_tools/makefile.dart`），不跑 make。
 - 插件市场暂时不做。
 
 **文件树**
@@ -167,6 +168,7 @@ cargo build --release --offline -p code-lite-app
 * `lib/features/pull_requests/`：左侧 Pull Requests 工具窗（列表/筛选/详情）、PR 并排差异标签（行内评审评论、右键菜单）与 Timeline 标签；
 * `lib/features/build_tools/`：左侧构建工具窗（Maven 等）。项目根有插件声明的标记文件（pom.xml）时活动条才出现按钮；模块树 → Lifecycle → 任务，双击在新终端标签里运行（有 mvnw 用 `./mvnw`，子模块带 `-f`）；
 * `lib/features/tool_window/`：侧边工具窗的位置与标题栏。`LayoutStore` 里每个 `SideTool`（项目 / Commit / PR / 结构 / Opening Projects / 构建）可以放在左侧或右侧（`ToolSide`），每侧再分上 / 下两块（`ToolSlot`），上下都开着时拆分显示（`side_split_view.dart`）；标题栏 ⋮ ▸ 移动到 ▸ 四个位置。右活动条（`RightStripeWidget`）始终显示，顶上是通知，下面是停靠在右侧的工具窗；构建工具窗（Maven）默认在右侧（同 IntelliJ）。底部工具窗横跨两条活动条之间的整个宽度，左右工具窗停在它上面。位置存在设置文件的 `layout` 里；
+* `lib/features/make/`：make 工具窗（`MakeStore` 每个项目一份，`MakePanel`）；Makefile 解析与命令行在 `lib/core/build_tools/makefile.dart`；
 * `lib/features/projects/`：左侧「Opening」工具窗（打开的项目列表，点击切换，× 真正关闭；项目组 `ProjectGroup` 存在 `open_projects.json` 的 `groups` 里，拖拽归组）；
 * `lib/features/search/`：全局搜索模态框（`global_search_modal.dart`，支持 `Cmd+Shift+F` 快速唤起）。
 

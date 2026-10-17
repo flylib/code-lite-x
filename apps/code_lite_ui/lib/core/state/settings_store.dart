@@ -77,6 +77,18 @@ class SettingsStore extends ChangeNotifier {
   bool get autosave => _autosave;
   Duration get autosaveDelay => _autosaveDelay;
 
+  /// make 可执行文件的路径(设置 ▸ Build Tools ▸ Make,同 IntelliJ);空 = 用 PATH 里的 `make`。
+  /// make 工具窗和 Makefile 行号栏的 ▶ 都用它。
+  String get makePath => _makePath;
+  String _makePath = '';
+
+  void setMakePath(String value) {
+    final v = value.trim();
+    if (v == _makePath) return;
+    _makePath = v;
+    _changed();
+  }
+
   bool _loading = false;
 
   Future<void> load() async {
@@ -94,6 +106,8 @@ class SettingsStore extends ChangeNotifier {
     if (editor['appearance'] is Map) appearance.applyJson(Map<String, dynamic>.from(editor['appearance'] as Map));
     if (j['layout'] is Map) layout?.applyJson(Map<String, dynamic>.from(j['layout'] as Map));
     if (j['keymap'] is Map) keymap?.applyJson(Map<String, dynamic>.from(j['keymap'] as Map));
+    final build = j['buildTools'];
+    if (build is Map && build['makePath'] is String) _makePath = (build['makePath'] as String).trim();
     _savedLayout = _layoutSignature();
     _loading = false;
     notifyListeners();
@@ -132,6 +146,7 @@ class SettingsStore extends ChangeNotifier {
         },
         if (layout != null) 'layout': layout!.toJson(),
         if (keymap != null) 'keymap': keymap!.toJson(),
+        if (_makePath.isNotEmpty) 'buildTools': {'makePath': _makePath},
       };
 
   String _layoutSignature() => layout == null ? '' : jsonEncode(layout!.toJson());

@@ -42,7 +42,7 @@ class BuildToolsPanel extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _TitleRow(title: store.title),
+              ToolWindowTitleRow(title: store.title),
               _Toolbar(store: store),
               if (store.loading) const LinearProgressIndicator(minHeight: 2),
               Expanded(
@@ -65,7 +65,7 @@ class BuildToolsPanel extends StatelessWidget {
   void _addModule(List<Widget> rows, BuildProject p, BuildModule m, {required bool isRoot}) {
     final key = BuildToolsStore.moduleKey(p, m);
     final open = store.isExpanded(key);
-    rows.add(_TreeRow(
+    rows.add(ToolTreeRow(
       key: ValueKey('build-module-$key'),
       depth: 0,
       expandable: true,
@@ -111,7 +111,7 @@ class BuildToolsPanel extends StatelessWidget {
           continue;
         }
         final iOpen = store.isExpanded(ik);
-        rows.add(_TreeRow(
+        rows.add(ToolTreeRow(
           key: ValueKey('build-item-$ik'),
           depth: 2,
           expandable: item.children.isNotEmpty,
@@ -143,7 +143,7 @@ class BuildToolsPanel extends StatelessWidget {
 
   bool _addGroup(List<Widget> rows, String moduleKey, String gk, String name, String kind) {
     final open = store.isExpanded(gk);
-    rows.add(_TreeRow(
+    rows.add(ToolTreeRow(
       key: ValueKey('build-group-$gk'),
       depth: 1,
       expandable: true,
@@ -160,7 +160,7 @@ class BuildToolsPanel extends StatelessWidget {
 
   void _addTask(List<Widget> rows, BuildProject p, BuildModule m, String key, String task, String label, {required int depth}) {
     final command = store.commandFor(p, m, [task]);
-    rows.add(_TreeRow(
+    rows.add(ToolTreeRow(
       key: ValueKey('build-task-$key/$task'),
       depth: depth,
       expandable: false,
@@ -195,8 +195,8 @@ class BuildToolsPanel extends StatelessWidget {
 }
 
 /// 「Maven」标题 + 拆分 / 选项 / 收起按钮(IntelliJ 工具窗的标题行)。
-class _TitleRow extends StatelessWidget {
-  const _TitleRow({required this.title});
+class ToolWindowTitleRow extends StatelessWidget {
+  const ToolWindowTitleRow({super.key, required this.title});
 
   final String title;
 
@@ -242,32 +242,32 @@ class _Toolbar extends StatelessWidget {
         scrollDirection: Axis.horizontal,
         child: Row(
           children: [
-            _ToolButton(icon: Icons.sync, tooltip: '重新加载所有 ${store.title} 项目', onTap: store.loading ? null : store.reload),
-            const _Separator(),
-            _ToolButton(
+            ToolbarIconButton(icon: Icons.sync, tooltip: '重新加载所有 ${store.title} 项目', onTap: store.loading ? null : store.reload),
+            const ToolbarSeparator(),
+            ToolbarIconButton(
               icon: Icons.play_arrow,
               color: const Color(0xFF5FB865),
               tooltip: '运行选中的任务',
               onTap: store.canRunSelected ? store.runSelected : null,
             ),
-            _ToolButton(
+            ToolbarIconButton(
               icon: Icons.smart_display_outlined,
               tooltip: '执行 ${store.title} 目标',
               onTap: hasProjects ? () => _executeGoal(context) : null,
             ),
             if (project != null && project.tool.options.isNotEmpty) ...[
-              const _Separator(),
+              const ToolbarSeparator(),
               for (final o in project.tool.options)
-                _ToolButton(
+                ToolbarIconButton(
                   icon: _optionIcon(o),
                   tooltip: o.label,
                   active: store.isOptionOn(project.tool, o.id),
                   onTap: () => store.toggleOption(project.tool, o.id),
                 ),
             ],
-            const _Separator(),
-            _ToolButton(icon: Icons.unfold_more, tooltip: '全部展开', onTap: hasProjects ? store.expandAll : null),
-            _ToolButton(icon: Icons.unfold_less, tooltip: '全部折叠', onTap: hasProjects ? store.collapseAll : null),
+            const ToolbarSeparator(),
+            ToolbarIconButton(icon: Icons.unfold_more, tooltip: '全部展开', onTap: hasProjects ? store.expandAll : null),
+            ToolbarIconButton(icon: Icons.unfold_less, tooltip: '全部折叠', onTap: hasProjects ? store.collapseAll : null),
           ],
         ),
       ),
@@ -364,16 +364,16 @@ class _GoalDialogState extends State<_GoalDialog> {
   }
 }
 
-class _Separator extends StatelessWidget {
-  const _Separator();
+class ToolbarSeparator extends StatelessWidget {
+  const ToolbarSeparator({super.key});
 
   @override
   Widget build(BuildContext context) =>
       Container(width: 1, height: 16, margin: const EdgeInsets.symmetric(horizontal: 5), color: IntelliJTheme.border);
 }
 
-class _ToolButton extends StatelessWidget {
-  const _ToolButton({required this.icon, required this.tooltip, required this.onTap, this.color, this.active = false});
+class ToolbarIconButton extends StatelessWidget {
+  const ToolbarIconButton({super.key, required this.icon, required this.tooltip, required this.onTap, this.color, this.active = false});
 
   final IconData icon;
   final String tooltip;
@@ -464,8 +464,8 @@ class _FolderIcon extends StatelessWidget {
 }
 
 /// 树的一行。单击 / 双击自己判断(GestureDetector 的 onDoubleTap 会把单击延迟到双击超时之后)。
-class _TreeRow extends StatefulWidget {
-  const _TreeRow({
+class ToolTreeRow extends StatefulWidget {
+  const ToolTreeRow({
     super.key,
     required this.depth,
     required this.expandable,
@@ -499,10 +499,10 @@ class _TreeRow extends StatefulWidget {
   final List<Widget> Function()? menu;
 
   @override
-  State<_TreeRow> createState() => _TreeRowState();
+  State<ToolTreeRow> createState() => ToolTreeRowState();
 }
 
-class _TreeRowState extends State<_TreeRow> {
+class ToolTreeRowState extends State<ToolTreeRow> {
   DateTime _lastTap = DateTime(0);
 
   void _tap() {

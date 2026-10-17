@@ -1,3 +1,4 @@
+import '../project_explorer/project_explorer_widget.dart' show MakefileIcon;
 import 'package:flutter/material.dart';
 
 import '../../core/keymap/keymap.dart';
@@ -23,6 +24,7 @@ class ActivityStripeWidget extends StatelessWidget {
     required this.onSelectTool,
     required this.onSelectBottomTab,
     this.buildToolTitle,
+    this.showMake = false,
     this.visibleTools,
     this.slotOf,
     this.sideOf,
@@ -38,6 +40,9 @@ class ActivityStripeWidget extends StatelessWidget {
 
   /// 项目里检测到了构建工具(Maven……)时为它的名字,活动条多出构建工具窗的按钮;null 时不显示。
   final String? buildToolTitle;
+
+  /// 项目里有 Makefile:显示 make 工具窗的按钮。
+  final bool showMake;
 
   /// 正在显示的左侧工具窗(上下拆分时可能有两个);null 时按 [leftTool] / [isLeftOpen] 判断。
   final Set<SideTool>? visibleTools;
@@ -57,7 +62,7 @@ class ActivityStripeWidget extends StatelessWidget {
   List<Widget> _leftButtons(ToolSlot slot) => spacedButtons([
         for (final tool in SideTool.values)
           if ((sideOf?.call(tool) ?? ToolSide.left) == ToolSide.left && (slotOf?.call(tool) ?? ToolSlot.top) == slot)
-            sideToolButton(tool, active: _isVisible(tool), onTap: () => onSelectTool(tool), buildToolTitle: buildToolTitle, keymap: keymap),
+            sideToolButton(tool, active: _isVisible(tool), onTap: () => onSelectTool(tool), buildToolTitle: buildToolTitle, showMake: showMake, keymap: keymap),
       ]);
 
   @override
@@ -115,6 +120,7 @@ String keymapIdOf(SideTool tool) => switch (tool) {
       SideTool.structure => KeymapIds.structure,
       SideTool.openProjects => KeymapIds.openProjects,
       SideTool.build => KeymapIds.build,
+      SideTool.make => KeymapIds.make,
     };
 
 /// 没传快捷键配置时(单独用活动条)按默认键位显示。
@@ -126,8 +132,9 @@ String withShortcut(String name, String actionId, KeymapStore? keymap) {
   return label == null ? name : '$name ($label)';
 }
 
-/// 侧边工具窗在活动条上的按钮;[SideTool.build] 在项目里没有构建工具时没有按钮(null)。
-Widget? sideToolButton(SideTool tool, {required bool active, required VoidCallback onTap, String? buildToolTitle, KeymapStore? keymap}) {
+/// 侧边工具窗在活动条上的按钮;[SideTool.build] 在项目里没有构建工具时、[SideTool.make] 没有 Makefile 时没有按钮(null)。
+Widget? sideToolButton(SideTool tool,
+    {required bool active, required VoidCallback onTap, String? buildToolTitle, bool showMake = false, KeymapStore? keymap}) {
   String tip(String name) => withShortcut(name, keymapIdOf(tool), keymap);
   return switch (tool) {
     SideTool.project => StripeButton(icon: Icons.folder_outlined, tooltip: tip('项目'), isActive: active, onTap: onTap),
@@ -145,6 +152,14 @@ Widget? sideToolButton(SideTool tool, {required bool active, required VoidCallba
         : StripeButton(
             iconBuilder: (color, size) => BuildToolIcon(color: color, size: size),
             tooltip: tip(buildToolTitle),
+            isActive: active,
+            onTap: onTap,
+          ),
+    SideTool.make => !showMake
+        ? null
+        : StripeButton(
+            iconBuilder: (color, size) => MakefileIcon(color: color, size: size),
+            tooltip: tip('make'),
             isActive: active,
             onTap: onTap,
           ),
@@ -172,6 +187,7 @@ class RightStripeWidget extends StatelessWidget {
     required this.slotOf,
     required this.onSelectTool,
     this.buildToolTitle,
+    this.showMake = false,
     this.hasNotification = false,
     this.keymap,
   });
@@ -182,6 +198,9 @@ class RightStripeWidget extends StatelessWidget {
   final ValueChanged<SideTool> onSelectTool;
   final String? buildToolTitle;
 
+  /// 项目里有 Makefile:显示 make 工具窗的按钮。
+  final bool showMake;
+
   /// 通知按钮上的小黄点。
   final bool hasNotification;
 
@@ -191,7 +210,7 @@ class RightStripeWidget extends StatelessWidget {
   List<Widget> _buttons(ToolSlot slot) => spacedButtons([
         for (final tool in SideTool.values)
           if (sideOf(tool) == ToolSide.right && slotOf(tool) == slot)
-            sideToolButton(tool, active: visibleTools.contains(tool), onTap: () => onSelectTool(tool), buildToolTitle: buildToolTitle, keymap: keymap),
+            sideToolButton(tool, active: visibleTools.contains(tool), onTap: () => onSelectTool(tool), buildToolTitle: buildToolTitle, showMake: showMake, keymap: keymap),
       ]);
 
   @override

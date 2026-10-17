@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/theme/intellij_theme.dart';
-import '../project_explorer/project_explorer_widget.dart' show fileTypeIcon;
+import '../project_explorer/project_explorer_widget.dart' show fileTypeIconWidget;
 
 /// 按文件名查找:给查询词和条数,返回 Rust 文件索引的结果(`ApiClient.fileIndexQuery`)。
 typedef FileQuery = Map<String, dynamic> Function(String query, int limit);
@@ -276,7 +276,6 @@ class _GotoFileDialogState extends State<GotoFileDialog> {
     final slash = hit.path.lastIndexOf('/');
     final name = hit.path.substring(slash + 1);
     final dir = slash < 0 ? '' : hit.path.substring(0, slash);
-    final (icon, color) = fileTypeIcon(name);
     final selected = i == _selected;
     return MouseRegion(
       onEnter: (_) => setState(() => _selected = i),
@@ -292,7 +291,7 @@ class _GotoFileDialogState extends State<GotoFileDialog> {
           ),
           child: Row(
             children: [
-              Icon(icon, size: 15, color: color),
+              fileTypeIconWidget(name, size: 15),
               const SizedBox(width: 8),
               Flexible(
                 flex: 3,

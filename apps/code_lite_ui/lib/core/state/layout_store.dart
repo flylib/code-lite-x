@@ -3,7 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../../features/bottom_tools/bottom_tools_widget.dart';
 
 /// 侧边工具窗(活动条上半段的那些按钮):可以放在左侧或右侧,每一侧再分上下两块。
-enum SideTool { project, commit, pullRequests, structure, openProjects, build }
+enum SideTool { project, commit, pullRequests, structure, openProjects, build, make }
 
 /// 工具窗停靠在哪一侧(IntelliJ 的 Move To ▸ Left / Right)。
 enum ToolSide { left, right }
@@ -40,9 +40,15 @@ class LayoutStore extends ChangeNotifier {
     ..topOpen = true;
   final _Dock _right = _Dock(width: 300);
 
-  /// 不在左上方的工具窗放哪了。默认和 IntelliJ 一样:构建工具窗(Maven)在右侧。
+  /// 不在左上方的工具窗放哪了。默认和 IntelliJ 一样:构建工具窗(Maven)在右侧上半块,make 在右侧下半块。
   final Map<SideTool, (ToolSide, ToolSlot)> _placed = {..._defaultPlaced};
-  static const Map<SideTool, (ToolSide, ToolSlot)> _defaultPlaced = {SideTool.build: (ToolSide.right, ToolSlot.top)};
+  /// 老布局存档(没有 leftTopTools)之后才加的工具窗:读老存档时它们也按默认位置放。
+  static const Set<SideTool> _addedAfterOldLayouts = {SideTool.make};
+
+  static const Map<SideTool, (ToolSide, ToolSlot)> _defaultPlaced = {
+    SideTool.build: (ToolSide.right, ToolSlot.top),
+    SideTool.make: (ToolSide.right, ToolSlot.bottom),
+  };
 
   /// 侧边工具窗(项目 / Commit / 结构 ……)每一侧共用一个宽度,拖动分隔线调整;切换工具窗时不跳变。
   static const double minSideWidth = 160;
@@ -177,7 +183,8 @@ class LayoutStore extends ChangeNotifier {
             if (_placeOf(t) == (side, slot)) t.name,
         ];
     return {
-      // 不在这三个列表里的就在左上方
+      // 左上方的也记下来:读回时哪个列表都没有的,是存档之后才加的工具窗,用它的默认位置
+      'leftTopTools': placedAt(ToolSide.left, ToolSlot.top),
       'leftBottomTools': placedAt(ToolSide.left, ToolSlot.bottom),
       'leftSplit': (_left.split * 100).round() / 100,
       'rightTopTools': placedAt(ToolSide.right, ToolSlot.top),
@@ -200,6 +207,15 @@ class LayoutStore extends ChangeNotifier {
     read('leftBottomTools', ToolSide.left, ToolSlot.bottom);
     read('rightTopTools', ToolSide.right, ToolSlot.top);
     read('rightBottomTools', ToolSide.right, ToolSlot.bottom);
+    // 存档里没提到的工具窗(存档之后新加的,比如 make)放到默认位置。
+    // 老存档没有 leftTopTools:那时不在列表里的就是在左上方,只有之后新加的才按默认放
+    final mentioned = <String>{
+      for (final key in [...keys, 'leftTopTools']) ...(j[key] as List? ?? const []).whereType<String>(),
+    };
+    for (final e in _defaultPlaced.entries) {
+      final isNew = j.containsKey('leftTopTools') || _addedAfterOldLayouts.contains(e.key);
+      if (isNew && !mentioned.contains(e.key.name)) _placed[e.key] = e.value;
+    }
     for (final (key, dock) in [('leftSplit', _left), ('rightSplit', _right)]) {
       final split = j[key];
       if (split is num) dock.split = split.toDouble().clamp(minSplit, 1 - minSplit);

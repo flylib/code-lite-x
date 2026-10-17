@@ -6,6 +6,7 @@ import 'package:flutter/gestures.dart' show kPrimaryButton;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../core/build_tools/makefile.dart' show isMakefileName, parseMakeTargets;
 import 'blame.dart';
 import 'context_menu_region.dart';
 import 'editor_appearance.dart';
@@ -88,6 +89,9 @@ class EditorViewWidget extends StatefulWidget {
   /// Markdown 预览里点了指向本地文件的链接:在编辑器里打开它(绝对路径)。
   final ValueChanged<String>? onOpenFile;
 
+  /// Makefile 行号栏的 ▶(同 IntelliJ):运行 [filePath] 里的目标。为 null 时不显示。
+  final void Function(String filePath, String target)? onRunMakeTarget;
+
   /// 预览用到的系统能力(测试里替换)。
   final MarkdownEnv markdownEnv;
 
@@ -104,6 +108,7 @@ class EditorViewWidget extends StatefulWidget {
     this.bannerBuilder,
     this.paneActionsBuilder,
     this.onOpenFile,
+    this.onRunMakeTarget,
     this.markdownEnv = const MarkdownEnv(),
     required this.openTabs,
     required this.activeFile,
@@ -1132,7 +1137,14 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
                               filePath,
                               controller.folds.lineOfRow(((pos.dy - 8) / _lineHeight).floor().clamp(0, controller.folds.rowCount - 1)),
                             ),
-                            child: _buildGutter(lines.length, diagByLine: diagByLine, controller: controller, highlighter: highlighter),
+                            child: _buildGutter(
+                              lines.length,
+                              diagByLine: diagByLine,
+                              controller: controller,
+                              highlighter: highlighter,
+                              makeTargets: _makeTargetsOf(controller, filePath),
+                              onRunTarget: widget.onRunMakeTarget == null ? null : (t) => widget.onRunMakeTarget!(filePath, t),
+                            ),
                           ),
                           _buildGitDiffStripe(
                             controller.folds,
@@ -1375,11 +1387,26 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
   /// 折叠箭头那一栏的宽度。
   static const double foldMarkerWidth = 14;
 
+  /// Makefile 里每个目标所在的行 → 目标名(行号栏的 ▶);不是 Makefile 或没接运行时为空。按文本版本缓存。
+  final Map<CodeEditorController, (int, Map<int, String>)> _makeTargets = {};
+
+  Map<int, String> _makeTargetsOf(CodeEditorController controller, String filePath) {
+    if (widget.onRunMakeTarget == null || !isMakefileName(filePath)) return const {};
+    final cached = _makeTargets[controller];
+    if (cached != null && cached.$1 == controller.version) return cached.$2;
+    _makeTargets.removeWhere((c, _) => c.isDisposed);
+    final map = {for (final t in parseMakeTargets(controller.text)) if (!t.special) t.line: t.name};
+    _makeTargets[controller] = (controller.version, map);
+    return map;
+  }
+
   Widget _buildGutter(
     int totalLines, {
     required Map<int, List<EditorDiagnostic>> diagByLine,
     required CodeEditorController controller,
     required DocumentHighlighter highlighter,
+    Map<int, String> makeTargets = const {},
+    void Function(String target)? onRunTarget,
   }) {
     final bookmarks = controller.bookmarks;
     final showNumbers = _appearance.showLineNumbers;
@@ -1425,7 +1452,10 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
                         diagByLine[rowLines[k]] ?? const [],
                         bookmarks,
                         showNumbers,
-                        fold: _foldMarker(controller, rowLines[k], byStart[rowLines[k]]),
+                        // Makefile 的目标行:▶ 运行(占折叠箭头那一栏,Makefile 没有折叠)
+                        fold: onRunTarget != null && makeTargets.containsKey(rowLines[k])
+                            ? _runMarker(makeTargets[rowLines[k]]!, onRunTarget)
+                            : _foldMarker(controller, rowLines[k], byStart[rowLines[k]]),
                       ),
                     ),
                 ],
@@ -1451,7 +1481,14 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
     );
   }
 
-  Widget _foldArrow(IconData icon, VoidCallback onTap, {Key? key}) => MouseRegion(
+  /// 行号栏的运行按钮(绿色 ▶)。
+  Widget _runMarker(String target, void Function(String target) onRun) => Tooltip(
+        message: "运行 'make $target'",
+        waitDuration: const Duration(milliseconds: 400),
+        child: _foldArrow(Icons.play_arrow, () => onRun(target), key: ValueKey('make-run-$target'), color: const Color(0xFF5FB865)),
+      );
+
+  Widget _foldArrow(IconData icon, VoidCallback onTap, {Key? key, Color? color}) => MouseRegion(
         key: key,
         cursor: SystemMouseCursors.click,
         child: GestureDetector(
@@ -1459,7 +1496,7 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
           onTap: onTap,
           child: SizedBox(
             width: foldMarkerWidth,
-            child: Icon(icon, size: 14, color: _appearance.colorScheme.lineNumber),
+            child: Icon(icon, size: 14, color: color ?? _appearance.colorScheme.lineNumber),
           ),
         ),
       );

@@ -1008,7 +1008,8 @@ int main(int argc, char **argv) {
         LspService.idleTimeout = saved.$1;
         LspService.idleCheckInterval = saved.$2;
       });
-      final lsp = LspService(root.path, serverOverrides: {'rust': serverCmd});
+      // 全量并发跑时机器很忙:唤醒后重启 + 初始化可能超过默认的 10 秒请求超时
+      final lsp = LspService(root.path, serverOverrides: {'rust': serverCmd}, requestTimeout: const Duration(seconds: 40));
       final events = <LspDiagnosticsEvent>[];
       final sub = lsp.diagnostics.listen(events.add);
       await lsp.didOpen('src/idle.rs', 'fn idle() {}\n');

@@ -46,6 +46,7 @@ abstract final class KeymapIds {
   static const git = 'ActivateVersionControlToolWindow';
   static const hideAll = 'HideAllWindows';
   static const gotoFile = 'GotoFile';
+  static const make = 'ActivateMakeToolWindow';
   static const collapseRegion = 'CollapseRegion';
   static const expandRegion = 'ExpandRegion';
   static const collapseAll = 'CollapseAllRegions';
@@ -63,6 +64,7 @@ const List<KeymapAction> keymapActions = [
   KeymapAction(id: KeymapIds.terminal, title: '终端', group: '工具窗', mac: ['alt F12'], other: ['alt F12']),
   KeymapAction(id: KeymapIds.git, title: 'Git 提交与日志', group: '工具窗', mac: ['meta 9'], other: ['alt 9']),
   KeymapAction(id: KeymapIds.hideAll, title: '隐藏 / 恢复所有工具窗', group: '工具窗', mac: ['shift meta F12'], other: ['ctrl shift F12']),
+  KeymapAction(id: KeymapIds.make, title: 'make', group: '工具窗', intellijIds: ['ActivatemakeToolWindow']),
   KeymapAction(id: KeymapIds.gotoFile, title: '按文件名打开(Go to File)', group: '导航', mac: ['shift meta O'], other: ['ctrl shift N']),
   KeymapAction(id: KeymapIds.collapseRegion, title: '折叠', group: '代码折叠', mac: ['meta MINUS'], other: ['ctrl MINUS']),
   KeymapAction(id: KeymapIds.expandRegion, title: '展开', group: '代码折叠', mac: ['meta EQUALS'], other: ['ctrl EQUALS']),

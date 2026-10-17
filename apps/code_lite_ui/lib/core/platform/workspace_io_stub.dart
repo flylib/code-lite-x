@@ -31,6 +31,10 @@ String noProjectRoot() => '.';
 
 Future<String?> pickSavePath(String suggestedName) async => null;
 
+Future<String?> pickFile({String? message, String? directory}) async => null;
+
+Future<(String?, String?)> detectMake(String path) async => (null, '浏览器里不能运行 make');
+
 Future<String?> writeTextFile(String path, String content) async => 'web 预览不支持写文件';
 
 Future<Map<String, dynamic>> loadSettings() async => const {};

@@ -1,3 +1,5 @@
+import '../build_tools/makefile.dart' show isMakefileName;
+import '../../features/make/make_store.dart';
 import 'dart:async';
 
 import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
@@ -67,10 +69,12 @@ class ProjectContext {
     required this.branchActions,
     required this.prs,
     required this.build,
+    required this.make,
   }) {
     workspace.addListener(_onWorkspaceChanged);
     branches.onChanged = _onRepoChanged;
     build.addListener(_onBuildToolsChanged);
+    make.addListener(_onBuildToolsChanged);
   }
 
   /// [isActive]:这个项目现在是不是正在显示的那个(影响要不要去动共享的窗口布局)。
@@ -114,6 +118,32 @@ class ProjectContext {
         fileSaved: client.onFileSaved,
         windows: defaultTargetPlatform == TargetPlatform.windows,
       ),
+      make: MakeStore(
+        projectRoot: () => workspace.rootPath,
+        read: (path) async {
+          final res = await client.fetchFile(path);
+          return res['status'] == 'ok' ? res['content'] as String? : null;
+        },
+        // 项目里的 Makefile:从 Rust 常驻的文件清单里找(子目录里的也算);清单还在建时返回 null
+        listMakefiles: () async {
+          final found = <String>{};
+          for (final q in const ['makefile', '.mk', '.mak']) {
+            final r = client.fileIndexQuery(q, limit: 500);
+            if (r['status'] != 'ok' || r['ready'] != true) return null;
+            for (final hit in (r['results'] as List? ?? const [])) {
+              final p = (hit as Map)['path'] as String?;
+              if (p != null && isMakefileName(p)) found.add(p);
+            }
+          }
+          return found.toList();
+        },
+        runner: (title, command) {
+          terminals.run(title, command);
+          if (isActive()) layout.showBottomTab(BottomToolTab.terminal);
+        },
+        makePath: () => services.settings.makePath,
+        fileSaved: client.onFileSaved,
+      ),
     );
   }
 
@@ -128,6 +158,9 @@ class ProjectContext {
   final BranchActions branchActions;
   final PullRequestsStore prs;
   final BuildToolsStore build;
+
+  /// make 工具窗:项目里的 Makefile 和它们的目标。
+  final MakeStore make;
 
   LayoutStore get _layout => services.layout;
 
@@ -173,6 +206,7 @@ class ProjectContext {
     prs.invalidate();
     branches.reset();
     build.reload();
+    make.reload();
     _sessionTimer?.cancel();
     _watch?.cancel();
     _watch = null;
@@ -219,6 +253,9 @@ class ProjectContext {
       if (paths.isNotEmpty) sessions.syncWithDisk(paths);
     }
     if (r['structure'] == true) _reloadTree();
+    // 别处改了 / 新建 / 删掉了 Makefile(git 切分支、别的编辑器):make 工具窗跟着重读
+    final makefiles = [...touched, for (final p in (r['removed'] as List? ?? const [])) p as String].where(isMakefileName);
+    if (makefiles.isNotEmpty) make.onFilesChanged(makefiles.first);
   }
 
   /// 刷新文件树;正在刷的话等它完了再刷一次(中间来的多次合成一次)。
@@ -262,17 +299,20 @@ class ProjectContext {
   /// 只在它是正在显示的项目时才动共享的窗口布局。
   void _onBuildToolsChanged() {
     if (!isActive()) return;
-    if (build.hasProjects || build.loading) return;
     syncLayoutToProject();
   }
 
   /// 窗口布局是共享的:切到别的项目后,开着的构建工具窗在新项目里没有对应内容,换回项目视图。
   void syncLayoutToProject() {
-    if (build.hasProjects || build.loading) return;
-    if (!_layout.isToolVisible(SideTool.build)) return;
-    final wasLeftTop = _layout.visibleTool(ToolSide.left, ToolSlot.top) == SideTool.build;
-    _layout.hideTool(SideTool.build);
-    if (wasLeftTop) _layout.showTool(SideTool.project);
+    void hide(SideTool tool) {
+      if (!_layout.isToolVisible(tool)) return;
+      final wasLeftTop = _layout.visibleTool(ToolSide.left, ToolSlot.top) == tool;
+      _layout.hideTool(tool);
+      if (wasLeftTop) _layout.showTool(SideTool.project);
+    }
+
+    if (!build.hasProjects && !build.loading) hide(SideTool.build);
+    if (!make.hasMakefiles && !make.loading) hide(SideTool.make);
   }
 
   /// git 动了仓库(切分支 / 更新 / 合并 / 变基 ……,或者别处在终端里切了分支):
@@ -307,6 +347,8 @@ class ProjectContext {
     await _webServer?.close(); // 端口随项目一起释放
     workspace.removeListener(_onWorkspaceChanged);
     build.removeListener(_onBuildToolsChanged);
+    make.removeListener(_onBuildToolsChanged);
+    make.dispose();
     branches.dispose();
     gitLog.dispose();
     prs.dispose();

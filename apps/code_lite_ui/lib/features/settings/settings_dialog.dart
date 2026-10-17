@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/platform/workspace_io.dart' as io;
 import '../../core/plugins/plugin_manager.dart';
 import '../../core/state/settings_store.dart';
 import '../../core/theme/intellij_theme.dart';
@@ -15,16 +16,17 @@ const TextStyle _hint = TextStyle(color: IntelliJTheme.textMuted, fontSize: 12);
 const TextStyle _section = TextStyle(color: IntelliJTheme.textHigh, fontSize: 13, fontWeight: FontWeight.w600);
 
 /// 打开设置(CodeLiteX ▸ Settings…,⌘,)。改动立即生效并写入 ~/.codelitex/settings.json。
-Future<void> showSettingsDialog(BuildContext context, SettingsStore settings, {PluginManager? plugins, bool openPlugins = false}) =>
+/// [openBuildTools]:直接打开 Build Tools 页(make 工具窗的设置按钮)。
+Future<void> showSettingsDialog(BuildContext context, SettingsStore settings, {PluginManager? plugins, bool openPlugins = false, bool openBuildTools = false}) =>
     showDialog<void>(
       context: context,
-      builder: (_) => SettingsDialog(settings: settings, plugins: plugins, openPlugins: openPlugins),
+      builder: (_) => SettingsDialog(settings: settings, plugins: plugins, openPlugins: openPlugins, openBuildTools: openBuildTools),
     );
 
-enum _Page { general, appearance, keymap, plugins }
+enum _Page { general, appearance, keymap, buildTools, plugins }
 
 class SettingsDialog extends StatefulWidget {
-  const SettingsDialog({super.key, required this.settings, this.plugins, this.openPlugins = false});
+  const SettingsDialog({super.key, required this.settings, this.plugins, this.openPlugins = false, this.openBuildTools = false});
 
   final SettingsStore settings;
   final PluginManager? plugins;
@@ -32,12 +34,17 @@ class SettingsDialog extends StatefulWidget {
   /// 直接打开 Plugins 页(菜单 CodeLiteX ▸ Plugins…)。
   final bool openPlugins;
 
+  /// 直接打开 Build Tools 页。
+  final bool openBuildTools;
+
   @override
   State<SettingsDialog> createState() => _SettingsDialogState();
 }
 
 class _SettingsDialogState extends State<SettingsDialog> {
-  late _Page _page = widget.openPlugins && widget.plugins != null ? _Page.plugins : _Page.general;
+  late _Page _page = widget.openPlugins && widget.plugins != null
+      ? _Page.plugins
+      : (widget.openBuildTools ? _Page.buildTools : _Page.general);
 
   @override
   Widget build(BuildContext context) {
@@ -92,6 +99,8 @@ class _SettingsDialogState extends State<SettingsDialog> {
                             const SizedBox(height: 10),
                             _NavItem(label: 'Keymap', selected: _page == _Page.keymap, onTap: () => setState(() => _page = _Page.keymap)),
                           ],
+                          const SizedBox(height: 10),
+                          _NavItem(label: 'Build Tools', selected: _page == _Page.buildTools, onTap: () => setState(() => _page = _Page.buildTools)),
                           if (widget.plugins != null) ...[
                             const SizedBox(height: 10),
                             _NavItem(label: 'Plugins', selected: _page == _Page.plugins, onTap: () => setState(() => _page = _Page.plugins)),
@@ -107,6 +116,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
                           _Page.general => _general(),
                           _Page.appearance => _appearance(),
                           _Page.keymap => [KeymapPage(keymap: widget.settings.keymap!)],
+                          _Page.buildTools => [MakeSettings(settings: widget.settings)],
                           _Page.plugins => [PluginsPage(plugins: widget.plugins!)],
                         },
                       ),
@@ -412,6 +422,108 @@ class _SchemeCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// 设置 ▸ Build Tools ▸ Make(同 IntelliJ 的 Path to Make executable):make 可执行文件的路径,
+/// 留空用 PATH 里的 make。「检测」跑一次 `make --version` 看能不能用。
+class MakeSettings extends StatefulWidget {
+  const MakeSettings({super.key, required this.settings});
+
+  final SettingsStore settings;
+
+  @override
+  State<MakeSettings> createState() => _MakeSettingsState();
+}
+
+class _MakeSettingsState extends State<MakeSettings> {
+  late final TextEditingController _path = TextEditingController(text: widget.settings.makePath);
+  String? _version;
+  String? _error;
+  bool _checking = false;
+
+  @override
+  void dispose() {
+    _path.dispose();
+    super.dispose();
+  }
+
+  Future<void> _browse() async {
+    final current = _path.text.trim();
+    final dir = current.contains('/') ? current.substring(0, current.lastIndexOf('/')) : '/usr/bin';
+    final picked = await io.pickFile(message: '选择 make 可执行文件', directory: dir);
+    if (picked == null || !mounted) return;
+    _path.text = picked;
+    widget.settings.setMakePath(picked);
+    await _check();
+  }
+
+  Future<void> _check() async {
+    setState(() {
+      _checking = true;
+      _version = _error = null;
+    });
+    final (version, error) = await io.detectMake(_path.text);
+    if (!mounted) return;
+    setState(() {
+      _checking = false;
+      _version = version;
+      _error = error;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Make', style: _section),
+        const SizedBox(height: 4),
+        const Text('make 工具窗和 Makefile 行号栏的 ▶ 都用它运行目标;留空用 PATH 里的 make。', style: _hint),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            const Text('make 可执行文件', style: _text),
+            const SizedBox(width: 12),
+            Expanded(
+              child: TextField(
+                key: const ValueKey('make-path-field'),
+                controller: _path,
+                style: _text,
+                decoration: const InputDecoration(
+                  isDense: true,
+                  hintText: 'make',
+                  hintStyle: _hint,
+                  border: OutlineInputBorder(),
+                  contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                ),
+                onChanged: widget.settings.setMakePath,
+                onSubmitted: (_) => _check(),
+              ),
+            ),
+            const SizedBox(width: 8),
+            OutlinedButton(onPressed: _browse, child: const Text('浏览…')),
+            const SizedBox(width: 8),
+            OutlinedButton(key: const ValueKey('make-detect'), onPressed: _checking ? null : _check, child: const Text('检测')),
+          ],
+        ),
+        const SizedBox(height: 8),
+        if (_checking)
+          const Text('正在检测…', style: _hint)
+        else if (_version != null)
+          Row(children: [
+            const Icon(Icons.check_circle_outline, size: 14, color: IntelliJTheme.gitGreen),
+            const SizedBox(width: 6),
+            Flexible(child: Text(_version!, style: _text, overflow: TextOverflow.ellipsis)),
+          ])
+        else if (_error != null)
+          Row(children: [
+            const Icon(Icons.error_outline, size: 14, color: IntelliJTheme.diagError),
+            const SizedBox(width: 6),
+            Flexible(child: Text(_error!, style: const TextStyle(color: IntelliJTheme.diagError, fontSize: 12), overflow: TextOverflow.ellipsis)),
+          ]),
+      ],
     );
   }
 }

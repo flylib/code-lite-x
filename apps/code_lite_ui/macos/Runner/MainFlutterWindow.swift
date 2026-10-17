@@ -46,6 +46,28 @@ class MainFlutterWindow: NSWindow {
         }
         return
       }
+      if call.method == "pickFile" {
+        // 选一个文件(设置里的 make 路径等);可执行文件常在隐藏目录,显示隐藏文件
+        let args = call.arguments as? [String: Any]
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        panel.allowsMultipleSelection = false
+        panel.showsHiddenFiles = true
+        panel.treatsFilePackagesAsDirectories = true
+        panel.prompt = "Choose"
+        if let message = args?["message"] as? String { panel.message = message }
+        if let dir = args?["directory"] as? String { panel.directoryURL = URL(fileURLWithPath: dir) }
+        let done: (NSApplication.ModalResponse) -> Void = { response in
+          result(response == .OK ? panel.url?.path : nil)
+        }
+        if let window = self {
+          panel.beginSheetModal(for: window, completionHandler: done)
+        } else {
+          done(panel.runModal())
+        }
+        return
+      }
       guard call.method == "pickDirectory" else {
         result(FlutterMethodNotImplemented)
         return

@@ -14,6 +14,36 @@ Future<String?> pickDirectory() async {
   }
 }
 
+/// 弹出系统"选择文件"面板(设置里选 make 等可执行文件)。[directory] 是一开始停在的目录。取消返回 null。
+Future<String?> pickFile({String? message, String? directory}) async {
+  try {
+    return await _dialogs.invokeMethod<String>('pickFile', {
+      if (message != null) 'message': message,
+      if (directory != null) 'directory': directory,
+    });
+  } on MissingPluginException {
+    return null;
+  }
+}
+
+/// 检测 make:跑 `<path> --version`,返回 (版本行, 错误);[path] 空时用 PATH 里的 make。
+/// Finder 启动的 app 的 PATH 很短,所以也在常见安装位置里找。
+Future<(String?, String?)> detectMake(String path) async {
+  final exe = path.trim().isEmpty ? 'make' : path.trim();
+  final env = Map<String, String>.from(Platform.environment);
+  env['PATH'] = [env['PATH'] ?? '', '/opt/homebrew/bin', '/usr/local/bin', '/usr/bin', '/bin'].where((p) => p.isNotEmpty).join(':');
+  try {
+    final r = await Process.run(exe, ['--version'], environment: env).timeout(const Duration(seconds: 5));
+    final out = '${r.stdout}'.trim();
+    if (r.exitCode != 0 || out.isEmpty) return (null, '运行失败(退出码 ${r.exitCode}):${'${r.stderr}'.trim()}');
+    return (out.split('\n').first.trim(), null);
+  } on ProcessException {
+    return (null, '找不到 $exe');
+  } catch (e) {
+    return (null, '$e');
+  }
+}
+
 /// 弹出系统"存储为"面板。取消返回 null。
 Future<String?> pickSavePath(String suggestedName) async {
   try {

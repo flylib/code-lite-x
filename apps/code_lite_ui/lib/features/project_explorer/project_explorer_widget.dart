@@ -1,3 +1,4 @@
+import '../../core/build_tools/makefile.dart' show isMakefileName;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -410,7 +411,6 @@ class _ProjectExplorerWidgetState extends State<ProjectExplorerWidget> {
 
   Widget _fileRow(_Row r, List<int>? hits) {
     final isActive = widget.activeFilePath == r.path;
-    final (icon, color) = _fileIcon(r.name);
     return Container(
       decoration: BoxDecoration(
         color: isActive && r.path != _selected ? IntelliJTheme.selectionBg : Colors.transparent,
@@ -419,7 +419,7 @@ class _ProjectExplorerWidgetState extends State<ProjectExplorerWidget> {
       padding: EdgeInsets.only(left: 26.0 + (r.depth * 12.0), right: 8),
       child: Row(
         children: [
-          Icon(icon, size: 13, color: color),
+          fileTypeIconWidget(r.name, size: 13),
           const SizedBox(width: 6),
           Expanded(
             child: _label(r.name, hits, TextStyle(color: isActive ? const Color(0xFF6CB4F8) : IntelliJTheme.textPrimary, fontSize: 12)),
@@ -454,8 +454,36 @@ class _ProjectExplorerWidgetState extends State<ProjectExplorerWidget> {
 
   static const Color _matchBg = Color(0xFF6B5A1E);
 
-  /// 文件图标:按语法引擎识别的语言给图标与颜色。
-  static (IconData, Color) _fileIcon(String name) => fileTypeIcon(name);
+}
+
+/// 文件图标的 widget:Makefile 是字母 M(IntelliJ 的 Makefile 图标,Material 里没有),其余按 [fileTypeIcon]。
+Widget fileTypeIconWidget(String name, {double size = 13}) {
+  if (isMakefileName(name)) return MakefileIcon(size: size);
+  final (icon, color) = fileTypeIcon(name);
+  return Icon(icon, size: size, color: color);
+}
+
+/// Makefile 的图标:加粗的 M。文件树、Go to File、make 工具窗、活动条共用。
+class MakefileIcon extends StatelessWidget {
+  const MakefileIcon({super.key, this.size = 13, this.color = makefileIconColor});
+
+  final double size;
+  final Color color;
+
+  /// IntelliJ Makefile 图标的蓝紫色。
+  static const Color makefileIconColor = Color(0xFF8C9EFF);
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+        width: size,
+        height: size,
+        child: Center(
+          child: Text(
+            'M',
+            style: TextStyle(color: color, fontSize: size * 1.05, fontWeight: FontWeight.w800, height: 1, letterSpacing: -0.5),
+          ),
+        ),
+      );
 }
 
 /// 文件图标(按语法引擎识别的语言):文件树、Go to File 等处共用。

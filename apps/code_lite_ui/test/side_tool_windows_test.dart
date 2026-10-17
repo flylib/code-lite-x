@@ -52,7 +52,14 @@ void main() {
         ..moveTool(SideTool.project, ToolSide.left, ToolSlot.bottom)
         ..moveTool(SideTool.build, ToolSide.left, ToolSlot.bottom)
         ..resizeSplit(ToolSide.left, 0.634);
-      expect(a.toJson(), {'leftBottomTools': ['project', 'build'], 'leftSplit': 0.63, 'rightTopTools': [], 'rightBottomTools': [], 'rightSplit': 0.5});
+      expect(a.toJson(), {
+        'leftTopTools': ['commit', 'pullRequests', 'structure', 'openProjects'],
+        'leftBottomTools': ['project', 'build'],
+        'leftSplit': 0.63,
+        'rightTopTools': [],
+        'rightBottomTools': ['make'],
+        'rightSplit': 0.5,
+      });
       final b = LayoutStore()..applyJson({'leftBottomTools': ['project', 'build', 'nonsense'], 'leftSplit': 0.63});
       expect(b.slotOf(SideTool.project), ToolSlot.bottom);
       expect(b.slotOf(SideTool.commit), ToolSlot.top);
@@ -99,10 +106,22 @@ void main() {
       expect(l.widthOf(ToolSide.right), LayoutStore.minSideWidth);
 
       // 移回左上方:右边就空了
+      l.moveTool(SideTool.make, ToolSide.left, ToolSlot.bottom);
       l.moveTool(SideTool.structure, ToolSide.left, ToolSlot.top);
       l.moveTool(SideTool.build, ToolSide.left, ToolSlot.top);
       expect(l.hasToolsOn(ToolSide.right), isFalse);
       expect(l.visibleTool(ToolSide.left, ToolSlot.top), SideTool.build, reason: '顶替左上方原来的工具窗');
+    });
+
+    test('a tool added after the layout was saved (make) goes to its default place, also from old saves', () {
+      // 老存档:没有 leftTopTools,build 被挪到了左上方(不在任何列表里)
+      final old = LayoutStore()..applyJson({'leftBottomTools': ['commit'], 'rightTopTools': [], 'rightBottomTools': []});
+      expect(old.sideOf(SideTool.build), ToolSide.left, reason: '老存档里不在列表里的照旧在左上方');
+      expect((old.sideOf(SideTool.make), old.slotOf(SideTool.make)), (ToolSide.right, ToolSlot.bottom), reason: '新加的按默认放');
+      // 新存档:用户把 make 挪到了左上方,读回来还在左上方
+      final moved = LayoutStore()..moveTool(SideTool.make, ToolSide.left, ToolSlot.top);
+      final back = LayoutStore()..applyJson(moved.toJson());
+      expect((back.sideOf(SideTool.make), back.slotOf(SideTool.make)), (ToolSide.left, ToolSlot.top));
     });
 
     test('right placement round-trips through json; the open project view moved to the right opens there', () {
@@ -113,10 +132,11 @@ void main() {
         ..resizeSplit(ToolSide.right, 0.3);
       final json = a.toJson();
       expect(json, {
+        'leftTopTools': ['project', 'pullRequests', 'openProjects'],
         'leftBottomTools': ['commit'],
         'leftSplit': 0.5,
         'rightTopTools': ['structure'],
-        'rightBottomTools': ['build'],
+        'rightBottomTools': ['build', 'make'],
         'rightSplit': 0.3,
       });
 
@@ -135,7 +155,8 @@ void main() {
       // 旧版本只存了左侧的布局,照样能读
       final d = LayoutStore()..applyJson({'leftBottomTools': ['structure'], 'leftSplit': 0.4});
       expect(d.slotOf(SideTool.structure), ToolSlot.bottom);
-      expect(d.hasToolsOn(ToolSide.right), isFalse);
+      expect(d.sideOf(SideTool.build), ToolSide.left, reason: '老存档里没提到的照旧在左上方');
+      expect(d.sideOf(SideTool.make), ToolSide.right, reason: '存档之后新加的 make 按默认放在右侧');
     });
 
     test('settings persist the placement only when it changes', () async {
@@ -161,7 +182,14 @@ void main() {
 
       layout.moveTool(SideTool.build, ToolSide.left, ToolSlot.bottom);
       expect(saved, hasLength(1));
-      expect(saved.single['layout'], {'leftBottomTools': ['structure', 'build'], 'leftSplit': 0.5, 'rightTopTools': [], 'rightBottomTools': [], 'rightSplit': 0.5});
+      expect(saved.single['layout'], {
+        'leftTopTools': ['project', 'commit', 'pullRequests', 'openProjects'],
+        'leftBottomTools': ['structure', 'build'],
+        'leftSplit': 0.5,
+        'rightTopTools': [],
+        'rightBottomTools': ['make'],
+        'rightSplit': 0.5,
+      });
       settings.dispose();
       sessions.dispose();
       await client.dispose();
