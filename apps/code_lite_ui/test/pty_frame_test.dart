@@ -59,6 +59,8 @@ void main() {
     expect(first.rows, 10);
     expect(first.cols, 60);
 
+    // 先清屏:shell 的启动输出可能已经占满这 10 行,再打印就整屏滚动、每行都变,测不出「只带变了的行」
+    client.ptyWrite(id, 'clear\r');
     // 安静下来后整屏同步一次;settle 里已经确认了没新输出时只回「没变」
     final full = await settle();
     expect(full.full, isTrue);
