@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/build_tools/makefile.dart' show isMakefileName, parseMakeTargets;
+import '../project_explorer/project_explorer_widget.dart' show fileTypeIconWidget;
 import 'blame.dart';
 import 'context_menu_region.dart';
 import 'editor_appearance.dart';
@@ -708,40 +709,8 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
     return KeyEventResult.ignored;
   }
 
-  Widget _buildFileTypeIcon(String filePath) {
-    final ext = filePath.split('.').last.toLowerCase();
-    switch (ext) {
-      case 'rs':
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 0.5),
-          decoration: BoxDecoration(
-            color: const Color(0xFFD87642).withValues(alpha: 0.18),
-            borderRadius: BorderRadius.circular(2),
-            border: Border.all(color: const Color(0xFFD87642), width: 0.8),
-          ),
-          child: const Text('rs', style: TextStyle(color: Color(0xFFD87642), fontSize: 9, fontWeight: FontWeight.bold)),
-        );
-      case 'dart':
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 0.5),
-          decoration: BoxDecoration(
-            color: const Color(0xFF3574F0).withValues(alpha: 0.18),
-            borderRadius: BorderRadius.circular(2),
-            border: Border.all(color: const Color(0xFF3574F0), width: 0.8),
-          ),
-          child: const Text('dt', style: TextStyle(color: Color(0xFF3574F0), fontSize: 9, fontWeight: FontWeight.bold)),
-        );
-      case 'json':
-      case 'toml':
-      case 'yaml':
-      case 'yml':
-        return const Text('{ }', style: TextStyle(color: Color(0xFFE5C07B), fontSize: 10, fontWeight: FontWeight.bold));
-      case 'md':
-        return const Text('M↓', style: TextStyle(color: Color(0xFF6CB4F8), fontSize: 10, fontWeight: FontWeight.bold));
-      default:
-        return const Icon(Icons.insert_drive_file_outlined, size: 12, color: Color(0xFF8C8C8C));
-    }
-  }
+  /// 标签上的文件图标:和文件树、Go to File 用同一套([fileTypeIconWidget])。
+  Widget _buildFileTypeIcon(String filePath) => fileTypeIconWidget(filePath.split('/').last, size: 14);
 
   /// 一个编辑面板:只订阅它自己的 controller 和外观设置。按键 / 光标移动只重建这一块,
   /// 标签栏等外层不动(标签上的「已修改」圆点随会话层的 dirty 变化刷新)。

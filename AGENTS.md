@@ -77,6 +77,7 @@ CodeLiteX 是一款高性能的原生跨平台代码编辑器，内置 Git 管�
 - 插件市场暂时不做。
 
 **文件树**
+- 文件图标：同一种文件在文件树、编辑器标签、Go to File 里是同一个图标（`fileTypeIconWidget`）。Markdown 是画出来的 Markdown 标志（圆角框里 M + ↓，`MarkdownIcon`），Makefile 是 M（`MakefileIcon`），其余是按语言选的 Material 图标。
 - 别处新建 / 删除文件时文件树自动刷新（文件监视在 Rust，`target/`、`node_modules/`、`.git` 等构建产物和临时文件的事件不触发刷新）。
 - 快速搜索（IntelliJ 的 speed search）：**只在文件树有焦点时生效**（点一下文件树）。直接打字在已展开的节点里找，选中跳到第一个匹配（从当前选中往下找，到底回到顶上），匹配字符高亮，顶上浮一个搜索框（没匹配时红字）；↑↓ 在匹配间跳，回车打开文件 / 展开目录，Backspace 删字，Esc 或失去焦点退出。匹配不分大小写，先找连续出现，否则分段匹配、每段从词首开始（`admser` → admin-service，`stmgc` → SeaTunnelMigrationGroupController）。不搜时 ↑↓ 移动选中，→ 展开 / ← 收起或回到上一级，回车打开。
 

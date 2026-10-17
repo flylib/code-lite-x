@@ -456,9 +456,11 @@ class _ProjectExplorerWidgetState extends State<ProjectExplorerWidget> {
 
 }
 
-/// 文件图标的 widget:Makefile 是字母 M(IntelliJ 的 Makefile 图标,Material 里没有),其余按 [fileTypeIcon]。
+/// 文件图标的 widget:文件树、编辑器标签、Go to File 共用,同一种文件到处是同一个图标。
+/// Makefile 是字母 M、Markdown 是 Markdown 标志(IntelliJ 的图标,Material 里没有),其余按 [fileTypeIcon]。
 Widget fileTypeIconWidget(String name, {double size = 13}) {
   if (isMakefileName(name)) return MakefileIcon(size: size);
+  if (languages.detect(name).id == 'markdown') return MarkdownIcon(size: size);
   final (icon, color) = fileTypeIcon(name);
   return Icon(icon, size: size, color: color);
 }
@@ -484,6 +486,72 @@ class MakefileIcon extends StatelessWidget {
           ),
         ),
       );
+}
+
+/// Markdown 文件的图标:Markdown 标志 —— 圆角框里一个 M 和一个向下的箭头(IntelliJ 的 Markdown 图标同款)。
+/// 画出来而不是用文字,13px 下也清楚。
+class MarkdownIcon extends StatelessWidget {
+  const MarkdownIcon({super.key, this.size = 13, this.color = markdownIconColor});
+
+  final double size;
+  final Color color;
+
+  static const Color markdownIconColor = Color(0xFF6CB4F8);
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+        width: size,
+        height: size,
+        child: CustomPaint(painter: _MarkdownMarkPainter(color)),
+      );
+}
+
+class _MarkdownMarkPainter extends CustomPainter {
+  _MarkdownMarkPainter(this.color);
+
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width;
+    final stroke = (w / 11).clamp(1.0, 2.0);
+    final p = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = stroke
+      ..strokeJoin = StrokeJoin.round
+      ..strokeCap = StrokeCap.round;
+    // 外框:宽高比约 1.6(Markdown 标志的比例),竖直居中
+    final boxH = w * 0.66;
+    final top = (size.height - boxH) / 2;
+    final box = Rect.fromLTWH(stroke / 2, top + stroke / 2, w - stroke, boxH - stroke);
+    canvas.drawRRect(RRect.fromRectAndRadius(box, Radius.circular(w * 0.12)), p);
+    // M
+    final y0 = top + boxH * 0.28, y1 = top + boxH * 0.72;
+    final mx0 = w * 0.2, mx1 = w * 0.52;
+    canvas.drawPath(
+      Path()
+        ..moveTo(mx0, y1)
+        ..lineTo(mx0, y0)
+        ..lineTo((mx0 + mx1) / 2, y0 + (y1 - y0) * 0.45)
+        ..lineTo(mx1, y0)
+        ..lineTo(mx1, y1),
+      p,
+    );
+    // ↓
+    final ax = w * 0.72;
+    canvas.drawLine(Offset(ax, y0), Offset(ax, y1), p);
+    canvas.drawPath(
+      Path()
+        ..moveTo(ax - w * 0.1, y1 - (y1 - y0) * 0.38)
+        ..lineTo(ax, y1)
+        ..lineTo(ax + w * 0.1, y1 - (y1 - y0) * 0.38),
+      p,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_MarkdownMarkPainter old) => old.color != color;
 }
 
 /// 文件图标(按语法引擎识别的语言):文件树、Go to File 等处共用。

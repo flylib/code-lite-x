@@ -1,3 +1,4 @@
+import 'package:code_lite_ui/features/project_explorer/project_explorer_widget.dart' show fileTypeIcon;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -376,8 +377,8 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Verify file type badge
-      expect(find.text('rs'), findsWidgets);
+      // 标签上的文件图标和文件树同一套(Rust 文件)
+      expect(find.byIcon(fileTypeIcon('primary.rs').$1), findsWidgets);
       // Verify both file contents are visible on screen simultaneously
       expect(find.text('primary.rs'), findsWidgets);
       expect(find.text('secondary.rs'), findsWidgets);
