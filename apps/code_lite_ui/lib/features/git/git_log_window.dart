@@ -644,10 +644,29 @@ class _FilterBar extends StatelessWidget {
       height: 36,
       padding: const EdgeInsets.symmetric(horizontal: 6),
       decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: IntelliJTheme.borderSubtle))),
-      // 右边固定放 Pull / Push,左边是搜索框、筛选和工具按钮
+      // 左边是搜索框和筛选;右边靠齐放工具按钮,最后是 Pull / Push
       child: Row(
         children: [
           Expanded(child: _filters(context)),
+          GitIconButton(icon: Icons.sync, tooltip: '刷新', onTap: store.refresh),
+          GitIconButton(
+            icon: Icons.local_florist_outlined,
+            tooltip: 'Cherry-Pick',
+            onTap: store.selected == null || store.busy != null
+                ? null
+                : () => GitCommitActions(context, store).cherryPick(store.selected!),
+          ),
+          GitIconButton(
+            icon: Icons.visibility_outlined,
+            tooltip: '显示详情',
+            active: store.showDetails,
+            onTap: store.toggleDetails,
+          ),
+          GitIconButton(
+            icon: Icons.manage_search,
+            tooltip: '跳转到哈希 / 分支 / 标签',
+            onTap: () => GitCommitActions(context, store).goToRevision(),
+          ),
           if (onPull != null)
             _SyncButton(key: const ValueKey('git-pull'), up: false, color: const Color(0xFF4A86F7), tooltip: 'Pull:更新当前分支(拉取并合并上游)', onTap: () => onPull!(context)),
           if (onPush != null)
@@ -736,25 +755,6 @@ class _FilterBar extends StatelessWidget {
               ),
             ),
           ),
-          GitIconButton(icon: Icons.sync, tooltip: '刷新', onTap: store.refresh),
-          GitIconButton(
-            icon: Icons.local_florist_outlined,
-            tooltip: 'Cherry-Pick',
-            onTap: store.selected == null || store.busy != null
-                ? null
-                : () => GitCommitActions(context, store).cherryPick(store.selected!),
-          ),
-          GitIconButton(
-            icon: Icons.visibility_outlined,
-            tooltip: '显示详情',
-            active: store.showDetails,
-            onTap: store.toggleDetails,
-          ),
-          GitIconButton(
-            icon: Icons.manage_search,
-            tooltip: '跳转到哈希 / 分支 / 标签',
-            onTap: () => GitCommitActions(context, store).goToRevision(),
-          ),
         ],
     );
   }
@@ -824,27 +824,28 @@ class _TrayArrowPainter extends CustomPainter {
     final paint = Paint()
       ..color = color
       ..style = PaintingStyle.stroke
-      ..strokeWidth = s * 0.13
+      // 线宽、留白照 Material 图标(24 格里线宽 2、四周各留约 2 格),和左边那几个看起来一样大
+      ..strokeWidth = s * 2 / 24
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round;
     // 托盘
     canvas.drawPath(
       Path()
-        ..moveTo(s * 0.14, s * 0.62)
-        ..lineTo(s * 0.14, s * 0.88)
-        ..lineTo(s * 0.86, s * 0.88)
-        ..lineTo(s * 0.86, s * 0.62),
+        ..moveTo(s * 4 / 24, s * 15 / 24)
+        ..lineTo(s * 4 / 24, s * 20 / 24)
+        ..lineTo(s * 20 / 24, s * 20 / 24)
+        ..lineTo(s * 20 / 24, s * 15 / 24),
       paint,
     );
     // 箭杆 + 箭头
-    final (tip, tail) = up ? (s * 0.08, s * 0.66) : (s * 0.66, s * 0.08);
-    final wing = up ? s * 0.22 : -s * 0.22;
+    final (tip, tail) = up ? (s * 4 / 24, s * 16 / 24) : (s * 16 / 24, s * 4 / 24);
+    final wing = up ? s * 5 / 24 : -s * 5 / 24;
     canvas.drawLine(Offset(s * 0.5, tail), Offset(s * 0.5, tip), paint);
     canvas.drawPath(
       Path()
-        ..moveTo(s * 0.28, tip + wing)
+        ..moveTo(s * 7 / 24, tip + wing)
         ..lineTo(s * 0.5, tip)
-        ..lineTo(s * 0.72, tip + wing),
+        ..lineTo(s * 17 / 24, tip + wing),
       paint,
     );
   }

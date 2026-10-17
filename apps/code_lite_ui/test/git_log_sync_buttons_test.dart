@@ -52,9 +52,14 @@ void main() {
     final push = find.byKey(const ValueKey('git-push'));
     expect(pull, findsOneWidget);
     expect(push, findsOneWidget);
-    // 在其它工具按钮的右边,Push 是最右的一个
-    expect(tester.getRect(pull).left, greaterThanOrEqualTo(tester.getRect(find.byTooltip('跳转到哈希 / 分支 / 标签')).right));
-    expect(tester.getRect(push).left, greaterThanOrEqualTo(tester.getRect(pull).right));
+    // 工具按钮靠右、紧挨着 Pull / Push(刷新 … 跳转、Pull、Push),Push 是最右的一个;六个一样大
+    final tools = [for (final t in ['刷新', 'Cherry-Pick', '显示详情', '跳转到哈希 / 分支 / 标签']) tester.getRect(find.byTooltip(t).last)];
+    final rects = [...tools, tester.getRect(pull), tester.getRect(push)];
+    for (var i = 1; i < rects.length; i++) {
+      expect(rects[i].left - rects[i - 1].right, inInclusiveRange(-0.5, 2), reason: '第 $i 个紧挨着前一个');
+      expect(rects[i].size, rects[0].size, reason: '大小一致');
+    }
+    expect(tools.first.left, greaterThan(tester.getRect(find.text('Paths')).right + 40), reason: '离开了左边的筛选,靠到右边');
     final bar = tester.getRect(find.ancestor(of: push, matching: find.byType(Container)).first);
     expect(bar.right - tester.getRect(push).right, lessThan(12));
 
