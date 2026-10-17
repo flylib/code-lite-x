@@ -189,6 +189,53 @@ void main() {
       expect(git(remote, ['log', '--format=%s', '-1', 'feat/new']), 'new branch commit');
     });
 
+    test('outgoing lists the commits after the upstream, newest first', () async {
+      final (_, work) = withRemote();
+      commitFile(work, 'c.txt', 'c\n', 'first local');
+      commitFile(work, 'd.txt', 'd\n', 'second local');
+      final res = await GitService(work.path).call('git.outgoing');
+      expect(res['status'], 'ok', reason: '$res');
+      expect(res['set_upstream'], false);
+      expect((res['remote'], res['target_branch'], res['branch']), ('origin', 'main', 'main'));
+      expect([for (final c in res['commits'] as List) c['subject']], ['second local', 'first local']);
+      final c = (res['commits'] as List).first as Map;
+      expect((c['hash'] as String).length, 40);
+      expect(c['time'], greaterThan(0));
+
+      await GitService(work.path).call('git.push');
+      final after = await GitService(work.path).call('git.outgoing');
+      expect(after['commits'], isEmpty, reason: '推完就没有了');
+    });
+
+    test('outgoing for a branch never pushed: only commits not on any remote, and it will set the upstream', () async {
+      final (_, work) = withRemote();
+      git(work, ['switch', '-q', '-c', 'feat/new']);
+      commitFile(work, 'n.txt', 'n\n', 'only on feat');
+      final res = await GitService(work.path).call('git.outgoing');
+      expect(res['set_upstream'], true);
+      expect(res['target_branch'], 'feat/new');
+      expect([for (final c in res['commits'] as List) c['subject']], ['only on feat']);
+    });
+
+    test('update with stash keeps local edits and brings in the remote ones', () async {
+      final (remote, work) = withRemote();
+      final other = tempDir('other');
+      git(other, ['clone', '-q', remote.path, '.']);
+      configure(other);
+      commitFile(other, 'b.txt', 'b\n', 'from other');
+      git(other, ['push', '-q']);
+      File('${work.path}/local.txt').writeAsStringSync('mine\n');
+      final changes = await GitService(work.path).call('git.local_changes');
+      expect([for (final c in changes['changes'] as List) c['path']], contains('local.txt'));
+
+      final res = await GitService(work.path).call('git.update', {'stash': true});
+      expect(res['status'], 'ok', reason: '$res');
+      expect(res['stash_conflict'], isNull);
+      expect(File('${work.path}/b.txt').existsSync(), isTrue);
+      expect(File('${work.path}/local.txt').readAsStringSync(), 'mine\n', reason: '本地改动恢复了');
+      expect(git(work, ['stash', 'list']), isEmpty, reason: '没留下 stash');
+    });
+
     test('push without any remote is reported', () async {
       final d = initRepo();
       final res = await GitService(d.path).call('git.push');

@@ -292,9 +292,14 @@ class GitService {
       case 'git.checkout':
         return {'branch': await _checkoutBranch(p.str('name'))};
       case 'git.update':
-        return {'output': await _update()};
+        return _update(stash: p.flag('stash'));
       case 'git.push':
         return _push();
+      case 'git.outgoing':
+        return _outgoing();
+      case 'git.local_changes':
+        final (_, changes) = parseStatusPorcelain(await _run(['status', '--porcelain=v1', '-b', '-z']));
+        return {'changes': changes};
       case 'git.merge':
         await _merge(p.str('name'));
         return {};
@@ -697,15 +702,82 @@ class GitService {
 
   static const _noPrompt = {'GIT_TERMINAL_PROMPT': '0', 'GIT_MERGE_AUTOEDIT': 'no'};
 
-  /// Update Project:拉取并合并当前分支的上游。返回 git 的输出。
-  Future<String> _update() async {
+  /// Update Project:拉取并合并当前分支的上游。返回 `{"output"}`(git 的输出)。
+  ///
+  /// [stash] 为真时(本地有没提交的改动,用户选了「Stash 后更新」,同 IntelliJ):先把改动连同未跟踪文件
+  /// stash 起来,拉完再恢复。拉取失败也先恢复再报错;恢复时有冲突则改动留在 stash 里,返回 `stash_conflict`。
+  Future<Map<String, dynamic>> _update({bool stash = false}) async {
     await _ensureIdle();
     final current = await _currentBranchName();
     if (current == null) throw GitException('当前处于游离 HEAD,无法更新');
     if (await _configGet('branch.$current.merge') == null) {
       throw GitException('分支 $current 没有上游分支,先推送它(会设置上游)');
     }
-    return (await _run(['pull', '--no-rebase', '--no-edit'], env: _noPrompt)).trim();
+    var stashed = false;
+    if (stash) {
+      final before = await _raw(['rev-parse', '--verify', '--quiet', 'refs/stash']);
+      await _run(['stash', 'push', '--include-untracked', '-m', 'CodeLiteX: Update Project']);
+      final after = await _raw(['rev-parse', '--verify', '--quiet', 'refs/stash']);
+      // 没有可存的改动时 git stash 什么也不做,不能去 pop 别人的 stash
+      stashed = after.success && after.stdout.trim() != (before.success ? before.stdout.trim() : '');
+    }
+    final String output;
+    try {
+      output = (await _run(['pull', '--no-rebase', '--no-edit'], env: _noPrompt)).trim();
+    } catch (_) {
+      if (stashed) await _raw(['stash', 'pop']);
+      rethrow;
+    }
+    if (stashed) {
+      final pop = await _raw(['stash', 'pop']);
+      if (!pop.success) return {'output': output, 'stash_conflict': true};
+    }
+    return {'output': output};
+  }
+
+  /// Push 之前确认用:当前分支要推到哪、会推哪些提交(新的在前)。
+  /// 有上游时是上游之后的提交;没有上游(第一次推)时是还不在任何远程分支上的提交,推送时会设为上游。
+  /// `{"branch","remote","target_branch","set_upstream","commits":[{"hash","short","author","time","subject"}]}`。
+  Future<Map<String, dynamic>> _outgoing() async {
+    final current = await _currentBranchName();
+    if (current == null) throw GitException('当前处于游离 HEAD,无法推送');
+    final remote = await _configGet('branch.$current.remote');
+    final merge = await _configGet('branch.$current.merge');
+    String targetRemote;
+    String targetBranch;
+    bool setUpstream;
+    List<String> range;
+    if (remote != null && remote != '.' && merge != null) {
+      targetRemote = remote;
+      targetBranch = merge.startsWith('refs/heads/') ? merge.substring('refs/heads/'.length) : merge;
+      setUpstream = false;
+      final up = 'refs/remotes/$remote/$targetBranch';
+      // 上游还没取回过(或在远程上被删了):按「不在任何远程分支上」算
+      range = (await _raw(['rev-parse', '--verify', '--quiet', up])).success ? ['$up..HEAD'] : ['HEAD', '--not', '--remotes'];
+    } else {
+      final remotes = rustLines(await _run(['remote'])).map((r) => r.trim()).where((r) => r.isNotEmpty).toList();
+      if (remotes.isEmpty) throw GitException('没有配置远程仓库');
+      targetRemote = remotes.contains('origin') ? 'origin' : remotes.first;
+      targetBranch = current;
+      setUpstream = true;
+      range = ['HEAD', '--not', '--remotes'];
+    }
+    final commits = <Map<String, dynamic>>[];
+    if (await _headHash() != '') {
+      final out = await _run(['log', '--max-count=1000', '--format=%H%x1f%h%x1f%an%x1f%at%x1f%s%x1e', ...range]);
+      for (final rec in out.split('\x1e')) {
+        final f = rec.trim().split('\x1f');
+        if (f.length < 5) continue;
+        commits.add({'hash': f[0], 'short': f[1], 'author': f[2], 'time': int.tryParse(f[3]) ?? 0, 'subject': f[4]});
+      }
+    }
+    return {
+      'branch': current,
+      'remote': targetRemote,
+      'target_branch': targetBranch,
+      'set_upstream': setUpstream,
+      'commits': commits,
+    };
   }
 
   /// Push:把当前分支推到上游;没有上游时推到 origin(或唯一的远程)并设置上游。

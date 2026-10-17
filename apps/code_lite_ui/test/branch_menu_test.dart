@@ -182,25 +182,111 @@ void main() {
     expect(find.text('Search for branches and actions'), findsNothing);
   });
 
+  Map<String, dynamic> outgoing({bool setUpstream = false, int count = 2}) => {
+        'status': 'ok',
+        'branch': 'main',
+        'remote': 'origin',
+        'target_branch': 'main',
+        'set_upstream': setUpstream,
+        'commits': [
+          for (var i = 0; i < count; i++) {'hash': 'h$i${'0' * 38}', 'short': 'h$i', 'author': 'dev', 'time': 1700000000 + i, 'subject': 'commit number $i'},
+        ],
+      };
+
   testWidgets('Update Project… and Push… call git and report', (tester) async {
     client.responses['git.update'] = {'status': 'ok', 'output': 'Updating a..b\nFast-forward\n 1 file changed'};
     client.responses['git.push'] = {'status': 'ok', 'remote': 'origin', 'branch': 'main', 'set_upstream': true};
+    client.responses['git.outgoing'] = outgoing(setUpstream: true);
     await show(tester);
 
     await openPopup(tester);
     await tester.tap(find.text('Update Project…'));
     await tester.pumpAndSettle();
-    expect(client.callsTo('git.update'), hasLength(1));
+    expect(client.callsTo('git.update'), [{'stash': false}], reason: '没有本地改动:不问,直接更新');
     expect(find.textContaining('已更新: 1 file changed'), findsOneWidget);
 
     await openPopup(tester);
     await tester.tap(find.text('Push…'));
     await tester.pumpAndSettle();
+    // 先弹确认框,列出要推的提交
+    expect(find.text('Push Commits'), findsOneWidget);
+    expect(find.text('commit number 0'), findsOneWidget);
+    expect(find.text('commit number 1'), findsOneWidget);
+    expect(find.byKey(const ValueKey('push-new-branch')), findsOneWidget);
+    expect(client.callsTo('git.push'), isEmpty);
+    await tester.tap(find.byKey(const ValueKey('push-confirm')));
+    await tester.pumpAndSettle();
     expect(client.callsTo('git.push'), hasLength(1));
     expect(find.textContaining('已推送 main 到 origin(并设为上游)'), findsOneWidget);
   });
 
+  testWidgets('Push: cancel does not push; nothing to push disables the button', (tester) async {
+    client.responses['git.outgoing'] = outgoing();
+    await show(tester);
+    await openPopup(tester);
+    await tester.tap(find.text('Push…'));
+    await tester.pumpAndSettle();
+    expect(tester.widget<Text>(find.byKey(const ValueKey('push-count'))).data, '2 个提交');
+    expect(tester.widget<Text>(find.byKey(const ValueKey('push-target'))).data, 'origin : main');
+    await tester.tap(find.text('取消'));
+    await tester.pumpAndSettle();
+    expect(client.callsTo('git.push'), isEmpty);
+
+    client.responses['git.outgoing'] = outgoing(count: 0);
+    await openPopup(tester);
+    await tester.tap(find.text('Push…'));
+    await tester.pumpAndSettle();
+    expect(find.text('没有要推送的提交,已经和远程一致'), findsOneWidget);
+    expect(tester.widget<FilledButton>(find.byKey(const ValueKey('push-confirm'))).onPressed, isNull);
+    await tester.tap(find.text('取消'));
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('Update with uncommitted changes asks first: cancel / stash & update / update anyway', (tester) async {
+    client.responses['git.local_changes'] = {
+      'status': 'ok',
+      'changes': [
+        {'path': 'src/A.java', 'status': 'modified', 'is_staged': false},
+        {'path': 'notes.txt', 'status': 'untracked', 'is_staged': false},
+      ],
+    };
+    client.responses['git.update'] = {'status': 'ok', 'output': 'Already up to date.'};
+    await show(tester);
+
+    Future<void> update() async {
+      await openPopup(tester);
+      await tester.tap(find.text('Update Project…'));
+      await tester.pumpAndSettle();
+    }
+
+    await update();
+    expect(find.text('本地有未提交的改动'), findsOneWidget);
+    expect(find.text('src/A.java'), findsOneWidget);
+    expect(find.text('notes.txt'), findsOneWidget);
+    await tester.tap(find.text('取消'));
+    await tester.pumpAndSettle();
+    expect(client.callsTo('git.update'), isEmpty);
+
+    await update();
+    await tester.tap(find.byKey(const ValueKey('update-stash')));
+    await tester.pumpAndSettle();
+    expect(client.callsTo('git.update'), [{'stash': true}]);
+
+    await update();
+    await tester.tap(find.text('直接更新'));
+    await tester.pumpAndSettle();
+    expect(client.callsTo('git.update').last, {'stash': false});
+
+    // 恢复时有冲突:提示改动还在 stash 里
+    client.responses['git.update'] = {'status': 'ok', 'output': 'x', 'stash_conflict': true};
+    await update();
+    await tester.tap(find.byKey(const ValueKey('update-stash')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('改动还在 stash 里'), findsOneWidget);
+  });
+
   testWidgets('only operations that touch the files ask for a reload of them', (tester) async {
+    client.responses['git.outgoing'] = outgoing();
     await show(tester);
     final flags = <bool>[];
     store.onChanged = flags.add;
@@ -209,6 +295,8 @@ void main() {
     await tester.pumpAndSettle();
     await openPopup(tester);
     await tester.tap(find.text('Push…'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('push-confirm')));
     await tester.pumpAndSettle();
     expect(flags, [true, false], reason: '更新会改文件,推送不会');
   });

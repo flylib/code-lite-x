@@ -20,7 +20,13 @@ class BottomToolsWidget extends StatelessWidget {
     required this.gitLog,
     this.repoName = '',
     this.height = 300,
+    this.onPull,
+    this.onPush,
   });
+
+  /// Git 工具窗筛选栏右边的 Pull / Push。
+  final void Function(BuildContext context)? onPull;
+  final void Function(BuildContext context)? onPush;
 
   final BottomToolTab activeTab;
 
@@ -49,6 +55,8 @@ class BottomToolsWidget extends StatelessWidget {
             store: gitLog,
             repoName: repoName,
             onHide: () => onSelectTab(BottomToolTab.git),
+            onPull: onPull,
+            onPush: onPush,
           ),
         BottomToolTab.terminal => TerminalPanel(
             store: terminals,

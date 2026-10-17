@@ -37,9 +37,13 @@ String formatGitDate(DateTime t) {
 
 /// IntelliJ 的 Git 工具窗(Log 标签):分支树 | 提交图与列表 | 变更文件与提交信息。
 class GitLogWindow extends StatefulWidget {
-  const GitLogWindow({super.key, required this.store, required this.repoName, required this.onHide});
+  const GitLogWindow({super.key, required this.store, required this.repoName, required this.onHide, this.onPull, this.onPush});
 
   final GitLogStore store;
+
+  /// 筛选栏最右边的 Pull(更新当前分支)/ Push(先确认要推的提交)。为 null 时不显示。
+  final void Function(BuildContext context)? onPull;
+  final void Function(BuildContext context)? onPush;
 
   /// 详情面板文件树的根节点名(项目目录名)。
   final String repoName;
@@ -91,7 +95,7 @@ class _GitLogWindowState extends State<GitLogWindow> {
                             _SideToolbar(store: store, onSearch: _searchFocus.requestFocus),
                             if (branches) SizedBox(width: 230, child: _BranchesPane(store: store)),
                             if (branches) const VerticalDivider(width: 1, color: IntelliJTheme.borderSubtle),
-                            Expanded(child: _LogPane(store: store, searchFocus: _searchFocus)),
+                            Expanded(child: _LogPane(store: store, searchFocus: _searchFocus, onPull: widget.onPull, onPush: widget.onPush)),
                             if (details) const VerticalDivider(width: 1, color: IntelliJTheme.borderSubtle),
                             if (details) SizedBox(width: 320, child: _DetailsPane(store: store, repoName: widget.repoName)),
                           ],
@@ -457,7 +461,10 @@ class _TreeRow extends StatelessWidget {
 // ---------------------------------------------------------------------------
 
 class _LogPane extends StatefulWidget {
-  const _LogPane({required this.store, required this.searchFocus});
+  const _LogPane({required this.store, required this.searchFocus, this.onPull, this.onPush});
+
+  final void Function(BuildContext context)? onPull;
+  final void Function(BuildContext context)? onPush;
 
   final GitLogStore store;
   final FocusNode searchFocus;
@@ -541,7 +548,7 @@ class _LogPaneState extends State<_LogPane> {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        _FilterBar(store: store, controller: _search, focus: widget.searchFocus),
+        _FilterBar(store: store, controller: _search, focus: widget.searchFocus, onPull: widget.onPull, onPush: widget.onPush),
         if (store.warning != null) _WarningBanner(message: store.warning!),
         if (store.busy != null)
           const LinearProgressIndicator(
@@ -622,11 +629,13 @@ class _WarningBanner extends StatelessWidget {
 }
 
 class _FilterBar extends StatelessWidget {
-  const _FilterBar({required this.store, required this.controller, required this.focus});
+  const _FilterBar({required this.store, required this.controller, required this.focus, this.onPull, this.onPush});
 
   final GitLogStore store;
   final TextEditingController controller;
   final FocusNode focus;
+  final void Function(BuildContext context)? onPull;
+  final void Function(BuildContext context)? onPush;
 
   @override
   Widget build(BuildContext context) {
@@ -634,7 +643,19 @@ class _FilterBar extends StatelessWidget {
       height: 36,
       padding: const EdgeInsets.symmetric(horizontal: 6),
       decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: IntelliJTheme.borderSubtle))),
+      // 右边固定放 Pull / Push,左边是搜索框、筛选和工具按钮
       child: Row(
+        children: [
+          Expanded(child: _filters(context)),
+          if (onPull != null) _SyncButton(key: const ValueKey('git-pull'), icon: Icons.south_west, label: 'Pull', color: IntelliJTheme.accentBlue, tooltip: '更新当前分支(拉取并合并上游)', onTap: () => onPull!(context)),
+          if (onPush != null) _SyncButton(key: const ValueKey('git-push'), icon: Icons.north_east, label: 'Push', color: const Color(0xFF5FB865), tooltip: '推送当前分支(先确认要推的提交)', onTap: () => onPush!(context)),
+        ],
+      ),
+    );
+  }
+
+  Widget _filters(BuildContext context) {
+    return Row(
         children: [
           // 搜索框:Text or hash,带 .* 正则 与 Cc 区分大小写 两个开关。窄时可收缩。
           Flexible(
@@ -732,9 +753,38 @@ class _FilterBar extends StatelessWidget {
             onTap: () => GitCommitActions(context, store).goToRevision(),
           ),
         ],
-      ),
     );
   }
+}
+
+/// 筛选栏右边的 Pull / Push:带颜色的箭头加文字(IntelliJ 工具栏里更新是蓝箭头、推送是绿箭头)。
+class _SyncButton extends StatelessWidget {
+  const _SyncButton({super.key, required this.icon, required this.label, required this.color, required this.tooltip, required this.onTap});
+
+  final IconData icon;
+  final String label;
+  final Color color;
+  final String tooltip;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Tooltip(
+        message: tooltip,
+        waitDuration: const Duration(milliseconds: 400),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(4),
+          hoverColor: IntelliJTheme.hoverBg,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              Icon(icon, size: 14, color: color),
+              const SizedBox(width: 3),
+              Text(label, style: const TextStyle(color: IntelliJTheme.textPrimary, fontSize: 12)),
+            ]),
+          ),
+        ),
+      );
 }
 
 /// IntelliJ 式筛选下拉:未设置时显示灰色标签,设置后显示值和 ×。

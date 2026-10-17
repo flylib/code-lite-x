@@ -92,6 +92,7 @@ CodeLiteX 是一款高性能的原生跨平台代码编辑器，内置 Git 管�
 
 **Git**
 - merge / rebase 有冲突时，标题栏出现两个按钮：一个弹出冲突文件列表，一个 × 中止这次合并。
+- Git 工具窗（Log）筛选栏最右边有 **Pull / Push**。Push 先弹「Push Commits」确认框：`分支 → 远程 : 分支`（第一次推的标 New，推后设为上游）+ 这次要推的提交列表，确认才推；没有要推的就不能点 Push。Pull（Update）时本地有没提交的改动先弹框列出来，选「Stash 后更新」（先 stash，拉完自动恢复；恢复有冲突就留在 stash 里并提示）/「直接更新」/ 取消。标题栏分支菜单的 Update / Push 也走同样的确认（`git.outgoing`、`git.local_changes`、`git.update` 的 `stash`）。
 - 解决冲突用三栏 Merge 窗口（标题叫「Merge」，不叫「Open File」），中间的结果栏可以直接编辑。右键左 / 右两栏的行号 ▸ Annotate with Git Blame：在文字和行号之间显示每行的「日期 作者」（今天的显示 Today），悬停看提交号和提交说明，再右键 Close Annotations 关掉；两栏各开各的。注释取自那一侧来自的提交（合并：HEAD / MERGE_HEAD；变基两侧对调：REBASE_HEAD / HEAD；cherry-pick / revert 同理），`git.merge_blame`。
 
 **快捷键**

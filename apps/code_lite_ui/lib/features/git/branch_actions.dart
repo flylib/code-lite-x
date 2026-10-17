@@ -9,6 +9,7 @@ import 'branch_store.dart';
 import 'conflicts_dialog.dart';
 import 'merge_model.dart' show MergeSide;
 import 'merge_window.dart';
+import 'push_pull_dialogs.dart';
 import 'repo_operation.dart';
 
 const TextStyle _text = TextStyle(color: IntelliJTheme.textPrimary, fontSize: 12);
@@ -47,14 +48,44 @@ class BranchActions {
     return true;
   }
 
+  /// Update(Pull):本地有没提交的改动时先问(Stash 后更新 / 直接更新 / 取消),同 IntelliJ。
   Future<void> update(BuildContext context) async {
-    final ok = await _run(context, 'Update', 'git.update', const {});
+    var stash = false;
+    final local = await store.call('git.local_changes');
+    final changes = [for (final c in (local['changes'] as List? ?? const [])) if (c is Map<String, dynamic>) c];
+    if (!context.mounted) return;
+    if (changes.isNotEmpty) {
+      final choice = await showLocalChangesDialog(context, changes);
+      if (choice == null || !context.mounted) return;
+      stash = choice == UpdateWithChanges.stash;
+    }
+    final ok = await _run(context, 'Update', 'git.update', {'stash': stash});
     if (!ok || !context.mounted) return;
+    if (store.lastResult['stash_conflict'] == true) {
+      _toast(context, '已更新,但恢复本地改动时有冲突:改动还在 stash 里(git stash list),解决冲突后再恢复', error: true);
+      return;
+    }
     final out = ((store.lastResult['output'] as String?) ?? '').trim();
     _toast(context, out.isEmpty ? '已更新' : '已更新: ${out.split('\n').map((l) => l.trim()).where((l) => l.isNotEmpty).lastOrNull ?? out}');
   }
 
+  /// Push:先列出要推到远程的提交,确认后才推(同 IntelliJ 的 Push Commits)。
   Future<void> push(BuildContext context) async {
+    final res = await store.call('git.outgoing');
+    if (!context.mounted) return;
+    if (res['status'] != 'ok') {
+      _toast(context, 'Push 失败: ${res['error'] ?? '无法读取要推送的提交'}', error: true);
+      return;
+    }
+    final confirmed = await showPushDialog(
+      context,
+      branch: res['branch'] as String? ?? '',
+      remote: res['remote'] as String? ?? '',
+      targetBranch: res['target_branch'] as String? ?? '',
+      setUpstream: res['set_upstream'] == true,
+      commits: [for (final c in (res['commits'] as List? ?? const [])) if (c is Map<String, dynamic>) OutgoingCommit.fromJson(c)],
+    );
+    if (!confirmed || !context.mounted) return;
     final ok = await _run(context, 'Push', 'git.push', const {}, worktree: false);
     if (!ok || !context.mounted) return;
     final r = store.lastResult;
