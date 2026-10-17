@@ -58,9 +58,26 @@ void main() {
     final bar = tester.getRect(find.ancestor(of: push, matching: find.byType(Container)).first);
     expect(bar.right - tester.getRect(push).right, lessThan(12));
 
-    await tester.tap(pull);
-    await tester.tap(push);
-    expect(events, ['pull', 'push']);
+    // 默认和左边的工具按钮同色;按住时 Pull 变蓝、Push 变绿并带底色,松开恢复
+    Color iconColor(Finder f) => ((tester.widget<CustomPaint>(find.descendant(of: f, matching: find.byType(CustomPaint)).last).painter!) as dynamic).color as Color;
+    BoxDecoration? bg(Finder f) => tester.widget<Container>(find.descendant(of: f, matching: find.byType(Container)).first).decoration as BoxDecoration?;
+    final grey = tester.widget<Icon>(find.descendant(of: find.byTooltip('跳转到哈希 / 分支 / 标签'), matching: find.byType(Icon))).color;
+    expect(iconColor(pull), grey);
+    expect(iconColor(push), grey);
+    expect(bg(pull), isNull);
+    final g = await tester.startGesture(tester.getCenter(pull));
+    await tester.pump();
+    expect(iconColor(pull), const Color(0xFF4A86F7));
+    expect(bg(pull)?.color, const Color(0xFF4A86F7).withValues(alpha: 0.18));
+    await g.up();
+    await tester.pump();
+    expect(iconColor(pull), grey);
+    final g2 = await tester.startGesture(tester.getCenter(push));
+    await tester.pump();
+    expect(iconColor(push), const Color(0xFF3DD68C));
+    await g2.up();
+    await tester.pump(const Duration(milliseconds: 600));
+    expect(events, ['pull', 'push'], reason: '按下松开就是一次点击');
     await tester.pumpWidget(const SizedBox());
     store.dispose();
   });

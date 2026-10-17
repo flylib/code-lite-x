@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/gestures.dart' show kPrimaryButton;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -647,8 +648,10 @@ class _FilterBar extends StatelessWidget {
       child: Row(
         children: [
           Expanded(child: _filters(context)),
-          if (onPull != null) _SyncButton(key: const ValueKey('git-pull'), icon: Icons.south_west, label: 'Pull', color: IntelliJTheme.accentBlue, tooltip: '更新当前分支(拉取并合并上游)', onTap: () => onPull!(context)),
-          if (onPush != null) _SyncButton(key: const ValueKey('git-push'), icon: Icons.north_east, label: 'Push', color: const Color(0xFF5FB865), tooltip: '推送当前分支(先确认要推的提交)', onTap: () => onPush!(context)),
+          if (onPull != null)
+            _SyncButton(key: const ValueKey('git-pull'), up: false, color: const Color(0xFF4A86F7), tooltip: 'Pull:更新当前分支(拉取并合并上游)', onTap: () => onPull!(context)),
+          if (onPush != null)
+            _SyncButton(key: const ValueKey('git-push'), up: true, color: const Color(0xFF3DD68C), tooltip: 'Push:推送当前分支(先确认要推的提交)', onTap: () => onPush!(context)),
         ],
       ),
     );
@@ -757,34 +760,97 @@ class _FilterBar extends StatelessWidget {
   }
 }
 
-/// 筛选栏右边的 Pull / Push:带颜色的箭头加文字(IntelliJ 工具栏里更新是蓝箭头、推送是绿箭头)。
-class _SyncButton extends StatelessWidget {
-  const _SyncButton({super.key, required this.icon, required this.label, required this.color, required this.tooltip, required this.onTap});
+/// 筛选栏右边的 Pull / Push:只有图标(箭头 + 托盘,Pull 向下、Push 向上),默认和左边的工具按钮一样是灰色;
+/// 按下时 Pull 变蓝、Push 变绿,底下衬一块同色的深底。
+class _SyncButton extends StatefulWidget {
+  const _SyncButton({super.key, required this.up, required this.color, required this.tooltip, required this.onTap});
 
-  final IconData icon;
-  final String label;
+  /// true = Push(箭头向上),false = Pull(箭头向下)。
+  final bool up;
+
+  /// 按下时的颜色。
   final Color color;
   final String tooltip;
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) => Tooltip(
-        message: tooltip,
-        waitDuration: const Duration(milliseconds: 400),
+  State<_SyncButton> createState() => _SyncButtonState();
+}
+
+class _SyncButtonState extends State<_SyncButton> {
+  bool _pressed = false;
+
+  void _press(bool v) {
+    if (_pressed != v) setState(() => _pressed = v);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final color = _pressed ? widget.color : IntelliJTheme.textSecondary;
+    return Tooltip(
+      message: widget.tooltip,
+      waitDuration: const Duration(milliseconds: 500),
+      // 按下的样子用指针事件:InkWell 的 onTapDown 要等手势判定(约 100 ms),快速点一下看不到
+      child: Listener(
+        onPointerDown: (e) {
+          if (e.buttons == kPrimaryButton) _press(true);
+        },
+        onPointerUp: (_) => _press(false),
+        onPointerCancel: (_) => _press(false),
         child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(4),
-          hoverColor: IntelliJTheme.hoverBg,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-            child: Row(mainAxisSize: MainAxisSize.min, children: [
-              Icon(icon, size: 14, color: color),
-              const SizedBox(width: 3),
-              Text(label, style: const TextStyle(color: IntelliJTheme.textPrimary, fontSize: 12)),
-            ]),
-          ),
+        onTap: widget.onTap,
+        borderRadius: BorderRadius.circular(4),
+        child: Container(
+          padding: const EdgeInsets.all(4),
+          decoration: _pressed ? BoxDecoration(color: widget.color.withValues(alpha: 0.18), borderRadius: BorderRadius.circular(4)) : null,
+          child: CustomPaint(size: const Size.square(15), painter: _TrayArrowPainter(up: widget.up, color: color)),
         ),
-      );
+      ),
+      ),
+    );
+  }
+}
+
+/// 箭头 + 托盘(底边带两条短竖边):Pull 是箭头落进托盘,Push 是箭头从托盘里出来。
+class _TrayArrowPainter extends CustomPainter {
+  const _TrayArrowPainter({required this.up, required this.color});
+
+  final bool up;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final s = size.width;
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = s * 0.13
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+    // 托盘
+    canvas.drawPath(
+      Path()
+        ..moveTo(s * 0.14, s * 0.62)
+        ..lineTo(s * 0.14, s * 0.88)
+        ..lineTo(s * 0.86, s * 0.88)
+        ..lineTo(s * 0.86, s * 0.62),
+      paint,
+    );
+    // 箭杆 + 箭头
+    final (tip, tail) = up ? (s * 0.08, s * 0.66) : (s * 0.66, s * 0.08);
+    final wing = up ? s * 0.22 : -s * 0.22;
+    canvas.drawLine(Offset(s * 0.5, tail), Offset(s * 0.5, tip), paint);
+    canvas.drawPath(
+      Path()
+        ..moveTo(s * 0.28, tip + wing)
+        ..lineTo(s * 0.5, tip)
+        ..lineTo(s * 0.72, tip + wing),
+      paint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_TrayArrowPainter old) => old.up != up || old.color != color;
 }
 
 /// IntelliJ 式筛选下拉:未设置时显示灰色标签,设置后显示值和 ×。
