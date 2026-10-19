@@ -116,15 +116,27 @@ String _name(BlameCommit c, BlameNameMode mode) {
   };
 }
 
+/// 注释栏里的名字最多显示几个字符,多的用 ... 省略(悬停看完整的,见 [blameTooltip])。
+const int blameNameMaxChars = 6;
+
+/// 名字超过 [blameNameMaxChars] 个字符时截断加 ...(按字符算,中文、emoji 不会截出半个)。
+String blameShortName(String name) {
+  final chars = name.runes.toList();
+  return chars.length <= blameNameMaxChars ? name : '${String.fromCharCodes(chars.take(blameNameMaxChars))}...';
+}
+
 /// 注释栏一行显示的文字(未提交的行留空,与 IntelliJ 一致)。
 String blameLabel(BlameCommit? c, EditorAppearance a, {DateTime? now}) {
   if (c == null || c.isUncommitted) return '';
   return [
     if (a.blameRevision) c.short,
     if (a.blameDate) blameDate(c.time, now: now),
-    if (a.blameAuthor) _name(c, a.blameNames),
+    if (a.blameAuthor) blameShortName(_name(c, a.blameNames)),
   ].join('  ');
 }
+
+/// 鼠标停在注释上的小窗:第一行完整的作者名,第二行提交号 · 日期 · 提交说明。编辑器和 Merge 窗口共用。
+String blameTooltip(BlameCommit c) => '${c.author}\n${c.short} · ${blameDate(c.time)} · ${c.summary}';
 
 const List<Color> _authorPalette = [
   Color(0xFF3574F0),
@@ -177,6 +189,18 @@ class BlameColumn extends StatelessWidget {
   final List<Widget> Function(int line, BlameCommit? commit) menuBuilder;
 
   static const _style = TextStyle(color: IntelliJTheme.textPrimary, fontSize: 11.5);
+
+  /// 一行注释;有提交的行悬停弹出完整作者名和提交信息。
+  Widget _row(BlameData d, BlameCommit? c) {
+    final row = Container(
+      color: blameBackground(c, d, appearance),
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      alignment: Alignment.centerLeft,
+      child: Text(blameLabel(c, appearance), maxLines: 1, overflow: TextOverflow.ellipsis, style: _style),
+    );
+    if (c == null || c.isUncommitted) return row;
+    return Tooltip(message: blameTooltip(c), waitDuration: const Duration(milliseconds: 400), child: row);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -235,12 +259,7 @@ class BlameColumn extends StatelessWidget {
                           left: 0,
                           right: 0,
                           height: lineHeight,
-                          child: Container(
-                            color: blameBackground(d.at(lineOfRow?.call(i) ?? i), d, appearance),
-                            padding: const EdgeInsets.symmetric(horizontal: 8),
-                            alignment: Alignment.centerLeft,
-                            child: Text(blameLabel(d.at(lineOfRow?.call(i) ?? i), appearance), maxLines: 1, overflow: TextOverflow.ellipsis, style: _style),
-                          ),
+                          child: _row(d, d.at(lineOfRow?.call(i) ?? i)),
                         ),
                     ],
                   ),

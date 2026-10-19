@@ -218,15 +218,28 @@ void main() {
           ),
         ),
       ));
-      expect(find.text('2026/4/24  ronnie wood'), findsOneWidget);
-      // 不弹悬停提示;列宽按实际字体计算,作者名不被截断。
-      expect(find.byType(Tooltip), findsNothing);
+      // 名字最多 6 个字符,多的用 ... 省略;列宽按实际字体计算,截断后的文字不再被挤出省略号
+      expect(find.text('2026/4/24  ronnie...'), findsOneWidget);
+      expect(find.text('2026/5/1  zed'), findsOneWidget);
       for (final t in tester.widgetList<Text>(find.byType(Text))) {
         final box = tester.renderObject<RenderParagraph>(find.byWidget(t));
         expect(box.didExceedMaxLines, isFalse, reason: '"${t.data}" was truncated');
       }
+      // 悬停弹小窗:完整的名字 + 提交号 · 日期 · 说明
+      final tips = tester.widgetList<Tooltip>(find.byType(Tooltip)).map((t) => t.message).toList();
+      expect(tips, hasLength(2));
+      expect(tips.first, startsWith('ronnie wood\n'));
+      expect(tips.first, contains('aaaaaaaa · 2026/4/24 · s1'));
+      final g = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await g.addPointer(location: Offset.zero);
+      await g.moveTo(tester.getCenter(find.text('2026/4/24  ronnie...')));
+      await tester.pump(const Duration(milliseconds: 600));
+      expect(find.textContaining('ronnie wood'), findsOneWidget, reason: '小窗里是完整名字');
+      await g.moveTo(const Offset(700, 500));
+      await g.removePointer();
+      await tester.pumpAndSettle();
 
-      await tester.tap(find.text('2026/4/24  ronnie wood'), buttons: kSecondaryButton);
+      await tester.tap(find.text('2026/4/24  ronnie...'), buttons: kSecondaryButton);
       await tester.pumpAndSettle();
       for (final item in ['Close Annotations', 'Show Diff', 'View', 'Copy Revision Number', 'Annotate Revision', 'Annotate Previous Revision', 'Show in File History']) {
         expect(find.text(item), findsOneWidget, reason: item);
@@ -235,9 +248,9 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Revision'));
       await tester.pumpAndSettle();
-      expect(find.text('aaaaaaaa  2026/4/24  ronnie wood'), findsOneWidget);
+      expect(find.text('aaaaaaaa  2026/4/24  ronnie...'), findsOneWidget);
 
-      await tester.tap(find.text('aaaaaaaa  2026/4/24  ronnie wood'), buttons: kSecondaryButton);
+      await tester.tap(find.text('aaaaaaaa  2026/4/24  ronnie...'), buttons: kSecondaryButton);
       await tester.pumpAndSettle();
       await tester.tap(find.text('Close Annotations'));
       await tester.pumpAndSettle();

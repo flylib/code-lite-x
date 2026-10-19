@@ -93,6 +93,7 @@ CodeLiteX 是一款高性能的原生跨平台代码编辑器，内置 Git 管�
 **Git**
 - merge / rebase 有冲突时，标题栏出现两个按钮：一个弹出冲突文件列表，一个 × 中止这次合并。
 - Git 工具窗（Log）筛选栏：左边是搜索框和 Branch / User / Date / Paths 筛选；刷新、Cherry-Pick、显示详情、跳转这几个工具按钮靠右，紧挨着最右边的 **Pull / Push**（只有图标，大小、线宽和其它工具按钮一致：箭头 + 托盘，Pull 向下、Push 向上；默认和左边工具按钮一样灰，按下时 Pull 蓝 `#4A86F7`、Push 绿 `#3DD68C` 并衬同色深底）。Push 先弹「Push Commits」确认框：`分支 → 远程 : 分支`（第一次推的标 New，推后设为上游）+ 这次要推的提交列表，确认才推；没有要推的就不能点 Push。Pull（Update）时本地有没提交的改动先弹框列出来，选「Stash 后更新」（先 stash，拉完自动恢复；恢复有冲突就留在 stash 里并提示）/「直接更新」/ 取消。标题栏分支菜单的 Update / Push 也走同样的确认（`git.outgoing`、`git.local_changes`、`git.update` 的 `stash`）。
+- Git Blame 注释（编辑器行号栏、Merge 窗口）：作者名最多显示 6 个字符，多的用 `...` 省略（按字符算）；鼠标停上去弹小窗，第一行完整作者名，第二行 提交号 · 日期 · 提交说明（`blameShortName`、`blameTooltip`）。
 - 解决冲突用三栏 Merge 窗口（标题叫「Merge」，不叫「Open File」），中间的结果栏可以直接编辑。右键左 / 右两栏的行号 ▸ Annotate with Git Blame：在文字和行号之间显示每行的「日期 作者」（今天的显示 Today），悬停看提交号和提交说明，再右键 Close Annotations 关掉；两栏各开各的。注释取自那一侧来自的提交（合并：HEAD / MERGE_HEAD；变基两侧对调：REBASE_HEAD / HEAD；cherry-pick / revert 同理），`git.merge_blame`。
 
 **快捷键**

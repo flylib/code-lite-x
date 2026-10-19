@@ -148,7 +148,7 @@ class _MergeWindowState extends State<MergeWindow> {
     );
     if (c != null && !c.isUncommitted) {
       cell = Tooltip(
-        message: '${c.short}  ${c.author}  ${blameDate(c.time)}\n${c.summary}',
+        message: blameTooltip(c),
         waitDuration: const Duration(milliseconds: 400),
         child: cell,
       );

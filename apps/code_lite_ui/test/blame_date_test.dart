@@ -22,8 +22,20 @@ void main() {
       'summary': 'x',
     }, 'a.sql');
     final a = EditorAppearance();
-    expect(blameLabel(c, a, now: now), 'Today  zanson2023');
-    expect(blameLabel(c, a, now: DateTime(2026, 10, 13, 8)), '2026/10/12  zanson2023');
+    // 名字最多 6 个字符,多的用 ... 省略
+    expect(blameLabel(c, a, now: now), 'Today  zanson...');
+    expect(blameLabel(c, a, now: DateTime(2026, 10, 13, 8)), '2026/10/12  zanson...');
+    // 悬停的小窗里是完整的名字
+    expect(blameTooltip(c).split('\n').first, 'zanson2023');
+    expect(blameTooltip(c), contains('aaaaaaa'));
     a.dispose();
+  });
+
+  test('names up to 6 characters are kept; longer ones are cut by character, not byte', () {
+    expect(blameShortName('Bill'), 'Bill');
+    expect(blameShortName('zanson'), 'zanson');
+    expect(blameShortName('jacksonwu101'), 'jackso...');
+    expect(blameShortName('张三丰李四王五赵六'), '张三丰李四王...');
+    expect(blameShortName('😀😀😀😀😀😀😀'), '😀😀😀😀😀😀...', reason: 'emoji 不截出半个');
   });
 }

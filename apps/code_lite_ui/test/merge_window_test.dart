@@ -315,7 +315,7 @@ void main() {
     final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
     await mouse.addPointer(location: tester.getCenter(find.byKey(const ValueKey('blame-left-3'))));
     await tester.pump(const Duration(milliseconds: 600));
-    expect(find.byTooltip('bbbbbbbb  bob  2026/10/9\nbob edits'), findsWidgets, reason: 'bob 改的两行都带这个提示');
+    expect(find.byTooltip('bob\nbbbbbbbb · 2026/10/9 · bob edits'), findsWidgets, reason: 'bob 改的两行都带这个提示(第一行是完整的作者名)');
     await mouse.removePointer();
 
     await menu('nums-right-0', 'Annotate with Git Blame');
