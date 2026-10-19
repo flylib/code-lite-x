@@ -54,7 +54,15 @@ void main() {
         KeymapIds.collapseAll: '⇧⌘-',
         KeymapIds.expandAll: '⇧⌘=',
         KeymapIds.duplicate: '⌘D',
+        KeymapIds.find: '⌘F',
+        KeymapIds.findNext: '⌘G',
+        KeymapIds.findPrevious: '⇧⌘G',
       });
+      expect(KeymapStore(mac: false).labelOf(KeymapIds.find), 'Ctrl+F');
+      expect(KeymapStore(mac: false).labelOf(KeymapIds.findNext), 'F3');
+      for (final id in [KeymapIds.find, KeymapIds.findNext, KeymapIds.findPrevious]) {
+        expect(keymapActionById(id)!.group, '编辑');
+      }
       expect(KeymapStore(mac: false).labelOf(KeymapIds.duplicate), 'Ctrl+D');
       expect(keymapActionById(KeymapIds.duplicate)!.group, '编辑');
       expect(KeymapStore(mac: false).labelOf(KeymapIds.collapseRegion), 'Ctrl+-');
@@ -112,8 +120,8 @@ void main() {
       );
       await settings.load();
       expect(keymap.labelOf(KeymapIds.terminal), '⌘T');
-      keymap.add(KeymapIds.git, KeyStroke.parse('meta G')!);
-      expect((saved.last['keymap'] as Map)['overrides'], {KeymapIds.terminal: ['meta T'], KeymapIds.git: ['meta 9', 'meta G']});
+      keymap.add(KeymapIds.git, KeyStroke.parse('shift meta K')!);
+      expect((saved.last['keymap'] as Map)['overrides'], {KeymapIds.terminal: ['meta T'], KeymapIds.git: ['meta 9', 'shift meta K']});
       settings.dispose();
     });
   });

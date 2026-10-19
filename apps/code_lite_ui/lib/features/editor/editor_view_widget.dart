@@ -16,6 +16,7 @@ import '../../core/theme/app_icons.dart';
 import '../../core/theme/intellij_theme.dart';
 import 'code_editor_controller.dart';
 import 'editor_session_manager.dart';
+import 'find_bar.dart';
 import 'folding.dart';
 import '../../core/keymap/keymap.dart';
 import 'ime_text_input_client.dart';
@@ -353,6 +354,11 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
   /// 关掉的文档(controller 已释放)不能再被缓存攥着:高亮缓存一个 2 万行的文件就有约 30 MB。
   /// 以前只有缓存里超过两个文档时才清理,关掉标签、甚至换了项目之后旧文档还一直留着。
   void _dropClosedDocuments() {
+    _finds.removeWhere((controller, f) {
+      if (!controller.isDisposed) return false;
+      f.dispose();
+      return true;
+    });
     _highlighters.removeWhere((controller, hl) {
       if (!controller.isDisposed) return false;
       hl.dispose(); // 连带关掉 Rust 里的语法树
@@ -473,6 +479,10 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
 
   @override
   void dispose() {
+    for (final f in _finds.values) {
+      f.dispose();
+    }
+    _finds.clear();
     _gutterHover.dispose();
     for (final hl in _highlighters.values) {
       hl.dispose();
@@ -497,6 +507,125 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
     if (_ownsVerticalScroll) _verticalScroll.dispose();
     if (_ownsHorizontalScroll) _horizontalScroll.dispose();
     super.dispose();
+  }
+
+  /// 每个窗格(按 controller)一份查找状态(⌘F)。
+  final Map<CodeEditorController, FindState> _finds = {};
+
+  FindState _findOf(CodeEditorController controller) => _finds.putIfAbsent(controller, FindState.new);
+
+  /// 打开查找条:选中了一行之内的文字就拿来当查询;输入框获得焦点、全选。
+  void _openFind(CodeEditorController controller) {
+    final f = _findOf(controller);
+    final sel = controller.getSelectedText();
+    if (sel.isNotEmpty && !sel.contains('\n')) {
+      f.text.text = sel;
+      f.query = sel;
+    }
+    f.text.selection = TextSelection(baseOffset: 0, extentOffset: f.text.text.length);
+    f.open = true;
+    f.refresh(controller.lines, controller.version, force: true);
+    final start = controller.selection.start;
+    f.current = f.indexAtOrAfter(start.line, start.col);
+    setState(() {});
+    f.changed();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) f.focus.requestFocus();
+    });
+  }
+
+  /// 查询或选项变了:从光标处往后找第一个,选中并滚过去(同 IntelliJ 边输边找)。
+  void _onFindQueryChanged(CodeEditorController controller) {
+    final f = _findOf(controller);
+    f.refresh(controller.lines, controller.version, force: true);
+    final start = controller.selection.start;
+    f.current = f.indexAtOrAfter(start.line, start.col);
+    if (f.current >= 0) _revealMatch(controller, f.matches[f.current]);
+    f.changed();
+    setState(() {});
+  }
+
+  /// 下一个([dir] = 1)/ 上一个(-1),到头绕回。
+  void _findStep(CodeEditorController controller, int dir) {
+    final f = _findOf(controller);
+    f.refresh(controller.lines, controller.version);
+    final n = f.matches.length;
+    if (n == 0) return;
+    final sel = controller.selection;
+    final cur = f.current >= 0 && f.current < n ? f.matches[f.current] : null;
+    final onCurrent = cur != null && sel.start == EditorPosition(cur.line, cur.start) && sel.end == EditorPosition(cur.line, cur.end);
+    int next;
+    if (onCurrent) {
+      next = (f.current + dir + n) % n;
+    } else if (dir > 0) {
+      next = f.indexAtOrAfter(sel.end.line, sel.end.col);
+    } else {
+      // 光标之前的最后一个
+      next = n - 1;
+      for (var i = n - 1; i >= 0; i--) {
+        final m = f.matches[i];
+        if (m.line < sel.start.line || (m.line == sel.start.line && m.end <= sel.start.col)) {
+          next = i;
+          break;
+        }
+      }
+    }
+    f.current = next;
+    _revealMatch(controller, f.matches[next]);
+    f.changed();
+    setState(() {});
+  }
+
+  /// 选中这处匹配并滚到能看见(收起的段会展开)。
+  void _revealMatch(CodeEditorController controller, FindMatch m) {
+    controller.setSelection(EditorPosition(m.line, m.start), EditorPosition(m.line, m.end));
+    final primary = identical(controller, _controller);
+    final vScroll = primary ? _verticalScroll : widget.secondaryTab?.verticalScroll;
+    final hScroll = primary ? _horizontalScroll : widget.secondaryTab?.horizontalScroll;
+    if (vScroll != null && vScroll.hasClients) {
+      final p = vScroll.position;
+      final y = controller.folds.rowOfLine(m.line) * _lineHeight;
+      if (y < p.pixels || y + _lineHeight + 2 * _padV > p.pixels + p.viewportDimension) {
+        vScroll.jumpTo((y - p.viewportDimension / 3).clamp(0.0, p.maxScrollExtent));
+      }
+    }
+    final hl = _highlighters[controller];
+    if (hScroll != null && hScroll.hasClients && hl != null && m.line < controller.lines.length) {
+      final p = hScroll.position;
+      final text = controller.lines[m.line];
+      final x0 = _padH + _xForCol(hl, m.line, text, m.start);
+      final x1 = _padH + _xForCol(hl, m.line, text, m.end);
+      if (x0 < p.pixels || x1 > p.pixels + p.viewportDimension - 24) {
+        hScroll.jumpTo((x0 - p.viewportDimension / 3).clamp(0.0, p.maxScrollExtent));
+      }
+    }
+  }
+
+  void _closeFind(CodeEditorController controller, FocusNode editorFocus) {
+    final f = _finds[controller];
+    if (f == null || !f.open) return;
+    f.open = false;
+    f.changed();
+    setState(() {});
+    editorFocus.requestFocus();
+  }
+
+  /// ⌘F / ⌘G / ⇧⌘G(查找条输入框里也走这里)。没处理返回 ignored。
+  KeyEventResult _handleFindKeys(CodeEditorController controller, KeyEvent event) {
+    if (_isShortcut(KeymapIds.find, event)) {
+      _openFind(controller);
+      return KeyEventResult.handled;
+    }
+    final hasQuery = _finds[controller]?.query.isNotEmpty ?? false;
+    if (hasQuery && _isShortcut(KeymapIds.findNext, event)) {
+      _findStep(controller, 1);
+      return KeyEventResult.handled;
+    }
+    if (hasQuery && _isShortcut(KeymapIds.findPrevious, event)) {
+      _findStep(controller, -1);
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
   }
 
   /// 没传快捷键表(测试、独立使用)时按默认键位。
@@ -533,6 +662,13 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
         return KeyEventResult.handled;
       }
       return KeyEventResult.ignored;
+    }
+
+    // 编辑:当前文件中查找(⌘F)、下一个 / 上一个(⌘G / ⇧⌘G);Esc 关掉查找条
+    if (_handleFindKeys(controller, event) == KeyEventResult.handled) return KeyEventResult.handled;
+    if (event.logicalKey == LogicalKeyboardKey.escape && (_finds[controller]?.open ?? false)) {
+      _closeFind(controller, isPrimary ? _focusNode : _secondaryFocusNode);
+      return KeyEventResult.handled;
     }
 
     // 编辑:复制行 / 选中内容(默认 ⌘D,Keymap 里可改;只有编辑器有焦点时才走到这里)
@@ -1087,6 +1223,15 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
           isPrimary: isPrimary,
           isDirty: controller.isDirty,
         ),
+        if (_finds[controller] case final find? when find.open)
+          FindBar(
+            state: find..refresh(lines, controller.version),
+            onQueryChanged: () => _onFindQueryChanged(controller),
+            onNext: () => _findStep(controller, 1),
+            onPrevious: () => _findStep(controller, -1),
+            onClose: () => _closeFind(controller, focusNode),
+            onKey: (event) => _handleFindKeys(controller, event),
+          ),
         Expanded(
           child: ColoredBox(
           // 代码区底色跟随配色方案
@@ -1962,6 +2107,26 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
               bottom: 0,
               child: Container(width: 1, color: _appearance.colorScheme.indentGuide),
             ),
+
+          // 0.5 查找的匹配(查找条开着时):整块底色,当前那个另有选区盖在上面
+          if (_finds[controller] case final find? when find.open)
+            for (final m in find.byLine[lineIndex] ?? const <FindMatch>[])
+              Positioned(
+                left: _xForCol(hl, lineIndex, lineText, m.start),
+                width: _xForCol(hl, lineIndex, lineText, m.end) - _xForCol(hl, lineIndex, lineText, m.start),
+                top: 1,
+                bottom: 1,
+                // 当前那个(选中的)再加一圈蓝框,同 IntelliJ
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF32593D),
+                    borderRadius: BorderRadius.circular(2),
+                    border: find.current >= 0 && find.current < find.matches.length && find.matches[find.current] == m
+                        ? Border.all(color: IntelliJTheme.caret)
+                        : null,
+                  ),
+                ),
+              ),
 
           // 1. Selection Highlight Box
           if (isLineSelected && selEndCol > selStartCol)

@@ -100,6 +100,7 @@ CodeLiteX 是一款高性能的原生跨平台代码编辑器，内置 Git 管�
 - 快捷键可配置，默认键位同 IntelliJ（macOS「Mac OS X 10.5+」；其它平台「Default」），存储格式和 action id 也用 IntelliJ 的（`meta 1`、`ActivateProjectToolWindow`），所以能直接「从 IntelliJ 导入」：读最新 `IntelliJIdea*` 配置目录的 `options/mac/keymap.xml`（当前配置名）+ `keymaps/*.xml`（用户改的）+ 安装包 `lib/app.jar` 里的自带配置，沿 parent 链解析；macOS 键位继承 `$default` 时 Ctrl 换成 ⌘（IntelliJ 自己也这么换）。设置 ▸ Keymap 可加（按下组合键录入，冲突的从原操作移走）、删、恢复默认。设置文件只存改过的（`keymap.overrides`）。
 - 第一批是打开 / 收起工具窗：⌘1 项目、⌘0 Commit、⌘7 结构、⌘9 Git、⌥F12 终端、⇧⌘F12 隐藏 / 恢复所有工具窗；PR、Opening Projects、Maven 默认无快捷键。再按一次同一个键收起（同 IntelliJ）。活动条按钮的提示跟着显示当前快捷键（`core/keymap/`、`features/settings/keymap_page.dart`）。
 - **编辑**分类：复制行 / 选中内容（IntelliJ 的 `EditorDuplicate`，默认 ⌘D，其它平台 Ctrl+D）——没选中时把当前行复制到下一行、光标跟到新行同一列；选中时在选区后接一份并选中它；算一步撤销。编辑区自己按快捷键表匹配（只在编辑器有焦点时生效，`EditorViewWidget.keymap`）。
+- **当前文件中查找**（同 IntelliJ 的 Find，归在「编辑」分类）：⌘F 在编辑区顶部弹出查找条（选中了一行之内的文字就带进去）：输入框、清空、Cc 区分大小写、W 整词、.* 正则、`当前/总数`（没有匹配时红字 0 results，正则写错输入框变红）、↑ ↓、关闭；边输边选中光标处往后的第一个匹配并滚过去，所有匹配绿色底（`#32593D`），当前那个加蓝框；回车 / ⌘G 下一个、⇧回车 / ⇧⌘G 上一个（到头绕回，其它平台 F3 / ⇧F3）；Esc 关掉、焦点回编辑器、选区留在当前匹配，关了以后 ⌘G 还能接着找。action id `Find` / `FindNext` / `FindPrevious`（`features/editor/find_bar.dart`）。替换（⌘R）还没做。
 - ⌘X 没选中时（同 IntelliJ）：删掉当前行并把这一行（带换行）放进剪贴板，下面的行上来、光标留在同一列；接着 ⌘V 时这一行作为整行插到光标所在行的上面（可以 ⌘X / ⌘V 挪行）。选中了还是只剪选中的。
 - 代码折叠（同 IntelliJ）：⌘- 折叠光标所在的段、⌘= 展开、⇧⌘- 全部折叠、⇧⌘= 全部展开（其它平台 Ctrl）；action id `CollapseRegion` / `ExpandRegion` / `CollapseAllRegions` / `ExpandAllRegions`。
 

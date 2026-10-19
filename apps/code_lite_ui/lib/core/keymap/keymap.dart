@@ -52,9 +52,12 @@ abstract final class KeymapIds {
   static const collapseAll = 'CollapseAllRegions';
   static const expandAll = 'ExpandAllRegions';
   static const duplicate = 'EditorDuplicate';
+  static const find = 'Find';
+  static const findNext = 'FindNext';
+  static const findPrevious = 'FindPrevious';
 }
 
-/// 目前支持配置的操作:打开 / 收起各个工具窗、Go to File、代码折叠、编辑(复制行)。默认键位取自 IntelliJ。
+/// 目前支持配置的操作:打开 / 收起各个工具窗、Go to File、代码折叠、编辑(复制行、查找)。默认键位取自 IntelliJ。
 const List<KeymapAction> keymapActions = [
   KeymapAction(id: KeymapIds.project, title: '项目', group: '工具窗', mac: ['meta 1'], other: ['alt 1']),
   KeymapAction(id: KeymapIds.commit, title: 'Commit', group: '工具窗', mac: ['meta 0'], other: ['alt 0']),
@@ -72,6 +75,9 @@ const List<KeymapAction> keymapActions = [
   KeymapAction(id: KeymapIds.collapseAll, title: '全部折叠', group: '代码折叠', mac: ['shift meta MINUS'], other: ['ctrl shift MINUS']),
   KeymapAction(id: KeymapIds.expandAll, title: '全部展开', group: '代码折叠', mac: ['shift meta EQUALS'], other: ['ctrl shift EQUALS']),
   KeymapAction(id: KeymapIds.duplicate, title: '复制行 / 选中内容(Duplicate Line or Selection)', group: '编辑', mac: ['meta D'], other: ['ctrl D']),
+  KeymapAction(id: KeymapIds.find, title: '在当前文件中查找(Find)', group: '编辑', mac: ['meta F'], other: ['ctrl F']),
+  KeymapAction(id: KeymapIds.findNext, title: '查找下一个(Find Next)', group: '编辑', mac: ['meta G'], other: ['F3']),
+  KeymapAction(id: KeymapIds.findPrevious, title: '查找上一个(Find Previous)', group: '编辑', mac: ['shift meta G'], other: ['shift F3']),
 ];
 
 KeymapAction? keymapActionById(String id) => keymapActions.where((a) => a.id == id).firstOrNull;
