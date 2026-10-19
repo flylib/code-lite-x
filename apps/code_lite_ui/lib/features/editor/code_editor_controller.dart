@@ -855,6 +855,28 @@ class CodeEditorController extends ChangeNotifier {
     if (folds.reconcile(regions, from, to)) notifyListeners();
   }
 
+  /// 复制当前行 / 选中的内容(IntelliJ 的 Duplicate Line or Selection,⌘D),算一步撤销。
+  /// 没选中:当前行复制到下一行,光标跟到新行的同一列;选中了:在选区后面接一份,选中复制出来的那份。
+  void duplicateLineOrSelection() {
+    _breakGroup = true; // 不和前面的输入合成一步撤销
+    if (hasSelection) {
+      final end = _selection.end;
+      final text = _rangeText(_selection.start, end);
+      final pieces = text.split('\n');
+      final newEnd = pieces.length == 1
+          ? EditorPosition(end.line, end.col + text.length)
+          : EditorPosition(end.line + pieces.length - 1, pieces.last.length);
+      _edit(end, end, text, selectionAfter: EditorSelection(anchor: end, head: newEnd));
+    } else {
+      final head = _selection.head;
+      final line = _lines[head.line];
+      final at = EditorPosition(head.line, line.length);
+      _edit(at, at, '\n$line', selectionAfter: EditorSelection.collapsed(EditorPosition(head.line + 1, head.col)));
+    }
+    _breakGroup = true; // 接着打字也另起一步
+    _historySelection = _selection;
+  }
+
   /// Navigates the cursor in the given direction.
   void moveCursor({
     required NavigationDirection direction,

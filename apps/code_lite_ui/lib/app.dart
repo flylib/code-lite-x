@@ -266,7 +266,7 @@ class _Workbench extends StatelessWidget {
                                 children: [
                                   // 侧边工具窗:layout 决定显示哪个(上下两块各一个时拆分显示),workspace 提供数据。
                                   _sideDock(ToolSide.left, layout, workspace, sessions),
-                                  Expanded(child: Island(child: _EditorRegion(client: client, gitLog: gitLog, prs: prs, make: make, plugins: plugins, browsers: browsers))),
+                                  Expanded(child: Island(child: _EditorRegion(client: client, gitLog: gitLog, prs: prs, make: make, plugins: plugins, browsers: browsers, keymap: settings.keymap))),
                                   _sideDock(ToolSide.right, layout, workspace, sessions),
                                 ],
                               ),
@@ -478,9 +478,12 @@ class _Workbench extends StatelessWidget {
 /// 编辑区。只订阅会话层 —— 换标签、分屏会重建这里,
 /// 但项目树、底部日志、右侧面板不动。
 class _EditorRegion extends StatelessWidget {
-  const _EditorRegion({required this.client, required this.gitLog, required this.prs, required this.make, required this.plugins, required this.browsers});
+  const _EditorRegion({required this.client, required this.gitLog, required this.prs, required this.make, required this.plugins, required this.browsers, this.keymap});
 
   final ApiClient client;
+
+  /// 编辑区里的快捷键(复制行等)按它算。
+  final KeymapStore? keymap;
   final MakeStore make;
   final GitLogStore gitLog;
   final PullRequestsStore prs;
@@ -564,6 +567,7 @@ class _EditorRegion extends StatelessWidget {
 
         return EditorViewWidget(
           projectName: workspace.projectName,
+          keymap: keymap,
           appearance: sessions.appearance,
           onShowInHistory: (hash, path) => _showInHistory(context, hash, path),
           specialTabBuilder: (id) => _specialTab(context, id, workspace, sessions),

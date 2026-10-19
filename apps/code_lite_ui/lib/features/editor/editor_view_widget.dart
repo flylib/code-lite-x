@@ -17,6 +17,7 @@ import '../../core/theme/intellij_theme.dart';
 import 'code_editor_controller.dart';
 import 'editor_session_manager.dart';
 import 'folding.dart';
+import '../../core/keymap/keymap.dart';
 import 'ime_text_input_client.dart';
 import 'lsp_overlay.dart';
 import 'markdown/markdown_links.dart';
@@ -68,6 +69,9 @@ class EditorViewWidget extends StatefulWidget {
   final VoidCallback? onCloseActiveTab;
   final ValueChanged<String>? onSelectSecondaryTab;
   final ValueChanged<String>? onRevertFile;
+
+  /// 当前快捷键表(用户在 Keymap 里改过的);为 null 时按默认键位。
+  final KeymapStore? keymap;
 
   /// 面包屑的根:当前项目目录名。没打开项目时为空,不显示根节点。
   final String projectName;
@@ -133,6 +137,7 @@ class EditorViewWidget extends StatefulWidget {
     this.onCloseActiveTab,
     this.onSelectSecondaryTab,
     this.onRevertFile,
+    this.keymap,
   });
 
   @override
@@ -494,6 +499,13 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
     super.dispose();
   }
 
+  /// 没传快捷键表(测试、独立使用)时按默认键位。
+  static final KeymapStore _defaultKeymap = KeymapStore();
+
+  /// 这次按键是不是 [id] 这个操作的快捷键(用户在 Keymap 里改过的按改过的算)。
+  bool _isShortcut(String id, KeyEvent event) =>
+      (widget.keymap ?? _defaultKeymap).shortcutsOf(id).any((k) => k.activator.accepts(event, HardwareKeyboard.instance));
+
   KeyEventResult _handlePaneKeyEvent(
     CodeEditorController controller,
     ImeTextInputBridge? imeBridge,
@@ -521,6 +533,13 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
         return KeyEventResult.handled;
       }
       return KeyEventResult.ignored;
+    }
+
+    // 编辑:复制行 / 选中内容(默认 ⌘D,Keymap 里可改;只有编辑器有焦点时才走到这里)
+    if (_isShortcut(KeymapIds.duplicate, event)) {
+      controller.duplicateLineOrSelection();
+      imeBridge?.syncState();
+      return KeyEventResult.handled;
     }
 
     // 书签:F3 开关、⌥F3 助记书签、⌃数字 跳到对应助记书签(与 IntelliJ 一致)。

@@ -53,7 +53,10 @@ void main() {
         KeymapIds.expandRegion: '⌘=',
         KeymapIds.collapseAll: '⇧⌘-',
         KeymapIds.expandAll: '⇧⌘=',
+        KeymapIds.duplicate: '⌘D',
       });
+      expect(KeymapStore(mac: false).labelOf(KeymapIds.duplicate), 'Ctrl+D');
+      expect(keymapActionById(KeymapIds.duplicate)!.group, '编辑');
       expect(KeymapStore(mac: false).labelOf(KeymapIds.collapseRegion), 'Ctrl+-');
       expect(KeymapStore(mac: false).labelOf(KeymapIds.gotoFile), 'Ctrl+Shift+N');
       expect(KeymapStore(mac: false).labelOf(KeymapIds.project), 'Alt+1');
