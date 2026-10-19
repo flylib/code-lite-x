@@ -16,7 +16,10 @@ class LspService {
     this.jdtlsDataRoot,
     this.launchResolver,
     this.sharedLaunchResolver,
+    this.disabled = false,
   });
+
+  final bool disabled;
 
   final String? jdtlsDataRoot;
   final LspLaunchResolver? launchResolver;

@@ -6,6 +6,8 @@ Future<String?> pickDirectory() async => null;
 
 Future<String?> createEmptyFile(String root, String relPath) async => 'web 预览不支持创建文件';
 
+Future<String?> pickProject() async => null;
+
 Future<bool> directoryExists(String path) async => false;
 
 Future<bool> fileExists(String path) async => false;

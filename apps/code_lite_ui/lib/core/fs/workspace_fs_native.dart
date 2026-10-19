@@ -31,8 +31,11 @@ Future<Map<String, dynamic>> listDirectory(String path, {int depth = 2}) =>
 /// 正则写错时返回 `{"status":"error","error":...}`。
 Future<Map<String, dynamic>> searchWorkspace(String root, String query, [Map<String, dynamic>? options]) async {
   // 先交给 Rust(并行、快 2~3 倍);没有 Rust 库、或正则 Rust 不支持(环视、反向引用)时用下面这份 Dart 的
-  final rust = await rustSearch({'op': 'search', 'root': root, 'query': query, 'options': options ?? const {}});
-  if (rust != null && rust['status'] != 'unsupported') return rust;
+  // 只搜一个文件(单独打开的文件):Rust 那份会遍历整个目录,直接用 Dart 的
+  if (options?['only_file'] == null) {
+    final rust = await rustSearch({'op': 'search', 'root': root, 'query': query, 'options': options ?? const {}});
+    if (rust != null && rust['status'] != 'unsupported') return rust;
+  }
   return searchWorkspaceInDart(root, query, options);
 }
 
@@ -57,8 +60,10 @@ Future<Map<String, dynamic>> replaceWorkspace(
   String replacement, [
   Map<String, dynamic>? options,
 ]) async {
-  final rust = await rustSearch({'op': 'replace', 'root': root, 'query': query, 'replacement': replacement, 'options': options ?? const {}});
-  if (rust != null && rust['status'] != 'unsupported') return rust;
+  if (options?['only_file'] == null) {
+    final rust = await rustSearch({'op': 'replace', 'root': root, 'query': query, 'replacement': replacement, 'options': options ?? const {}});
+    if (rust != null && rust['status'] != 'unsupported') return rust;
+  }
   return replaceWorkspaceInDart(root, query, replacement, options);
 }
 
@@ -202,7 +207,11 @@ class _SearchOptions {
     this.wholeWord = false,
     this.maxResults = _defaultMaxResults,
     this.fileExtension,
+    this.onlyFile,
   });
+
+  /// 只搜根目录下的这一个文件(单独打开的文件),不遍历目录。
+  final String? onlyFile;
 
   final bool isRegex;
   final bool caseSensitive;
@@ -218,6 +227,7 @@ class _SearchOptions {
       wholeWord: j['whole_word'] == true,
       maxResults: (j['max_results'] as num?)?.toInt() ?? _defaultMaxResults,
       fileExtension: j['file_extension'] as String?,
+      onlyFile: j['only_file'] as String?,
     );
   }
 
@@ -229,6 +239,10 @@ class _SearchOptions {
 }
 
 List<String> _collectFiles(String root, _SearchOptions options) {
+  if (options.onlyFile case final only?) {
+    final path = '$root${Platform.pathSeparator}$only';
+    return File(path).existsSync() ? [path] : const [];
+  }
   final out = <String>[];
   void walk(Directory dir) {
     List<FileSystemEntity> entries;

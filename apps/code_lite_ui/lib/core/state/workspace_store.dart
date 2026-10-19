@@ -56,7 +56,7 @@ class WorkspaceStore extends ChangeNotifier with DisposeSafeNotifier {
 
   /// 把当前项目的标签 / 光标 / 滚动位置存下来(没变就不写)。应用失去焦点、定时、切换 / 关闭项目时调用。
   Future<void> saveSession() async {
-    final root = _rootPath;
+    final root = _sessionKey;
     if (root == null || _restoring) return;
     final snap = _sessions.snapshot(); // 同步取,之后项目怎么变都不影响这次存的内容
     final sig = snap.signature;
@@ -67,8 +67,8 @@ class WorkspaceStore extends ChangeNotifier with DisposeSafeNotifier {
 
   /// 打开 [root] 后按上次的状态重新打开标签:跳过已经不存在的文件,光标和滚动位置放回去,
   /// 最后切到上次的当前标签。
-  Future<void> _restoreSession(String root) async {
-    final snap = await _sessionStore.read(root);
+  Future<void> _restoreSession(String root, {String? key}) async {
+    final snap = await _sessionStore.read(key ?? root);
     final opened = <String>[];
     for (final t in snap.tabs) {
       // 标签路径可能是绝对的(文件树给的),也可能是相对项目根的:不能一律拼上项目根
@@ -141,10 +141,20 @@ class WorkspaceStore extends ChangeNotifier with DisposeSafeNotifier {
   int get errorCount => diagnostics.where((d) => d.isError).length;
   int get warningCount => diagnostics.where((d) => d.isWarning).length;
 
-  /// 当前项目根目录;没打开项目时为 null。
+  /// 当前项目根目录;没打开项目时为 null。单独打开一个文件时是它所在的目录。
   String? get rootPath => _rootPath;
   bool get hasProject => _rootPath != null;
-  String get projectName => _rootPath?.split('/').where((s) => s.isNotEmpty).lastOrNull ?? '';
+
+  /// 单独打开的那个文件(File → Open 选的是文件);打开的是目录时为 null。
+  String? _singleFile;
+  String? get singleFile => _singleFile;
+  bool get isSingleFile => _singleFile != null;
+
+  /// 项目名:目录名;单独打开的文件就是文件名。
+  String get projectName => (_singleFile ?? _rootPath)?.split('/').where((s) => s.isNotEmpty).lastOrNull ?? '';
+
+  /// 会话(标签、光标)按什么存:目录;单独打开的文件按它自己的路径(不和它所在目录的项目混在一起)。
+  String? get _sessionKey => _singleFile ?? _rootPath;
 
   /// 最近打开的项目,最新的在前,已剔除磁盘上不存在的。
   List<String> get recentProjects => _recentProjects;
@@ -154,7 +164,7 @@ class WorkspaceStore extends ChangeNotifier with DisposeSafeNotifier {
   Future<void> bootstrap() async {
     await _refreshRecent();
     final last = _recentProjects.firstOrNull;
-    if (last != null && await openFolder(last)) return;
+    if (last != null && (await openFolder(last) || await openSingleFile(last))) return;
     if (!_client.isFfiAvailable) {
       await load();
       return;
@@ -182,9 +192,44 @@ class WorkspaceStore extends ChangeNotifier with DisposeSafeNotifier {
       _activeSymbol = null;
       _diagnostics = const [];
       _rootPath = path;
+      _singleFile = null;
       await _remember(path);
       await load();
       await _restoreSession(path);
+    } finally {
+      _restoring = false;
+      _savedSignature = _sessions.snapshot().signature;
+    }
+    return true;
+  }
+
+  /// 单独打开一个文件(File → Open 选的是文件):工作目录是它所在的目录,文件树里只有它,打开后直接显示它。
+  /// 不起语言服务器、不监视 / 不索引那个目录(见 [ApiClient.openSingleFile])。
+  Future<bool> openSingleFile(String filePath) async {
+    if (!await _fileExists(filePath)) return false;
+    await saveSession();
+    final previous = _rootPath;
+    final previousFile = _singleFile;
+    final hadCore = _client.isFfiAvailable;
+    if (!_client.openSingleFile(filePath) && hadCore) {
+      if (previous != null) {
+        previousFile != null ? _client.openSingleFile(previousFile) : _client.openWorkspace(previous);
+      }
+      return false;
+    }
+    _sessionSaveTimer?.cancel();
+    _restoring = true;
+    try {
+      _sessions.closeAll();
+      _outline = const [];
+      _activeSymbol = null;
+      _diagnostics = const [];
+      _rootPath = _client.rootPath;
+      _singleFile = filePath;
+      await _remember(filePath);
+      await load();
+      await _restoreSession(_rootPath!, key: filePath);
+      if (!_sessions.tabs.containsKey(filePath)) await openFile(filePath);
     } finally {
       _restoring = false;
       _savedSignature = _sessions.snapshot().signature;
@@ -197,6 +242,7 @@ class WorkspaceStore extends ChangeNotifier with DisposeSafeNotifier {
     unawaited(saveSession()); // 先取快照,再关标签
     _sessionSaveTimer?.cancel();
     _rootPath = null;
+    _singleFile = null;
     _sessions.closeAll();
     _tree = const {};
     _outline = const [];
@@ -223,7 +269,8 @@ class WorkspaceStore extends ChangeNotifier with DisposeSafeNotifier {
     final saved = await _loadRecent();
     final alive = <String>[];
     for (final p in saved) {
-      if (await io.directoryExists(p)) alive.add(p);
+      // 最近打开的可能是目录,也可能是单独打开的文件
+      if (await io.directoryExists(p) || await _fileExists(p)) alive.add(p);
     }
     _recentProjects = alive;
   }

@@ -14,6 +14,15 @@ Future<String?> pickDirectory() async {
   }
 }
 
+/// File → Open 的系统面板:目录(项目)和单个文件都能选。取消返回 null。
+Future<String?> pickProject() async {
+  try {
+    return await _dialogs.invokeMethod<String>('pickProject');
+  } on MissingPluginException {
+    return null;
+  }
+}
+
 /// 弹出系统"选择文件"面板(设置里选 make 等可执行文件)。[directory] 是一开始停在的目录。取消返回 null。
 Future<String?> pickFile({String? message, String? directory}) async {
   try {

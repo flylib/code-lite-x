@@ -42,8 +42,15 @@ class ApiClient {
 
   bool get isFfiAvailable => _ffi.isAvailable;
 
-  /// 当前工作区根目录。
+  /// 当前工作区根目录(单独打开一个文件时是它所在的目录)。
   String get rootPath => _root;
+
+  /// 单独打开的那个文件(绝对路径);打开的是目录时为 null。
+  String? _singleFile;
+  String? get singleFile => _singleFile;
+  bool get isSingleFile => _singleFile != null;
+
+  String get _singleName => _singleFile!.split('/').last;
 
   /// 插件提供的语言服务器启动方式(由 PluginManager 设置);语言服务器每次启动时查询。
   LspLaunchResolver? lspLaunchResolver;
@@ -73,13 +80,25 @@ class ApiClient {
   GitHubService get github => _github;
 
   /// 把 Rust Core 重新指向另一个工作区根目录(File → Open)。
-  bool openWorkspace(String path) {
+  bool openWorkspace(String path) => _open(path, singleFile: null);
+
+  /// 单独打开一个文件(File → Open 选的是文件):工作目录是它所在的目录(终端从这里开、Git 照常),
+  /// 但不把这个目录当工程:不起语言服务器、不监视 / 不索引目录,文件树和搜索只有这一个文件。
+  bool openSingleFile(String filePath) {
+    final slash = filePath.lastIndexOf('/');
+    final dir = slash > 0 ? filePath.substring(0, slash) : '/';
+    return _open(dir, singleFile: filePath);
+  }
+
+  bool _open(String path, {required String? singleFile}) {
+    _singleFile = singleFile;
     _root = path;
     _git = GitService(path);
     _github = GitHubService(path);
     // 旧项目的语言服务器在后台关掉,不阻塞切换。
     final oldLsp = _lsp;
-    _lsp = LspService(path, launchResolver: _launchFor, sharedLaunchResolver: _sharedLaunchFor)..setActive(_lspActive);
+    _lsp = LspService(path, launchResolver: _launchFor, sharedLaunchResolver: _sharedLaunchFor, disabled: singleFile != null)
+      ..setActive(_lspActive);
     _attachLsp();
     oldLsp.dispose();
     return _ffi.reinitialize(path);
@@ -89,9 +108,23 @@ class ApiClient {
   /// Fetches the project workspace file tree(纯 Dart 扫描,后台 isolate)。
   /// 只有 web 预览(没有 dart:io)拿不到真实目录,用演示数据兜底。
   Future<Map<String, dynamic>> fetchWorkspaceTree() async {
+    if (isSingleFile) return _singleFileTree();
     final tree = await fs.scanTree(_root);
     return tree.isNotEmpty ? tree : _fallbackWorkspace();
   }
+
+  /// 单独打开的文件:文件树只有它(挂在它所在的目录下)。
+  Map<String, dynamic> _singleFileTree() => {
+        'path': _root,
+        'name': _root.split('/').where((s) => s.isNotEmpty).lastOrNull ?? _root,
+        'is_dir': true,
+        'size_bytes': 0,
+        'modified_ms': 0,
+        'loaded': true,
+        'children': [
+          {'path': _singleFile, 'name': _singleName, 'is_dir': false, 'size_bytes': 0, 'modified_ms': 0, 'children': null},
+        ],
+      };
 
   /// 展开文件树里还没扫描到的深层目录(`loaded: false` 的节点)。
   Future<Map<String, dynamic>> listDirectory(String path) => fs.listDirectory(path);
@@ -159,11 +192,14 @@ class ApiClient {
 
   /// Searches the workspace(纯 Dart,后台 isolate,不卡界面)。
   Future<Map<String, dynamic>> searchWorkspace(String query, [Map<String, dynamic>? options]) =>
-      fs.searchWorkspace(_root, query, options);
+      fs.searchWorkspace(_root, query, _scoped(options));
+
+  /// 单独打开的文件:搜索 / 替换只在这一个文件里。
+  Map<String, dynamic>? _scoped(Map<String, dynamic>? options) => isSingleFile ? {...?options, 'only_file': _singleName} : options;
 
   /// Replaces occurrences across the workspace.
   Future<Map<String, dynamic>> replaceWorkspace(String query, String replacement, [Map<String, dynamic>? options]) =>
-      fs.replaceWorkspace(_root, query, replacement, options);
+      fs.replaceWorkspace(_root, query, replacement, _scoped(options));
 
   /// Executes command in interactive PTY/terminal.
   Future<Map<String, dynamic>> terminalExec(String cmd, List<String> args) async {
@@ -180,7 +216,7 @@ class ApiClient {
   Map<String, dynamic> ptyResize(String id, int rows, int cols) => _ffi.ptyResize(id, rows, cols);
   /// 开始监视项目目录(Rust:构建产物、.git 等的事件在 Rust 里就丢掉,顺带让文件清单实时更新)。
   /// 没有 Rust 库 / 系统不让监视时返回 false,调用方用 Dart 的监视。
-  bool startWatching() => _ffi.watchStart(_root);
+  bool startWatching() => !isSingleFile && _ffi.watchStart(_root);
 
   /// 取走攒下的文件变化:`{"changed","created","removed","structure","overflow"}`(相对路径);没在监视时 null。
   Map<String, dynamic>? pollWatch() => _ffi.watchPoll(_root);
@@ -188,11 +224,15 @@ class ApiClient {
   /// 按文件名快速打开(Go to File):在 Rust 常驻的项目文件清单上模糊匹配,返回前 [limit] 个。
   /// `{"status":"ok","ready","files","generation","results":[{"path","score","indices"}]}`;
   /// 没有 Rust 库 / 库太旧时 `{"status":"error"}`。
-  Map<String, dynamic> fileIndexQuery(String query, {int limit = 50}) =>
-      _ffi.indexQuery(_root, query, limit) ?? const {'status': 'error', 'error': '文件索引不可用(需要 Rust 库)'};
+  Map<String, dynamic> fileIndexQuery(String query, {int limit = 50}) => isSingleFile
+      // 单独打开的文件:不给它所在的目录建清单
+      ? const {'status': 'ok', 'ready': true, 'files': 0, 'generation': 0, 'results': []}
+      : _ffi.indexQuery(_root, query, limit) ?? const {'status': 'error', 'error': '文件索引不可用(需要 Rust 库)'};
 
   /// 后台重新扫一遍项目文件清单(打开 Go to File 时调,新建 / 删掉的文件跟上)。
-  void fileIndexRefresh() => _ffi.indexRefresh(_root);
+  void fileIndexRefresh() {
+    if (!isSingleFile) _ffi.indexRefresh(_root);
+  }
 
   /// 一帧终端画面:二进制、只带和上一帧不同的行(Rust `encode_frame`)。
   /// Rust 库太旧没有这个接口时,用 JSON 整屏快照代替。

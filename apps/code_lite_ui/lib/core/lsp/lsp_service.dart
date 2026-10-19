@@ -136,6 +136,7 @@ class LspService {
     this.jdtlsDataRoot,
     this.launchResolver,
     this.sharedLaunchResolver,
+    this.disabled = false,
   }) : _overrides = serverOverrides ?? const {} {
     _resolvedRoot = _tryResolve(root);
   }
@@ -210,6 +211,9 @@ class LspService {
 
   /// 工作区根目录(绝对路径)。
   final String root;
+
+  /// 不起任何语言服务端(单独打开一个文件时:不能拿它所在的目录当工程去索引),全部走降级(语法树大纲、括号检查)。
+  final bool disabled;
 
   /// 单个请求的超时;超时后结果按 null 处理(documentSymbols 随即降级到正则大纲)。
   final Duration requestTimeout;
@@ -554,6 +558,7 @@ class LspService {
 
   /// 取(必要时创建并启动)languageId 所属分组的服务端;未路由的语言返回 null。
   _Server? _serverFor(String languageId) {
+    if (disabled) return null;
     final group = lspServerGroupFor(languageId);
     if (group == null) return null;
     final existing = _servers[group];

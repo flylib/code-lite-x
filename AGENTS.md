@@ -87,6 +87,7 @@ CodeLiteX 是一款高性能的原生跨平台代码编辑器，内置 Git 管�
 **项目**
 - 一个进程同时打开多个项目，都留在内存里，切换只是换显示哪一个。「Opening Projects」列表里点 × 才真正关闭，关闭时有未保存的修改要问。
 - 标题栏的项目下拉：直接打字就开始搜索、过滤项目（IntelliJ 的做法）。
+- **单独打开一个文件**：File → Open 的系统面板目录和文件都能选（`pickProject`；新建 / 克隆的「位置」仍只选目录）。选了文件就像项目一样出现在 Opening 里（名字 + 路径，可归组、重启恢复、最近打开里也有），标题栏项目名是文件名，打开即显示这个文件。工作目录是它所在的目录（终端从这里开、Git 分支照常），但**不把那个目录当工程**：文件树只有这个文件，不监视 / 不索引目录（Go to File 只有打开的标签），不探测 Maven / Makefile，不起语言服务器（着色、结构视图走 Rust 语法树），全局搜索 / 替换只在这个文件里；会话（光标等）按文件自己的路径记（`ApiClient.openSingleFile`、`WorkspaceStore.openSingleFile`）。
 - 打开项目面板标题叫「Opening」。**项目组**（同 IntelliJ 的 Project Group）：标题栏的 ＋ 只用来新建项目组（打开项目走标题栏项目下拉 / File 菜单）；把项目拖到组上归进去，拖到组外移出（右键菜单也能移）；组**记住成员**，项目关掉后在组里显示成灰色，点一下重新打开；组的右键菜单有全部打开 / 全部关闭 / 重命名 / 删除（删组不关项目）。
 - **语言服务器省内存**（jdtls 一个项目五六百 MB）：① Java 服务端启动时自动补 `-XX:+UseParallelGC -XX:GCTimeRatio=4 -XX:AdaptiveSizePolicyWeight=90 -Dsun.zip.disableMemoryMapping=true`（同 VS Code 的 Java 插件；对已装插件和 Homebrew 的 `jdtls` 都生效，`LspService.withJvmMemoryFlags`）；② 项目在后台超过 15 分钟，停掉它的语言服务器（状态栏「已暂停」），切回来 / 打开文件 / 有请求时再起，按当前内容重放；③ **同一项目组里的 Java 项目共用一个 jdtls**（多工作区目录，按组 id 共用，缓存一个组一份，改名不重建索引；移进 / 移出组时该项目换到对应的进程）。
 

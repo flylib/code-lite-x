@@ -68,6 +68,25 @@ class MainFlutterWindow: NSWindow {
         }
         return
       }
+      if call.method == "pickProject" {
+        // File → Open:目录(项目)和单个文件都能选(同 IntelliJ)
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = true
+        panel.allowsMultipleSelection = false
+        panel.canCreateDirectories = true
+        panel.prompt = "Open"
+        panel.message = "Choose a project folder or a file"
+        let done: (NSApplication.ModalResponse) -> Void = { response in
+          result(response == .OK ? panel.url?.path : nil)
+        }
+        if let window = self {
+          panel.beginSheetModal(for: window, completionHandler: done)
+        } else {
+          done(panel.runModal())
+        }
+        return
+      }
       guard call.method == "pickDirectory" else {
         result(FlutterMethodNotImplemented)
         return

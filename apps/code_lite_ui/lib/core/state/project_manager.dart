@@ -98,11 +98,13 @@ class ProjectManager extends ChangeNotifier {
     Future<List<String>> Function()? loadRecent,
     Future<void> Function(List<String>)? saveRecent,
     Future<bool> Function(String path)? directoryExists,
+    Future<bool> Function(String path)? fileExists,
     ApiClient Function()? newClient,
   })  : _store = store ?? OpenProjectsStore(),
         _loadRecentStore = loadRecent ?? io.loadRecentProjects,
         _saveRecentStore = saveRecent ?? io.saveRecentProjects,
-        _directoryExists = directoryExists ?? io.directoryExists {
+        _directoryExists = directoryExists ?? io.directoryExists,
+        _fileExists = fileExists ?? io.fileExists {
     // 项目组里的 Java 项目共用一个语言服务器(按组的 id)
     LspService.shareKeyFor = _shareKeyFor;
     services = ProjectServices(
@@ -124,6 +126,10 @@ class ProjectManager extends ChangeNotifier {
   final Future<List<String>> Function() _loadRecentStore;
   final Future<void> Function(List<String>) _saveRecentStore;
   final Future<bool> Function(String path) _directoryExists;
+  final Future<bool> Function(String path) _fileExists;
+
+  /// 打开的可以是目录(项目),也可以是单独一个文件。
+  Future<bool> _exists(String path) async => await _directoryExists(path) || await _fileExists(path);
 
   final List<OpenProject> _projects = [];
   final List<ProjectGroup> _groups = [];
@@ -207,20 +213,20 @@ class ProjectManager extends ChangeNotifier {
   /// 没有记录(老版本升级上来)就退回最近项目里的第一个。
   Future<void> restore() async {
     final recent = await _loadRecentStore();
-    _recent = [for (final p in recent) if (await _directoryExists(p)) p];
+    _recent = [for (final p in recent) if (await _exists(p)) p];
     final saved = await _store.read();
     _groups
       ..clear()
       ..addAll(saved.groups);
     for (final g in _groups) {
-      final kept = [for (final m in g.members) if (await _directoryExists(m)) normalize(m)];
+      final kept = [for (final m in g.members) if (await _exists(m)) normalize(m)];
       g.members
         ..clear()
         ..addAll(kept.toSet());
     }
     var paths = <String>[
       for (final p in saved.open)
-        if (await _directoryExists(p)) normalize(p),
+        if (await _exists(p)) normalize(p),
     ];
     if (paths.isEmpty && _recent.isNotEmpty) paths = [_recent.first];
     _projects
@@ -247,7 +253,7 @@ class ProjectManager extends ChangeNotifier {
     final path = normalize(rawPath);
     final existing = find(path);
     if (existing != null) return activate(existing);
-    if (!await _directoryExists(path)) return false;
+    if (!await _exists(path)) return false;
     final entry = OpenProject(path);
     _projects.add(entry);
     final ok = await _load(entry);
@@ -397,7 +403,7 @@ class ProjectManager extends ChangeNotifier {
   /// 打开组里还没打开的项目(先放进列表、第一次切过去才加载,同启动恢复),并切到组里第一个。
   Future<void> openGroup(ProjectGroup group) async {
     for (final m in group.members) {
-      if (find(m) == null && await _directoryExists(m)) _projects.add(OpenProject(m));
+      if (find(m) == null && await _exists(m)) _projects.add(OpenProject(m));
     }
     _notify();
     final first = group.members.map(find).nonNulls.firstOrNull;

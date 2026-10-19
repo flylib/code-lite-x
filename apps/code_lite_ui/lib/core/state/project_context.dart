@@ -106,7 +106,8 @@ class ProjectContext {
       prs: PullRequestsStore(client),
       build: BuildToolsStore(
         plugins: services.plugins,
-        projectRoot: () => workspace.rootPath,
+        // 单独打开的文件不探测构建工具(不把它所在的目录当工程)
+        projectRoot: () => workspace.isSingleFile ? null : workspace.rootPath,
         read: (path) async {
           final res = await client.fetchFile(path);
           return res['status'] == 'ok' ? res['content'] as String? : null;
@@ -119,7 +120,8 @@ class ProjectContext {
         windows: defaultTargetPlatform == TargetPlatform.windows,
       ),
       make: MakeStore(
-        projectRoot: () => workspace.rootPath,
+        // 单独打开的文件不探测构建工具(不把它所在的目录当工程)
+        projectRoot: () => workspace.isSingleFile ? null : workspace.rootPath,
         read: (path) async {
           final res = await client.fetchFile(path);
           return res['status'] == 'ok' ? res['content'] as String? : null;
@@ -194,7 +196,9 @@ class ProjectContext {
   bool _treeDirty = false;
 
   /// 打开 [projectPath]:读文件树、恢复上次的标签。失败(目录不存在 / 初始化失败)返回 false。
-  Future<bool> open(String projectPath) => workspace.openFolder(projectPath);
+  /// 打开项目目录;[projectPath] 是文件时单独打开这个文件(见 [WorkspaceStore.openSingleFile])。
+  Future<bool> open(String projectPath) async =>
+      await io.directoryExists(projectPath) ? workspace.openFolder(projectPath) : workspace.openSingleFile(projectPath);
 
   /// 换了项目根:Git Log / PR 里还是旧数据,作废后在下次显示时重新加载;
   /// 只在有项目时关注分支和记录会话(没有项目时不起任何 git 进程和定时器)。
@@ -214,8 +218,11 @@ class ProjectContext {
     _watchTimer = null;
     if (root != null) {
       branches.start();
-      // 文件监视交给 Rust(构建产物的事件在那边就丢掉);不行再用 Dart 自己的
-      if (client.startWatching()) {
+      // 文件监视交给 Rust(构建产物的事件在那边就丢掉);不行再用 Dart 自己的。
+      // 单独打开的文件不监视它所在的目录:切回窗口 / 保存前照样和磁盘对一遍
+      if (workspace.isSingleFile) {
+        // 不监视
+      } else if (client.startWatching()) {
         _watchTimer = Timer.periodic(const Duration(milliseconds: 300), (_) => _pollWatch());
       } else {
         _watch = io.watchFiles(root).listen(_onFileChanged);

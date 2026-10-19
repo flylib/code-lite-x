@@ -587,7 +587,8 @@ class _EditorRegion extends StatelessWidget {
               ? OpenInBrowserBar(
                   service: browsers,
                   file: absoluteFilePath(client.rootPath, path),
-                  projectRoot: workspace.rootPath,
+                  // 用来找是哪个打开的项目(单独打开的文件在列表里记的是文件路径)
+                  projectRoot: workspace.singleFile ?? workspace.rootPath,
                   // 浏览器读的是磁盘:没落盘的改动先存下来
                   beforeOpen: () => workspace.saveFile(path),
                 )
@@ -1010,7 +1011,7 @@ Future<void> _closeGroup(BuildContext context, ProjectManager manager, ProjectGr
 }
 
 Future<void> _openFolder(BuildContext context, ProjectManager manager) async {
-  final path = await io.pickDirectory();
+  final path = await io.pickProject(); // 目录或单个文件
   if (path == null || !context.mounted) return;
   await _openProject(context, manager, path);
 }
