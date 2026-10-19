@@ -238,8 +238,9 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
       focusNode: _focusNode,
     );
 
+    // 只在焦点就在编辑器本身时挂输入法:焦点在里面的查找框上时(hasFocus 仍为真)要让给查找框
     _focusNode.addListener(() {
-      if (_focusNode.hasFocus) {
+      if (_focusNode.hasPrimaryFocus) {
         if (!_previewOnly) _imeBridge.attach();
       } else {
         _imeBridge.detach();
@@ -263,7 +264,7 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
         focusNode: _secondaryFocusNode,
       );
       _secondaryFocusNode.addListener(() {
-        if (_secondaryFocusNode.hasFocus) {
+        if (_secondaryFocusNode.hasPrimaryFocus) {
           _secondaryImeBridge?.attach();
         } else {
           _secondaryImeBridge?.detach();
@@ -927,7 +928,9 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
     return Focus(
       focusNode: _focusNode,
       autofocus: true,
-      onKeyEvent: (node, event) => _handlePaneKeyEvent(_controller, _imeBridge, event, isPrimary: true),
+      // 焦点在查找框上时,冒泡上来的按键不归编辑器(否则会把字插进编辑器);查找框自己处理回车 / Esc / ⌘G
+      onKeyEvent: (node, event) =>
+          node.hasPrimaryFocus ? _handlePaneKeyEvent(_controller, _imeBridge, event, isPrimary: true) : KeyEventResult.ignored,
       child: Container(
         color: IntelliJTheme.editorBg,
         child: Column(
@@ -1396,7 +1399,8 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
     if (!isPrimary) {
       return Focus(
         focusNode: focusNode,
-        onKeyEvent: (node, event) => _handlePaneKeyEvent(controller, imeBridge, event, isPrimary: false),
+        onKeyEvent: (node, event) =>
+            node.hasPrimaryFocus ? _handlePaneKeyEvent(controller, imeBridge, event, isPrimary: false) : KeyEventResult.ignored,
         child: content,
       );
     }

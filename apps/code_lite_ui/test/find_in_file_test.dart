@@ -128,6 +128,28 @@ void main() {
       c.dispose();
     });
 
+    testWidgets('typing goes into the find field, not the editor (real IME path and key events)', (tester) async {
+      final c = await show(tester);
+      await key(tester, LogicalKeyboardKey.keyF, meta: true);
+      await tester.pump();
+      // 按键先冒泡到编辑区:不能被当成字符插进编辑器
+      await key(tester, LogicalKeyboardKey.keyT);
+      expect(c.text, text, reason: '编辑器内容不变');
+      // 系统输入法送来的文字到当前挂着输入法的控件:应该是查找框
+      tester.testTextInput.enterText('test');
+      await tester.pump();
+      expect(c.text, text, reason: '编辑器内容不变');
+      expect(tester.widget<TextField>(find.byKey(const ValueKey('find-field'))).controller!.text, 'test');
+      // 关掉查找条后,打字回到编辑器
+      await key(tester, LogicalKeyboardKey.escape);
+      await tester.pump();
+      tester.testTextInput.enterText('x');
+      await tester.pump();
+      expect(c.text, isNot(text), reason: '焦点回到编辑器,输入法也接回编辑器');
+      await tester.pumpWidget(const SizedBox());
+      c.dispose();
+    });
+
     testWidgets('⌘F with a selection searches for it', (tester) async {
       final c = await show(tester);
       c.setSelection(const EditorPosition(1, 3), const EditorPosition(1, 8));
