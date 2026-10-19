@@ -1036,25 +1036,60 @@ class CodeEditorController extends ChangeNotifier {
   Future<void> copy() async {
     final text = getSelectedText();
     if (text.isNotEmpty) {
+      _wholeLineClip = null;
       await Clipboard.setData(ClipboardData(text: text));
     }
   }
 
-  /// Cuts selected text to system clipboard.
+  /// 上一次没选中时剪下的整行(带换行)。粘贴时剪贴板里还是它,就按整行插到光标所在行的上面(同 IntelliJ)。
+  String? _wholeLineClip;
+
+  /// 剪切(⌘X)。选中了剪选中的;没选中时剪掉光标所在的整行(连同换行,同 IntelliJ),
+  /// 下面的行上来,光标留在同一列。先改文本再写剪贴板,按键处理随后同步输入法时文本已经是新的。
   Future<void> cut() async {
-    final text = getSelectedText();
-    if (text.isNotEmpty) {
-      await Clipboard.setData(ClipboardData(text: text));
+    if (hasSelection) {
+      final text = getSelectedText();
+      _wholeLineClip = null;
       _deleteSelection();
+      await Clipboard.setData(ClipboardData(text: text));
+      return;
     }
+    final line = _selection.head.line;
+    final col = _selection.head.col;
+    final content = _lines[line];
+    if (_lines.length == 1 && content.isEmpty) return; // 空文件:没东西可剪
+    _breakGroup = true;
+    if (_lines.length == 1) {
+      _edit(const EditorPosition(0, 0), EditorPosition(0, content.length), '', selectionAfter: const EditorSelection.collapsed(EditorPosition.zero));
+    } else if (line < _lines.length - 1) {
+      final next = _lines[line + 1];
+      _edit(EditorPosition(line, 0), EditorPosition(line + 1, 0), '',
+          selectionAfter: EditorSelection.collapsed(EditorPosition(line, col < next.length ? col : next.length)));
+    } else {
+      // 最后一行:连同上一行末尾的换行一起删掉,光标回到上一行
+      final prev = _lines[line - 1];
+      _edit(EditorPosition(line - 1, prev.length), EditorPosition(line, content.length), '',
+          selectionAfter: EditorSelection.collapsed(EditorPosition(line - 1, col < prev.length ? col : prev.length)));
+    }
+    _breakGroup = true;
+    _wholeLineClip = '$content\n';
+    await Clipboard.setData(ClipboardData(text: _wholeLineClip!));
   }
 
-  /// Pastes text from system clipboard.
+  /// Pastes text from system clipboard. 剪贴板里是刚剪下的整行时,插到光标所在行的上面,光标跟着原来的文字走。
   Future<void> paste() async {
     final data = await Clipboard.getData(Clipboard.kTextPlain);
-    if (data?.text != null && data!.text!.isNotEmpty) {
-      insertText(data.text!);
+    final text = data?.text;
+    if (text == null || text.isEmpty) return;
+    if (!hasSelection && _wholeLineClip != null && text == _wholeLineClip) {
+      final at = EditorPosition(_selection.head.line, 0);
+      final lines = '\n'.allMatches(text).length;
+      _breakGroup = true;
+      _edit(at, at, text, selectionAfter: EditorSelection.collapsed(EditorPosition(_selection.head.line + lines, _selection.head.col)));
+      _breakGroup = true;
+      return;
     }
+    insertText(text);
   }
 
   // --- Internal helpers ---
