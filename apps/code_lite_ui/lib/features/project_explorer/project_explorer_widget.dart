@@ -1,4 +1,6 @@
 import '../../core/build_tools/makefile.dart' show isMakefileName;
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
+import 'package:flutter/gestures.dart' show kPrimaryButton;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -201,6 +203,9 @@ class _ProjectExplorerWidgetState extends State<ProjectExplorerWidget> {
   /// 项目根(改的是整个项目目录)和单独打开的文件不能在这里改名。
   bool _canRename(_Row r) => widget.onRename != null && r.selectable && !r.isRoot;
 
+  bool _isControlClick(PointerDownEvent e) =>
+      defaultTargetPlatform == TargetPlatform.macOS && e.buttons == kPrimaryButton && HardwareKeyboard.instance.isControlPressed;
+
   /// 右键点在哪一行:选中它,在点的地方弹菜单(同 IntelliJ,右键也会改变选中)。
   void _openMenu(Offset local) {
     if (!_scroll.hasClients) return;
@@ -388,7 +393,11 @@ class _ProjectExplorerWidgetState extends State<ProjectExplorerWidget> {
               // 按下就拿焦点(Listener 不参与手势竞争,不影响行上的点击)
               child: Listener(
                 behavior: HitTestBehavior.translucent,
-                onPointerDown: (_) => _focus.requestFocus(),
+                onPointerDown: (e) {
+                  _focus.requestFocus();
+                  // macOS 上按住 Control 单击也是右键(触控板双指轻点系统本来就当右键发过来)
+                  if (_isControlClick(e)) _openMenu(e.localPosition);
+                },
                 child: Theme(
                   data: darculaMenuTheme(Theme.of(context)),
                   child: MenuAnchor(
@@ -472,6 +481,8 @@ class _ProjectExplorerWidgetState extends State<ProjectExplorerWidget> {
     Widget tap(Widget child) => InkWell(
           key: ValueKey('${r.isDir ? 'dir' : 'file'}:${r.path}'),
           onTap: () {
+            // Control+单击是弹菜单,不是打开
+            if (defaultTargetPlatform == TargetPlatform.macOS && HardwareKeyboard.instance.isControlPressed) return;
             _focus.requestFocus();
             setState(() => _selected = r.path);
             _activate(r);

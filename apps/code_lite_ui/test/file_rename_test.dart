@@ -6,6 +6,7 @@ import 'package:code_lite_ui/core/state/workspace_store.dart';
 import 'package:code_lite_ui/features/editor/code_editor_controller.dart';
 import 'package:code_lite_ui/features/editor/editor_session_manager.dart';
 import 'package:code_lite_ui/features/project_explorer/project_explorer_widget.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -144,6 +145,33 @@ void main() {
       await tester.sendKeyEvent(LogicalKeyboardKey.escape);
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('rename-field')), findsNothing);
+    });
+
+    testWidgets('on macOS Control+click also opens the menu (and does not open the file)', (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+      try {
+        final opened = <String>[];
+        await tester.pumpWidget(MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 320,
+              height: 500,
+              child: ProjectExplorerWidget(treeData: tree, activeFilePath: '', onSelectFile: opened.add, onRename: (_, __) async => null),
+            ),
+          ),
+        ));
+        await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+        await tester.tap(find.byKey(const ValueKey('file:/p/README.md')), kind: PointerDeviceKind.mouse);
+        await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+        await tester.pumpAndSettle();
+        expect(find.byKey(const ValueKey('tree-menu-rename')), findsOneWidget);
+        expect(opened, isEmpty);
+        await tester.tap(find.byKey(const ValueKey('tree-menu-rename')));
+        await tester.pumpAndSettle();
+        expect(find.text("Rename file 'README.md' to:"), findsOneWidget);
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
     });
 
     testWidgets('the project root and a single opened file cannot be renamed here', (tester) async {
