@@ -359,6 +359,9 @@ class _Workbench extends StatelessWidget {
                               activeFilePath: workspace.activeFile,
                               onSelectFile: workspace.openFile,
                               onLoadChildren: client.listDirectory,
+                              // 单独打开的文件:改了名就对不上 Opening 里记的路径,先不让改
+                              onRename: workspace.isSingleFile ? null : workspace.renamePath,
+                              keymap: settings.keymap,
                             ),
                           SideTool.commit => CommitPanel(
                               key: ValueKey(workspace.rootPath),

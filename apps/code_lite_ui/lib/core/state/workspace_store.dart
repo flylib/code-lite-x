@@ -265,6 +265,27 @@ class WorkspaceStore extends ChangeNotifier with DisposeSafeNotifier {
     return null;
   }
 
+  /// 文件树右键 ▸ Rename(⇧F6):把 [path](文件或目录,绝对或相对项目)改名为 [newName](同一目录下)。
+  /// 先保存没保存的修改,改名后打开着的标签跟到新路径,文件树重读。成功返回 null,失败返回原因。
+  /// 只改文件名,不改代码里对它的引用。
+  Future<String?> renamePath(String path, String newName) async {
+    final root = _rootPath;
+    if (root == null) return '请先打开一个项目';
+    final err = renameNameError(newName);
+    if (err != null) return err;
+    final from = absoluteFilePath(root, path);
+    final slash = from.lastIndexOf('/');
+    if (slash <= 0) return '不能改这个名字';
+    final to = '${from.substring(0, slash)}/${newName.trim()}';
+    if (to == from) return null;
+    await _sessions.saveAll();
+    final failed = await io.renamePath(from, to);
+    if (failed != null) return failed;
+    _sessions.retargetPaths(root, from, to);
+    await load();
+    return null;
+  }
+
   Future<void> _refreshRecent() async {
     final saved = await _loadRecent();
     final alive = <String>[];

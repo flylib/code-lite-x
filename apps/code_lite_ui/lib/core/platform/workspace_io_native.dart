@@ -86,6 +86,29 @@ Future<String?> createEmptyFile(String root, String relPath) async {
   }
 }
 
+/// 文件或目录改名 / 挪到 [to](绝对路径)。[to] 已经有东西时不覆盖。成功返回 null,失败返回原因。
+/// 只改大小写(`foo.txt` → `Foo.txt`)在不分大小写的磁盘上「已存在」的是它自己,照样改。
+Future<String?> renamePath(String from, String to) async {
+  final type = await FileSystemEntity.type(from, followLinks: false);
+  if (type == FileSystemEntityType.notFound) return '找不到: $from';
+  if (from.toLowerCase() != to.toLowerCase() && await FileSystemEntity.type(to, followLinks: false) != FileSystemEntityType.notFound) {
+    return '已存在: ${to.split('/').last}';
+  }
+  try {
+    switch (type) {
+      case FileSystemEntityType.directory:
+        await Directory(from).rename(to);
+      case FileSystemEntityType.link:
+        await Link(from).rename(to);
+      default:
+        await File(from).rename(to);
+    }
+    return null;
+  } on FileSystemException catch (e) {
+    return e.osError?.message ?? e.message;
+  }
+}
+
 Future<bool> directoryExists(String path) => Directory(path).exists();
 
 Future<bool> fileExists(String path) => File(path).exists();

@@ -8,6 +8,8 @@ Future<String?> createEmptyFile(String root, String relPath) async => 'web 预�
 
 Future<String?> pickProject() async => null;
 
+Future<String?> renamePath(String from, String to) async => 'web 预览不支持改名';
+
 Future<bool> directoryExists(String path) async => false;
 
 Future<bool> fileExists(String path) async => false;

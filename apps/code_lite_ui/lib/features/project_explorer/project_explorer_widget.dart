@@ -2,9 +2,12 @@ import '../../core/build_tools/makefile.dart' show isMakefileName;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../core/keymap/keymap.dart';
 import '../../core/theme/intellij_theme.dart';
+import '../editor/context_menu_region.dart' show darculaMenuTheme;
 import '../editor/syntax/languages.dart';
 import '../tool_window/tool_window_actions.dart';
+import 'rename_dialog.dart';
 
 /// 左侧 Project 文件树。
 ///
@@ -14,6 +17,7 @@ import '../tool_window/tool_window_actions.dart';
 /// - 文件图标按语法引擎识别出的语言区分;
 /// - 快速搜索(IntelliJ 的 speed search):点一下文件树让它获得焦点,直接打字就在展开着的节点里找,
 ///   选中跳到第一个匹配,↑↓ 在匹配之间跳,回车打开,Esc 退出。只在文件树有焦点时生效。
+/// - 右键菜单(IntelliJ 的项目视图菜单),目前有 Rename(⇧F6)。
 class ProjectExplorerWidget extends StatefulWidget {
   final Map<String, dynamic> treeData;
   final String activeFilePath;
@@ -22,12 +26,20 @@ class ProjectExplorerWidget extends StatefulWidget {
   /// 读取一个还没扫描的目录,返回该目录节点(含 children)。
   final Future<Map<String, dynamic>> Function(String path)? onLoadChildren;
 
+  /// 把 [path] 改名为同一目录下的 `newName`,返回失败原因(null 成功)。不传(单独打开的文件)就不能改名。
+  final Future<String?> Function(String path, String newName)? onRename;
+
+  /// 快捷键表(⇧F6 改名);不传按默认键位。
+  final KeymapStore? keymap;
+
   const ProjectExplorerWidget({
     super.key,
     required this.treeData,
     required this.activeFilePath,
     required this.onSelectFile,
     this.onLoadChildren,
+    this.onRename,
+    this.keymap,
   });
 
   @override
@@ -156,7 +168,10 @@ class _ProjectExplorerWidgetState extends State<ProjectExplorerWidget> {
 
   /// 搜索词变了:选中的还匹配就不动,否则从它开始往下找第一个匹配(找不到从头找)。
   void _searchFrom(List<_Row> rows, {int step = 0}) {
-    final hits = [for (var i = 0; i < rows.length; i++) if (rows[i].selectable && speedSearchMatch(rows[i].name, _query) != null) i];
+    final hits = [
+      for (var i = 0; i < rows.length; i++)
+        if (rows[i].selectable && speedSearchMatch(rows[i].name, _query) != null) i
+    ];
     if (hits.isEmpty) {
       setState(() {});
       return;
@@ -173,12 +188,90 @@ class _ProjectExplorerWidgetState extends State<ProjectExplorerWidget> {
     _select(rows[pick].path, rows);
   }
 
+  // --- 右键菜单与改名 -------------------------------------------------------------------
+
+  final MenuController _menu = MenuController();
+  _Row? _menuRow;
+
+  static final KeymapStore _defaultKeymap = KeymapStore();
+  KeymapStore get _keymap => widget.keymap ?? _defaultKeymap;
+
+  bool _isShortcut(String id, KeyEvent e) => _keymap.shortcutsOf(id).any((k) => k.activator.accepts(e, HardwareKeyboard.instance));
+
+  /// 项目根(改的是整个项目目录)和单独打开的文件不能在这里改名。
+  bool _canRename(_Row r) => widget.onRename != null && r.selectable && !r.isRoot;
+
+  /// 右键点在哪一行:选中它,在点的地方弹菜单(同 IntelliJ,右键也会改变选中)。
+  void _openMenu(Offset local) {
+    if (!_scroll.hasClients) return;
+    final rows = _rows();
+    final i = ((local.dy + _scroll.position.pixels - 4) / _rowHeight).floor();
+    if (i < 0 || i >= rows.length || !rows[i].selectable) return;
+    _focus.requestFocus();
+    setState(() {
+      _selected = rows[i].path;
+      _menuRow = rows[i];
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _menu.open(position: local);
+    });
+  }
+
+  List<Widget> _menuItems() {
+    final r = _menuRow;
+    if (r == null) return const [];
+    final keys = _keymap.shortcutsOf(KeymapIds.rename);
+    return [
+      MenuItemButton(
+        key: const ValueKey('tree-menu-rename'),
+        onPressed: _canRename(r) ? () => _rename(r) : null,
+        shortcut: keys.isEmpty ? null : keys.first.activator as SingleActivator,
+        child: const Text('Rename...'),
+      ),
+    ];
+  }
+
+  /// 弹 Rename 对话框;改成功后选中新名字,展开着的目录(和它下面展开的)保持展开。
+  /// 压成一行的包(`com.acme.app`)改的是最后一级目录。
+  Future<void> _rename(_Row r) async {
+    final onRename = widget.onRename;
+    if (onRename == null || !_canRename(r)) return;
+    final slash = r.path.lastIndexOf('/');
+    final name = r.path.substring(slash + 1);
+    final newName = await showRenameDialog(context, name: name, isDir: r.isDir, onRename: (n) => onRename(r.path, n));
+    if (!mounted) return;
+    if (newName != null) {
+      final to = '${r.path.substring(0, slash + 1)}$newName';
+      setState(() {
+        final moved = {
+          for (final p in _expanded)
+            if (p == r.path || p.startsWith('${r.path}/')) p
+        };
+        _expanded
+          ..removeAll(moved)
+          ..addAll([for (final p in moved) '$to${p.substring(r.path.length)}']);
+        _selected = to;
+      });
+    }
+    _focus.requestFocus();
+  }
+
   KeyEventResult _onKey(FocusNode node, KeyEvent e) {
     if (e is! KeyDownEvent && e is! KeyRepeatEvent) return KeyEventResult.ignored;
+    if (e is KeyDownEvent && _isShortcut(KeymapIds.rename, e)) {
+      final row = _rows().where((r) => r.selectable && r.path == _selected).firstOrNull;
+      if (row == null || !_canRename(row)) return KeyEventResult.ignored;
+      if (_query.isNotEmpty) setState(() => _query = '');
+      _rename(row);
+      return KeyEventResult.handled;
+    }
     final kb = HardwareKeyboard.instance;
     if (kb.isMetaPressed || kb.isControlPressed) return KeyEventResult.ignored; // ⌘1 之类交给应用快捷键
     final rows = _rows();
-    final selectable = [for (final r in rows) if (r.selectable) r];
+    final selectable = [
+      for (final r in rows)
+        if (r.selectable) r
+    ];
     if (selectable.isEmpty) return KeyEventResult.ignored;
     final key = e.logicalKey;
     final cur = selectable.indexWhere((r) => r.path == _selected);
@@ -296,23 +389,35 @@ class _ProjectExplorerWidgetState extends State<ProjectExplorerWidget> {
               child: Listener(
                 behavior: HitTestBehavior.translucent,
                 onPointerDown: (_) => _focus.requestFocus(),
-                child: Stack(
-                  children: [
-                    ListView.builder(
-                      controller: _scroll,
-                      padding: const EdgeInsets.symmetric(vertical: 4),
-                      itemExtent: _rowHeight,
-                      itemCount: rows.length,
-                      itemBuilder: (context, i) => _buildRow(rows[i]),
-                    ),
-                    if (_query.isNotEmpty)
-                      Positioned(
-                        top: 4,
-                        left: 8,
-                        right: 8,
-                        child: _SearchField(query: _query, noMatch: noMatch),
+                child: Theme(
+                  data: darculaMenuTheme(Theme.of(context)),
+                  child: MenuAnchor(
+                    controller: _menu,
+                    consumeOutsideTap: true,
+                    menuChildren: _menuItems(),
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.translucent,
+                      onSecondaryTapDown: (d) => _openMenu(d.localPosition),
+                      child: Stack(
+                        children: [
+                          ListView.builder(
+                            controller: _scroll,
+                            padding: const EdgeInsets.symmetric(vertical: 4),
+                            itemExtent: _rowHeight,
+                            itemCount: rows.length,
+                            itemBuilder: (context, i) => _buildRow(rows[i]),
+                          ),
+                          if (_query.isNotEmpty)
+                            Positioned(
+                              top: 4,
+                              left: 8,
+                              right: 8,
+                              child: _SearchField(query: _query, noMatch: noMatch),
+                            ),
+                        ],
                       ),
-                  ],
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -453,7 +558,6 @@ class _ProjectExplorerWidgetState extends State<ProjectExplorerWidget> {
   }
 
   static const Color _matchBg = Color(0xFF6B5A1E);
-
 }
 
 /// 文件图标的 widget:文件树、编辑器标签、Go to File 共用,同一种文件到处是同一个图标。
@@ -589,8 +693,7 @@ enum _RowKind { dir, file, hint }
 
 /// 文件树里的一行(展开后摊平成列表,键盘选择和快速搜索都在这上面走)。
 class _Row {
-  _Row.dir(this.path, this.name, this.depth, this.node, {required this.expanded, required this.isRoot, required this.isPackage})
-      : kind = _RowKind.dir;
+  _Row.dir(this.path, this.name, this.depth, this.node, {required this.expanded, required this.isRoot, required this.isPackage}) : kind = _RowKind.dir;
   _Row.file(this.path, this.name, this.depth)
       : kind = _RowKind.file,
         node = null,

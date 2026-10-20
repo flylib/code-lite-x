@@ -57,7 +57,10 @@ void main() {
         KeymapIds.find: '⌘F',
         KeymapIds.findNext: '⌘G',
         KeymapIds.findPrevious: '⇧⌘G',
+        KeymapIds.rename: '⇧F6',
       });
+      expect(KeymapStore(mac: false).labelOf(KeymapIds.rename), 'Shift+F6');
+      expect(keymapActionById(KeymapIds.rename)!.group, '重构');
       expect(KeymapStore(mac: false).labelOf(KeymapIds.find), 'Ctrl+F');
       expect(KeymapStore(mac: false).labelOf(KeymapIds.findNext), 'F3');
       for (final id in [KeymapIds.find, KeymapIds.findNext, KeymapIds.findPrevious]) {

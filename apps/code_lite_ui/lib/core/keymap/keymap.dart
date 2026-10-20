@@ -55,6 +55,7 @@ abstract final class KeymapIds {
   static const find = 'Find';
   static const findNext = 'FindNext';
   static const findPrevious = 'FindPrevious';
+  static const rename = 'RenameElement';
 }
 
 /// 目前支持配置的操作:打开 / 收起各个工具窗、Go to File、代码折叠、编辑(复制行、查找)。默认键位取自 IntelliJ。
@@ -78,6 +79,7 @@ const List<KeymapAction> keymapActions = [
   KeymapAction(id: KeymapIds.find, title: '在当前文件中查找(Find)', group: '编辑', mac: ['meta F'], other: ['ctrl F']),
   KeymapAction(id: KeymapIds.findNext, title: '查找下一个(Find Next)', group: '编辑', mac: ['meta G'], other: ['F3']),
   KeymapAction(id: KeymapIds.findPrevious, title: '查找上一个(Find Previous)', group: '编辑', mac: ['shift meta G'], other: ['shift F3']),
+  KeymapAction(id: KeymapIds.rename, title: '改名(Rename)', group: '重构', mac: ['shift F6'], other: ['shift F6']),
 ];
 
 KeymapAction? keymapActionById(String id) => keymapActions.where((a) => a.id == id).firstOrNull;

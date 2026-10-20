@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import '../../core/client/api_client.dart';
+import '../../core/platform/paths.dart';
 import '../../core/state/session_snapshot.dart';
 import '../../core/lsp/lsp.dart';
 import 'code_editor_controller.dart';
@@ -12,8 +13,9 @@ import '../../core/state/dispose_safe.dart';
 
 /// Holds independent buffer, viewport, cursor, and diagnostic state for an open editor tab.
 class EditorTabState {
-  final String filePath;
-  final String fileName;
+  /// 文件改名 / 挪走时跟着换(见 [EditorSessionManager.retargetPaths]),内容和撤销历史不动。
+  String filePath;
+  String get fileName => filePath.split('/').last;
   final CodeEditorController controller;
   final ScrollController verticalScroll;
   final ScrollController horizontalScroll;
@@ -37,8 +39,7 @@ class EditorTabState {
     this.activeSymbol,
     this.loadError,
     double initialScroll = 0,
-  })  : fileName = filePath.split('/').last,
-        controller = CodeEditorController(initialText: initialContent),
+  })  : controller = CodeEditorController(initialText: initialContent),
         verticalScroll = ScrollController(initialScrollOffset: initialScroll),
         horizontalScroll = ScrollController(),
         _lastScroll = initialScroll;
@@ -288,13 +289,14 @@ class EditorSessionManager extends ChangeNotifier with DisposeSafeNotifier {
     // 文本就在 controller 里(Dart 是唯一的数据源),这里只需通知 LSP 和界面。
     // 按键不通知会话层的监听者(否则整个编辑区每敲一个字都重建一遍):
     // 编辑面板自己订阅 controller;标签上的「已修改」圆点靠下面的 onDirtyChanged。
+    // 用 tab.filePath 而不是 path:文件改名后标签换了路径,改动要发到新路径上
     tab.controller.addChangeListener((c) {
-      if (tab.loadError == null) _queueChange(path, c);
+      if (tab.loadError == null) _queueChange(tab.filePath, c);
     });
     tab.controller.onTextChanged = () {
       if (tab.loadError == null) {
-        _scheduleDidChange(path);
-        if (autosave) _scheduleSave(path);
+        _scheduleDidChange(tab.filePath);
+        if (autosave) _scheduleSave(tab.filePath);
       }
     };
 
@@ -306,6 +308,42 @@ class EditorSessionManager extends ChangeNotifier with DisposeSafeNotifier {
     _activePath = path;
     notifyListeners();
     return tab;
+  }
+
+  /// 文件 / 目录改了名([from] → [to],都是绝对路径,[root] 是项目根):打开着的这些文件(目录改名时是它下面的)
+  /// 的标签换成新路径,内容、光标、滚动、撤销历史都留着;语言服务器那边关掉旧文档、按新路径重新打开。
+  /// 标签原来记的是相对路径就还用相对路径。
+  void retargetPaths(String root, String from, String to) {
+    final prefix = root.endsWith('/') ? root : '$root/';
+    String? moved(String path) {
+      final abs = absoluteFilePath(root, path);
+      if (abs != from && !abs.startsWith('$from/')) return null;
+      final next = '$to${abs.substring(from.length)}';
+      if (abs == path) return next;
+      return next.startsWith(prefix) ? next.substring(prefix.length) : next;
+    }
+
+    final renames = <String, String>{};
+    for (final path in _tabOrder) {
+      if (isSpecialTab(path) || !_tabs.containsKey(path)) continue;
+      final next = moved(path);
+      if (next != null && next != path) renames[path] = next;
+    }
+    if (renames.isEmpty) return;
+    for (final MapEntry(key: old, value: next) in renames.entries) {
+      final tab = _tabs.remove(old)!;
+      _closeDocument(old);
+      tab.filePath = next;
+      _tabs[next] = tab;
+      _tabOrder[_tabOrder.indexOf(old)] = next;
+      if (_activePath == old) _activePath = next;
+      if (_secondaryActivePath == old) _secondaryActivePath = next;
+      if (tab.loadError == null) {
+        client.lspDidOpen(next, tab.controller.text);
+        if (autosave && tab.isDirty) _scheduleSave(next);
+      }
+    }
+    notifyListeners();
   }
 
   /// Rollback 等在磁盘上改了文件之后:已打开的这些标签按磁盘内容重新载入(撤销历史一并清空)。

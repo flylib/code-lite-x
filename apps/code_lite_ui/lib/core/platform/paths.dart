@@ -5,3 +5,12 @@ String absoluteFilePath(String root, String path) {
   if (absolute) return path;
   return root.endsWith('/') || root.endsWith(r'\') ? '$root$path' : '$root/$path';
 }
+
+/// 改名时新名字哪里不行(空、带 `/`、`.` / `..`);可以用返回 null。
+String? renameNameError(String name) {
+  final n = name.trim();
+  if (n.isEmpty) return '名字不能为空';
+  if (n.contains('/') || n.contains(r'\')) return '名字里不能有 /';
+  if (n == '.' || n == '..') return '不能叫 $n';
+  return null;
+}
