@@ -288,6 +288,69 @@ void main() {
       await tester.runAsync(client.dispose);
     });
 
+    testWidgets('Rollback covers the checked files (all of them when Changes is checked); with none checked, the selected row', (tester) async {
+      write('src/a.txt', 'changed\n');
+      write('src/keep.txt', 'changed too\n');
+      write('untracked.md', 'u\n');
+      // 勾上了 Changes(勾选即暂存)。widget 测试的时钟是假的,子进程要在 runAsync 里跑
+      await tester.runAsync(() => git(['add', 'src/a.txt', 'src/keep.txt']));
+      final client = ApiClient(initialRoot: repo.path);
+      await tester.binding.setSurfaceSize(const Size(400, 700));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      Future<void> settle(bool Function() done) async {
+        await tester.runAsync(() async {
+          for (var i = 0; i < 60 && !done(); i++) {
+            await Future<void>.delayed(const Duration(milliseconds: 50));
+            await tester.pump();
+          }
+        });
+      }
+
+      // 点了会跑 git 的按钮要在 runAsync 里点,后续的 git 子进程才在真实时钟里跑
+      Future<void> tapReal(Finder f) => tester.runAsync(() async {
+            await tester.tap(f);
+            for (var i = 0; i < 4; i++) {
+              await Future<void>.delayed(const Duration(milliseconds: 20));
+              await tester.pump();
+            }
+          });
+
+      await tester.runAsync(() async {
+        await tester.pumpWidget(MaterialApp(
+          home: Scaffold(body: CommitPanel(client: client, onOpenDiff: (_) {}, onOpenFile: (_) {}, onCommitted: () {})),
+        ));
+      });
+      final a = find.textContaining('a.txt', findRichText: true);
+      await settle(() => a.evaluate().isNotEmpty);
+      await tester.tap(a); // 只选中(高亮)了 a.txt
+      await tester.pump();
+
+      await tapReal(find.byTooltip('Rollback…'));
+      expect(find.text('  src/a.txt'), findsOneWidget);
+      expect(find.text('  src/keep.txt'), findsOneWidget, reason: '勾选的全部都算,不只是选中的那一行');
+      expect(find.text('  untracked.md'), findsNothing);
+      await tapReal(find.widgetWithText(FilledButton, 'Rollback'));
+      await settle(() => a.evaluate().isEmpty);
+      expect(File('${repo.path}/src/a.txt').readAsStringSync(), 'one\ntwo\nthree\n');
+      expect(File('${repo.path}/src/keep.txt').readAsStringSync(), 'k\n');
+      expect(File('${repo.path}/untracked.md').existsSync(), isTrue);
+
+      // 一个都没勾:只回滚选中的行
+      write('src/a.txt', 'again\n');
+      write('src/keep.txt', 'again\n');
+      await tapReal(find.byTooltip('刷新'));
+      await settle(() => a.evaluate().isNotEmpty && find.textContaining('keep.txt', findRichText: true).evaluate().isNotEmpty);
+      await tester.tap(a);
+      await tester.pump();
+      await tapReal(find.byTooltip('Rollback…'));
+      expect(find.text('  src/a.txt'), findsOneWidget);
+      expect(find.text('  src/keep.txt'), findsNothing);
+      await tapReal(find.text('Cancel'));
+
+      await tester.pumpWidget(const SizedBox());
+      await tester.runAsync(client.dispose);
+    });
+
     testWidgets('CommitPanel drops a file once it is saved back to the HEAD content', (tester) async {
       write('src/a.txt', 'changed\n');
       final client = ApiClient(initialRoot: repo.path);

@@ -93,6 +93,7 @@ CodeLiteX 是一款高性能的原生跨平台代码编辑器，内置 Git 管�
 - **语言服务器省内存**（jdtls 一个项目五六百 MB）：① Java 服务端启动时自动补 `-XX:+UseParallelGC -XX:GCTimeRatio=4 -XX:AdaptiveSizePolicyWeight=90 -Dsun.zip.disableMemoryMapping=true`（同 VS Code 的 Java 插件；对已装插件和 Homebrew 的 `jdtls` 都生效，`LspService.withJvmMemoryFlags`）；② 项目在后台超过 15 分钟，停掉它的语言服务器（状态栏「已暂停」），切回来 / 打开文件 / 有请求时再起，按当前内容重放；③ **同一项目组里的 Java 项目共用一个 jdtls**（多工作区目录，按组 id 共用，缓存一个组一份，改名不重建索引；移进 / 移出组时该项目换到对应的进程）。
 
 **Git**
+- Commit 工具窗的 **Rollback**：勾选了文件就回滚勾选的那些（勾上「Changes」就是全部），一个都没勾才回滚选中（高亮）的行；Unversioned 的新文件不算。确认框里列出这次要回滚的文件（`_rollbackTargets`）。
 - merge / rebase 有冲突时，标题栏出现两个按钮：一个弹出冲突文件列表，一个 × 中止这次合并。
 - Git 工具窗（Log）筛选栏：左边是搜索框和 Branch / User / Date / Paths 筛选；刷新、Cherry-Pick、显示详情、跳转这几个工具按钮靠右，紧挨着最右边的 **Pull / Push**（只有图标，大小、线宽和其它工具按钮一致：箭头 + 托盘，Pull 向下、Push 向上；默认和左边工具按钮一样灰，按下时 Pull 蓝 `#4A86F7`、Push 绿 `#3DD68C` 并衬同色深底）。Push 先弹「Push Commits」确认框：`分支 → 远程 : 分支`（第一次推的标 New，推后设为上游）+ 这次要推的提交列表，确认才推；没有要推的就不能点 Push。Pull（Update）时本地有没提交的改动先弹框列出来，选「Stash 后更新」（先 stash，拉完自动恢复；恢复有冲突就留在 stash 里并提示）/「直接更新」/ 取消。标题栏分支菜单的 Update / Push 也走同样的确认（`git.outgoing`、`git.local_changes`、`git.update` 的 `stash`）。
 - Git Blame 注释（编辑器行号栏、Merge 窗口）：作者名最多显示 6 个字符，多的用 `...` 省略（按字符算）；鼠标停上去弹小窗，第一行完整作者名，第二行 提交号 · 日期 · 提交说明（`blameShortName`、`blameTooltip`）。

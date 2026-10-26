@@ -153,11 +153,17 @@ class _CommitPanelState extends State<CommitPanel> {
 
   bool get _hasStaged => _changes.any((c) => c['is_staged'] == true);
 
-  List<String> get _rollbackTargets => [
-        for (final c in _changes)
-          if (_selected.contains(c['path']) && c['status'] != 'untracked')
-            c['path'] as String,
-      ];
+  /// Rollback 对哪些文件:勾选了文件就是勾选的那些(勾上「Changes」就是全部),
+  /// 一个都没勾才看选中(高亮)的行。没纳入版本管理的新文件不算(git 里没有它的旧版本可恢复)。
+  List<String> get _rollbackTargets {
+    final checked = _hasStaged;
+    return [
+      for (final c in _changes)
+        if ((checked ? c['is_staged'] == true : _selected.contains(c['path'])) &&
+            c['status'] != 'untracked')
+          c['path'] as String,
+    ];
+  }
 
   Future<void> _rollback() async {
     final targets = _rollbackTargets;
