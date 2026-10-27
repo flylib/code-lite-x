@@ -60,7 +60,9 @@ class _GitLogWindowState extends State<GitLogWindow> {
   @override
   void initState() {
     super.initState();
-    widget.store.ensureLoaded();
+    widget.store
+      ..defaultToHead()
+      ..ensureLoaded();
   }
 
   @override

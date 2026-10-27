@@ -30,7 +30,7 @@ void main() {
   });
 
   Future<GitLogStore> show(WidgetTester tester, {void Function(BuildContext)? onPull, void Function(BuildContext)? onPush}) async {
-    await tester.binding.setSurfaceSize(const Size(1400, 500));
+    await tester.binding.setSurfaceSize(const Size(1600, 500)); // 默认带「Branch: HEAD」筛选,筛选栏宽一些
     addTearDown(() => tester.binding.setSurfaceSize(null));
     final store = GitLogStore(client);
     await tester.runAsync(store.refresh);

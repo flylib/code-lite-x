@@ -64,6 +64,32 @@ void main() {
     store.dispose();
   });
 
+  test('the branch filter starts at HEAD; opening the window with none selected goes back to HEAD', () async {
+    // 一个没合进当前分支的提交:只在「所有分支」里看得到
+    await git(['switch', '-q', '-c', 'side']);
+    await commitFile('s.txt', 's\n', 'wip: 旁支');
+    await git(['switch', '-q', 'main']);
+
+    final store = GitLogStore(client);
+    expect(store.branch, 'HEAD');
+    await store.refresh();
+    expect(store.commits.map((c) => c.subject), isNot(contains('wip: 旁支')));
+
+    store.setBranch(null); // 点 × 清掉:所有分支
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    expect(store.commits.map((c) => c.subject), contains('wip: 旁支'));
+
+    store.defaultToHead(); // 再打开 Git 窗口
+    expect(store.branch, 'HEAD');
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    expect(store.commits.map((c) => c.subject), isNot(contains('wip: 旁支')));
+
+    store.setBranch('side');
+    store.defaultToHead(); // 选了别的分支就不动
+    expect(store.branch, 'side');
+    store.dispose();
+  });
+
   test('filters by text, branch and paths', () async {
     final store = GitLogStore(client);
     await store.refresh();

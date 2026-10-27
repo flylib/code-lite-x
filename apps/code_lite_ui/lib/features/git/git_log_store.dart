@@ -185,8 +185,8 @@ class GitLogStore extends ChangeNotifier with DisposeSafeNotifier {
   bool regex = false;
   bool matchCase = false;
 
-  /// null = 所有分支
-  String? branch;
+  /// null = 所有分支。默认 HEAD(当前分支);打开 Git 窗口时没选分支也回到 HEAD,见 [defaultToHead]。
+  String? branch = 'HEAD';
 
   /// null = 所有人
   String? author;
@@ -229,6 +229,7 @@ class GitLogStore extends ChangeNotifier with DisposeSafeNotifier {
   }
 
   Future<void> refresh() async {
+    _loaded = true;
     await Future.wait([_loadBranches(), _loadCommits(reset: true)]);
   }
 
@@ -371,11 +372,18 @@ class GitLogStore extends ChangeNotifier with DisposeSafeNotifier {
     selected = null;
     details = null;
     warning = null;
-    branch = null;
+    branch = 'HEAD';
     author = null;
     paths = const [];
     error = null;
     notifyListeners();
+  }
+
+  /// 打开 Git 窗口时:没选分支(之前点 × 清掉了)就选回 HEAD。
+  void defaultToHead() {
+    if (branch != null) return;
+    branch = 'HEAD';
+    if (_loaded) _loadCommits(reset: true); // 还没加载过的话,马上的第一次加载就按 HEAD
   }
 
   void setBranch(String? value) {
