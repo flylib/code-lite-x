@@ -291,6 +291,7 @@ class _Workbench extends StatelessWidget {
                                         // 点的时候才取当前项目的(切换项目后不会用到旧项目的)
                                         onPull: (ctx) => branchActions.update(ctx),
                                         onPush: (ctx) => branchActions.push(ctx),
+                                        branches: branches,
                                       ),
                                     ),
                                   ],

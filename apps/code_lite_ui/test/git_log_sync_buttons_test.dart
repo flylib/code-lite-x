@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:code_lite_ui/core/client/api_client.dart';
+import 'package:code_lite_ui/features/git/branch_store.dart';
 import 'package:code_lite_ui/features/git/git_log_store.dart';
 import 'package:code_lite_ui/features/git/git_log_window.dart';
 import 'package:flutter/material.dart';
@@ -29,13 +30,13 @@ void main() {
     repo.deleteSync(recursive: true);
   });
 
-  Future<GitLogStore> show(WidgetTester tester, {void Function(BuildContext)? onPull, void Function(BuildContext)? onPush}) async {
+  Future<GitLogStore> show(WidgetTester tester, {void Function(BuildContext)? onPull, void Function(BuildContext)? onPush, BranchStore? branches}) async {
     await tester.binding.setSurfaceSize(const Size(1600, 500)); // 默认带「Branch: HEAD」筛选,筛选栏宽一些
     addTearDown(() => tester.binding.setSurfaceSize(null));
     final store = GitLogStore(client);
     await tester.runAsync(store.refresh);
     await tester.pumpWidget(MaterialApp(
-      home: Scaffold(body: GitLogWindow(store: store, repoName: 'r', onHide: () {}, onPull: onPull, onPush: onPush)),
+      home: Scaffold(body: GitLogWindow(store: store, repoName: 'r', onHide: () {}, onPull: onPull, onPush: onPush, branches: branches)),
     ));
     // 面板打开时会再刷新一次(跑真的 git,进程是在测试的假时钟里起的):真实时间和假时钟交替推进,等它跑完
     for (var i = 0; i < 40; i++) {
@@ -87,6 +88,43 @@ void main() {
     store.dispose();
   });
 
+  testWidgets('while a Pull / Push runs that button spins (same colour) and neither can be clicked', (tester) async {
+    final events = <String>[];
+    final branches = _Branches(client);
+    final store = await show(tester, onPull: (_) => events.add('pull'), onPush: (_) => events.add('push'), branches: branches);
+    final pull = find.byKey(const ValueKey('git-pull'));
+    final push = find.byKey(const ValueKey('git-push'));
+    final spinner = find.byKey(const ValueKey('git-sync-spinner'));
+    expect(spinner, findsNothing);
+    final size = tester.getSize(pull);
+
+    branches.setBusy('Update');
+    await tester.pump();
+    expect(find.descendant(of: pull, matching: spinner), findsOneWidget);
+    expect(find.descendant(of: push, matching: spinner), findsNothing);
+    expect(tester.widget<CircularProgressIndicator>(spinner).color, const Color(0xFF4A86F7));
+    expect(tester.getSize(pull), size, reason: '转圈不改变按钮大小');
+    await tester.tap(pull);
+    await tester.tap(push);
+    await tester.pump(const Duration(milliseconds: 600));
+    expect(events, isEmpty, reason: '进行中点不了');
+
+    branches.setBusy('Push');
+    await tester.pump();
+    expect(find.descendant(of: push, matching: spinner), findsOneWidget);
+    expect(tester.widget<CircularProgressIndicator>(spinner).color, const Color(0xFF3DD68C));
+
+    branches.setBusy(null);
+    await tester.pump();
+    expect(spinner, findsNothing);
+    await tester.tap(push);
+    await tester.pump(const Duration(milliseconds: 600));
+    expect(events, ['push']);
+    await tester.pumpWidget(const SizedBox());
+    store.dispose();
+    branches.dispose();
+  });
+
   testWidgets('without actions the buttons are not shown', (tester) async {
     final store = await show(tester);
     expect(find.byKey(const ValueKey('git-pull')), findsNothing);
@@ -94,4 +132,14 @@ void main() {
     await tester.pumpWidget(const SizedBox());
     store.dispose();
   });
+}
+
+/// 直接设 busy(真的 Pull / Push 要远程仓库)。
+class _Branches extends BranchStore {
+  _Branches(super.client);
+
+  void setBusy(String? label) {
+    busy = label;
+    notifyListeners();
+  }
 }

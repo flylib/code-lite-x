@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/client/api_client.dart';
+import '../git/branch_store.dart';
 import '../git/git_log_store.dart';
 import '../git/git_log_window.dart';
 import '../terminal/terminal_store.dart';
@@ -22,11 +23,15 @@ class BottomToolsWidget extends StatelessWidget {
     this.height = 300,
     this.onPull,
     this.onPush,
+    this.branches,
   });
 
   /// Git 工具窗筛选栏右边的 Pull / Push。
   final void Function(BuildContext context)? onPull;
   final void Function(BuildContext context)? onPush;
+
+  /// Pull / Push 进行中时按钮转圈(看它的 busy)。
+  final BranchStore? branches;
 
   final BottomToolTab activeTab;
 
@@ -57,6 +62,7 @@ class BottomToolsWidget extends StatelessWidget {
             onHide: () => onSelectTab(BottomToolTab.git),
             onPull: onPull,
             onPush: onPush,
+            branches: branches,
           ),
         BottomToolTab.terminal => TerminalPanel(
             store: terminals,

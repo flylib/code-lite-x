@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 
 import '../../core/theme/intellij_theme.dart';
 import 'commit_graph.dart';
+import 'branch_store.dart';
 import 'git_commit_actions.dart';
 import 'git_log_store.dart';
 
@@ -38,13 +39,16 @@ String formatGitDate(DateTime t) {
 
 /// IntelliJ 的 Git 工具窗(Log 标签):分支树 | 提交图与列表 | 变更文件与提交信息。
 class GitLogWindow extends StatefulWidget {
-  const GitLogWindow({super.key, required this.store, required this.repoName, required this.onHide, this.onPull, this.onPush});
+  const GitLogWindow({super.key, required this.store, required this.repoName, required this.onHide, this.onPull, this.onPush, this.branches});
 
   final GitLogStore store;
 
   /// 筛选栏最右边的 Pull(更新当前分支)/ Push(先确认要推的提交)。为 null 时不显示。
   final void Function(BuildContext context)? onPull;
   final void Function(BuildContext context)? onPush;
+
+  /// Pull / Push 正在跑时([BranchStore.busy] 是 Update / Push)按钮转圈;为 null 时不转。
+  final BranchStore? branches;
 
   /// 详情面板文件树的根节点名(项目目录名)。
   final String repoName;
@@ -98,7 +102,7 @@ class _GitLogWindowState extends State<GitLogWindow> {
                             _SideToolbar(store: store, onSearch: _searchFocus.requestFocus),
                             if (branches) SizedBox(width: 230, child: _BranchesPane(store: store)),
                             if (branches) const VerticalDivider(width: 1, color: IntelliJTheme.borderSubtle),
-                            Expanded(child: _LogPane(store: store, searchFocus: _searchFocus, onPull: widget.onPull, onPush: widget.onPush)),
+                            Expanded(child: _LogPane(store: store, searchFocus: _searchFocus, onPull: widget.onPull, onPush: widget.onPush, branches: widget.branches)),
                             if (details) const VerticalDivider(width: 1, color: IntelliJTheme.borderSubtle),
                             if (details) SizedBox(width: 320, child: _DetailsPane(store: store, repoName: widget.repoName)),
                           ],
@@ -464,10 +468,11 @@ class _TreeRow extends StatelessWidget {
 // ---------------------------------------------------------------------------
 
 class _LogPane extends StatefulWidget {
-  const _LogPane({required this.store, required this.searchFocus, this.onPull, this.onPush});
+  const _LogPane({required this.store, required this.searchFocus, this.onPull, this.onPush, this.branches});
 
   final void Function(BuildContext context)? onPull;
   final void Function(BuildContext context)? onPush;
+  final BranchStore? branches;
 
   final GitLogStore store;
   final FocusNode searchFocus;
@@ -551,7 +556,7 @@ class _LogPaneState extends State<_LogPane> {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        _FilterBar(store: store, controller: _search, focus: widget.searchFocus, onPull: widget.onPull, onPush: widget.onPush),
+        _FilterBar(store: store, controller: _search, focus: widget.searchFocus, onPull: widget.onPull, onPush: widget.onPush, branches: widget.branches),
         if (store.warning != null) _WarningBanner(message: store.warning!),
         if (store.busy != null)
           const LinearProgressIndicator(
@@ -632,13 +637,14 @@ class _WarningBanner extends StatelessWidget {
 }
 
 class _FilterBar extends StatelessWidget {
-  const _FilterBar({required this.store, required this.controller, required this.focus, this.onPull, this.onPush});
+  const _FilterBar({required this.store, required this.controller, required this.focus, this.onPull, this.onPush, this.branches});
 
   final GitLogStore store;
   final TextEditingController controller;
   final FocusNode focus;
   final void Function(BuildContext context)? onPull;
   final void Function(BuildContext context)? onPush;
+  final BranchStore? branches;
 
   @override
   Widget build(BuildContext context) {
@@ -669,10 +675,37 @@ class _FilterBar extends StatelessWidget {
             tooltip: '跳转到哈希 / 分支 / 标签',
             onTap: () => GitCommitActions(context, store).goToRevision(),
           ),
-          if (onPull != null)
-            _SyncButton(key: const ValueKey('git-pull'), up: false, color: const Color(0xFF4A86F7), tooltip: 'Pull:更新当前分支(拉取并合并上游)', onTap: () => onPull!(context)),
-          if (onPush != null)
-            _SyncButton(key: const ValueKey('git-push'), up: true, color: const Color(0xFF3DD68C), tooltip: 'Push:推送当前分支(先确认要推的提交)', onTap: () => onPush!(context)),
+          // 正在 Pull / Push(标题栏分支菜单发起的也算)时那个按钮转圈,两个都点不了
+          if (onPull != null || onPush != null)
+            ListenableBuilder(
+              listenable: branches ?? const _Never(),
+              builder: (context, _) {
+                final busy = branches?.busy;
+                return Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (onPull != null)
+                      _SyncButton(
+                        key: const ValueKey('git-pull'),
+                        up: false,
+                        color: const Color(0xFF4A86F7),
+                        tooltip: busy == 'Update' ? 'Pull 进行中…' : 'Pull:更新当前分支(拉取并合并上游)',
+                        running: busy == 'Update',
+                        onTap: busy != null ? null : () => onPull!(context),
+                      ),
+                    if (onPush != null)
+                      _SyncButton(
+                        key: const ValueKey('git-push'),
+                        up: true,
+                        color: const Color(0xFF3DD68C),
+                        tooltip: busy == 'Push' ? 'Push 进行中…' : 'Push:推送当前分支(先确认要推的提交)',
+                        running: busy == 'Push',
+                        onTap: busy != null ? null : () => onPush!(context),
+                      ),
+                  ],
+                );
+              },
+            ),
         ],
       ),
     );
@@ -763,9 +796,9 @@ class _FilterBar extends StatelessWidget {
 }
 
 /// 筛选栏右边的 Pull / Push:只有图标(箭头 + 托盘,Pull 向下、Push 向上),默认和左边的工具按钮一样是灰色;
-/// 按下时 Pull 变蓝、Push 变绿,底下衬一块同色的深底。
+/// 按下时 Pull 变蓝、Push 变绿,底下衬一块同色的深底。正在 Pull / Push 时([running])图标换成同色的转圈。
 class _SyncButton extends StatefulWidget {
-  const _SyncButton({super.key, required this.up, required this.color, required this.tooltip, required this.onTap});
+  const _SyncButton({super.key, required this.up, required this.color, required this.tooltip, required this.onTap, this.running = false});
 
   /// true = Push(箭头向上),false = Pull(箭头向下)。
   final bool up;
@@ -773,7 +806,10 @@ class _SyncButton extends StatefulWidget {
   /// 按下时的颜色。
   final Color color;
   final String tooltip;
-  final VoidCallback onTap;
+
+  /// 有操作在跑时为 null(点不了)。
+  final VoidCallback? onTap;
+  final bool running;
 
   @override
   State<_SyncButton> createState() => _SyncButtonState();
@@ -795,7 +831,7 @@ class _SyncButtonState extends State<_SyncButton> {
       // 按下的样子用指针事件:InkWell 的 onTapDown 要等手势判定(约 100 ms),快速点一下看不到
       child: Listener(
         onPointerDown: (e) {
-          if (e.buttons == kPrimaryButton) _press(true);
+          if (e.buttons == kPrimaryButton && widget.onTap != null) _press(true);
         },
         onPointerUp: (_) => _press(false),
         onPointerCancel: (_) => _press(false),
@@ -805,7 +841,15 @@ class _SyncButtonState extends State<_SyncButton> {
         child: Container(
           padding: const EdgeInsets.all(4),
           decoration: _pressed ? BoxDecoration(color: widget.color.withValues(alpha: 0.18), borderRadius: BorderRadius.circular(4)) : null,
-          child: CustomPaint(size: const Size.square(15), painter: _TrayArrowPainter(up: widget.up, color: color)),
+          child: widget.running
+              ? SizedBox.square(
+                  dimension: 15,
+                  child: Padding(
+                    padding: const EdgeInsets.all(1.5),
+                    child: CircularProgressIndicator(key: const ValueKey('git-sync-spinner'), strokeWidth: 1.6, color: widget.color),
+                  ),
+                )
+              : CustomPaint(size: const Size.square(15), painter: _TrayArrowPainter(up: widget.up, color: color)),
         ),
       ),
       ),
@@ -1265,4 +1309,15 @@ class _DetailsPaneState extends State<_DetailsPane> {
       ],
     );
   }
+}
+
+/// 没有 [BranchStore] 时给 ListenableBuilder 的占位:从不通知。
+class _Never implements Listenable {
+  const _Never();
+
+  @override
+  void addListener(VoidCallback listener) {}
+
+  @override
+  void removeListener(VoidCallback listener) {}
 }
