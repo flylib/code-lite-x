@@ -27,6 +27,7 @@ import 'visible_lines.dart';
 import 'syntax/document_highlighter.dart';
 import 'syntax/language.dart';
 import 'syntax/languages.dart';
+import '../notifications/notifications.dart';
 
 /// 差异标签的 id 前缀:`diff:<相对仓库根的路径>`。
 const String diffTabPrefix = 'diff:';
@@ -1867,9 +1868,7 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
       session.data = data;
     });
     if (data == null) {
-      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-        SnackBar(content: Text('无法获取 $filePath 的 Git Blame(文件不在 Git 仓库中或尚未提交)')),
-      );
+      showNotice(context, '无法获取 Git Blame: $filePath 不在 Git 仓库中或尚未提交', error: true);
       _blame.remove(controller)?.dispose(controller);
       setState(() {});
     }

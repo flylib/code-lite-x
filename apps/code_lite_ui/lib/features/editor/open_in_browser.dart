@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/platform/browsers.dart' as browsers;
 import '../../core/theme/intellij_theme.dart';
+import '../notifications/notifications.dart';
 
 export '../../core/platform/paths.dart' show absoluteFilePath;
 
@@ -64,11 +65,10 @@ class OpenInBrowserBar extends StatelessWidget {
   final Future<void> Function()? beforeOpen;
 
   Future<void> _open(BuildContext context, browsers.BrowserApp b) async {
-    final messenger = ScaffoldMessenger.maybeOf(context);
     await beforeOpen?.call();
     final error = await service.open(b, file, projectRoot: projectRoot);
-    if (error != null && error.isNotEmpty) {
-      messenger?.showSnackBar(SnackBar(content: Text('无法用 ${b.name} 打开:$error')));
+    if (error != null && error.isNotEmpty && context.mounted) {
+      showNotice(context, '无法用 ${b.name} 打开:$error', error: true);
     }
   }
 

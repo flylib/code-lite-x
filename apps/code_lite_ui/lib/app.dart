@@ -48,6 +48,7 @@ import 'features/status_bar/status_bar_widget.dart';
 import 'features/terminal/terminal_store.dart';
 import 'features/title_bar/branch_menu.dart';
 import 'features/title_bar/operation_buttons.dart';
+import 'features/notifications/notifications.dart';
 import 'features/title_bar/project_dialogs.dart';
 import 'features/title_bar/project_menu.dart';
 import 'features/title_bar/title_bar_widget.dart';
@@ -74,6 +75,8 @@ class _CodeLiteAppState extends State<CodeLiteApp> {
   final KeymapStore _keymap = KeymapStore();
   late final SettingsStore _settings = SettingsStore(appearance: _appearance, layout: _layout, keymap: _keymap);
   late final PluginManager _plugins = PluginManager();
+  /// 提示和错误:右下角弹卡片,错误另记最近 10 条(底部 Problems 工具窗)。所有项目共用一份。
+  final NotificationCenter _notices = NotificationCenter();
   /// HTML 在浏览器里按 http://localhost:63342/<项目名>/<路径> 打开(同 IntelliJ):
   /// 地址由文件所在项目自己的服务器给出,那个服务器随项目关闭而关闭。
   late final BrowserService _browsers = BrowserService(
@@ -118,12 +121,16 @@ class _CodeLiteAppState extends State<CodeLiteApp> {
     _layout.dispose();
     _appearance.dispose();
     _keymap.dispose();
+    _notices.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
+    // 通知放在 MaterialApp 上面:对话框里发的提示也找得到
+    return NotificationScope(
+      center: _notices,
+      child: MaterialApp(
       title: 'CodeLiteX',
       debugShowCheckedModeBanner: false,
       theme: IntelliJTheme.darkTheme,
@@ -146,6 +153,7 @@ class _CodeLiteAppState extends State<CodeLiteApp> {
             ),
           );
         },
+      ),
       ),
     );
   }
@@ -181,6 +189,7 @@ class _Workbench extends StatelessWidget {
     final workspace = context.workspaceRead;
     final layout = context.layoutRead;
     final sessions = context.sessionRead;
+    final notices = NotificationScope.maybeOf(context);
 
     return _AppMenuBar(
       settings: settings,
@@ -208,7 +217,10 @@ class _Workbench extends StatelessWidget {
         autofocus: true,
         child: Scaffold(
           backgroundColor: IntelliJTheme.frameBg,
-          body: Column(
+          // 提示和错误弹在右下角(右活动条左边、状态栏上面),盖在工作区上
+          body: Stack(
+            children: [
+          Column(
             children: [
               // 标题栏订阅 workspace(当前文件、项目)和项目列表;分支那一块自己订阅 BranchStore。
               ListenableBuilder(
@@ -237,7 +249,7 @@ class _Workbench extends StatelessWidget {
                   children: [
                     // 左活动条:订阅 layout,以及构建工具(检测到 Maven 等才出现它的按钮)。
                     ListenableBuilder(
-                      listenable: Listenable.merge([layout, buildTools, make, settings.keymap]),
+                      listenable: Listenable.merge([layout, buildTools, make, settings.keymap, if (notices != null) notices]),
                       builder: (context, _) => ActivityStripeWidget(
                         buildToolTitle: buildTools.hasProjects ? buildTools.title : null,
                         showMake: make.hasMakefiles,
@@ -251,6 +263,7 @@ class _Workbench extends StatelessWidget {
                         onSelectTool: layout.selectTool,
                         onSelectBottomTab: layout.selectBottomTab,
                         keymap: settings.keymap,
+                        hasErrors: notices?.unread ?? false,
                       ),
                     ),
 
@@ -292,6 +305,7 @@ class _Workbench extends StatelessWidget {
                                         onPull: (ctx) => branchActions.update(ctx),
                                         onPush: (ctx) => branchActions.push(ctx),
                                         branches: branches,
+                                        notices: notices,
                                       ),
                                     ),
                                   ],
@@ -305,7 +319,7 @@ class _Workbench extends StatelessWidget {
 
                     // 右活动条:始终显示(顶上是通知),停靠在右侧的工具窗按钮在下面。
                     ListenableBuilder(
-                      listenable: Listenable.merge([layout, buildTools, make, settings.keymap]),
+                      listenable: Listenable.merge([layout, buildTools, make, settings.keymap, if (notices != null) notices]),
                       builder: (context, _) => RightStripeWidget(
                         buildToolTitle: buildTools.hasProjects ? buildTools.title : null,
                         showMake: make.hasMakefiles,
@@ -314,6 +328,10 @@ class _Workbench extends StatelessWidget {
                         slotOf: layout.slotOf,
                         onSelectTool: layout.selectTool,
                         keymap: settings.keymap,
+                        // 铃铛:有没看过的错误亮红点,点了打开底部的 Problems
+                        hasNotification: notices?.unread ?? false,
+                        notificationsOpen: layout.isBottomOpen && layout.bottomTab == BottomToolTab.problems,
+                        onNotifications: () => layout.selectBottomTab(BottomToolTab.problems),
                       ),
                     ),
                   ],
@@ -330,6 +348,14 @@ class _Workbench extends StatelessWidget {
                   client: client,
                 ),
               ),
+            ],
+          ),
+              if (notices != null)
+                Positioned(
+                  right: IntelliJMetrics.activityStripe + 8,
+                  bottom: IntelliJMetrics.statusBar + 8,
+                  child: NotificationOverlay(center: notices),
+                ),
             ],
           ),
         ),
@@ -428,6 +454,7 @@ class _Workbench extends StatelessWidget {
       for (final tool in SideTool.values) keymapIdOf(tool): () => side(tool),
       KeymapIds.terminal: () => layout.selectBottomTab(BottomToolTab.terminal),
       KeymapIds.git: () => layout.selectBottomTab(BottomToolTab.git),
+      KeymapIds.problems: () => layout.selectBottomTab(BottomToolTab.problems),
       KeymapIds.hideAll: layout.toggleHideAll,
       KeymapIds.gotoFile: () => _gotoFile(context),
       KeymapIds.collapseRegion: () => context.sessionRead.activeTab?.controller.collapseRegionAtCaret(),
@@ -885,10 +912,7 @@ class _AppMenuBar extends StatelessWidget {
     controller.dispose();
     if (name == null || !context.mounted) return;
     final err = await workspace.createFile(name);
-    if (err != null && context.mounted) {
-      ScaffoldMessenger.maybeOf(context)
-          ?.showSnackBar(SnackBar(content: Text('创建失败: $err')));
-    }
+    if (err != null && context.mounted) showNotice(context, '创建失败: $err', error: true);
   }
 }
 
@@ -1024,7 +1048,7 @@ Future<void> _openFolder(BuildContext context, ProjectManager manager) async {
 Future<void> _openProject(BuildContext context, ProjectManager manager, String path) async {
   final ok = await manager.open(path);
   if (!ok && context.mounted) {
-    ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(content: Text('无法打开项目: $path')));
+    showNotice(context, '无法打开项目: $path', error: true);
   }
 }
 

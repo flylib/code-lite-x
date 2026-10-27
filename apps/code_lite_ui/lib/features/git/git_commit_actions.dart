@@ -5,6 +5,7 @@ import '../../core/platform/workspace_io.dart' as io;
 import '../../core/theme/intellij_theme.dart';
 import 'diff_view.dart';
 import 'git_log_store.dart';
+import '../notifications/notifications.dart';
 
 const TextStyle _kText = TextStyle(color: IntelliJTheme.textPrimary, fontSize: 12.5);
 const TextStyle _kMuted = TextStyle(color: IntelliJTheme.textMuted, fontSize: 12);
@@ -117,12 +118,7 @@ class GitCommitActions {
   // ---------------------------------------------------------------------------
 
   void _toast(String message, {bool error = false}) {
-    if (!context.mounted) return;
-    ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(
-      content: Text(message),
-      backgroundColor: error ? const Color(0xFF5E2B2E) : null,
-      duration: Duration(seconds: error ? 6 : 3),
-    ));
+    showNotice(context, message, error: error);
   }
 
   Future<void> _run(String label, String method, Map<String, dynamic> params, {String? success}) async {

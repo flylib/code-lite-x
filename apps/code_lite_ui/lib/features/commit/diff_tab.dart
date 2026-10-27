@@ -7,6 +7,7 @@ import '../../core/theme/intellij_theme.dart';
 import '../editor/code_editor_controller.dart';
 import 'diff_cells.dart';
 import 'line_diff.dart';
+import '../notifications/notifications.dart';
 
 /// 中间:左行号 36 + 「>>」恢复按钮 20 + 间隔 4 + 右行号 36。
 const double _gutterWidth = 96;
@@ -275,7 +276,7 @@ class _DiffTabState extends State<DiffTab> {
     final res = await widget.client.saveFile(_sourcePath, text);
     if (!mounted) return;
     if (res['status'] != 'ok') {
-      ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(content: Text('恢复失败: ${res['error']}')));
+      showNotice(context, '恢复失败: ${res['error']}', error: true);
       return;
     }
     if (live != null) {

@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../../core/github/github_service.dart';
 import '../../core/theme/intellij_theme.dart';
 import 'pr_store.dart';
+import '../notifications/notifications.dart';
 
 const TextStyle prText = TextStyle(color: IntelliJTheme.textPrimary, fontSize: 12.5);
 const TextStyle prMuted = TextStyle(color: IntelliJTheme.textMuted, fontSize: 12);
@@ -17,12 +18,7 @@ String prDateTime(DateTime? d) {
   return '${prDate(d)} ${two(d.hour)}:${two(d.minute)}';
 }
 
-void prSnack(BuildContext context, String message, {bool error = false}) {
-  ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(
-    content: Text(message),
-    backgroundColor: error ? const Color(0xFF5E2B2E) : null,
-  ));
-}
+void prSnack(BuildContext context, String message, {bool error = false}) => showNotice(context, message, error: error);
 
 /// 检查状态的小图标:失败红叉、进行中黄点、通过绿勾。
 Widget checksIcon(ChecksState s, {double size = 16}) => switch (s) {

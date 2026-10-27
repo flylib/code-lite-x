@@ -7,6 +7,7 @@ import '../../core/client/api_client.dart';
 import '../../core/theme/intellij_theme.dart';
 import 'stash_panel.dart';
 import '../tool_window/tool_window_actions.dart';
+import '../notifications/notifications.dart';
 
 const TextStyle _kText =
     TextStyle(color: IntelliJTheme.textPrimary, fontSize: 12.5);
@@ -205,10 +206,7 @@ class _CommitPanelState extends State<CommitPanel> {
     if (ok != true) return;
     final res = await widget.client.gitCall('git.rollback', {'paths': targets});
     if (!mounted) return;
-    if (res['status'] != 'ok') {
-      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-          SnackBar(content: Text('Rollback 失败: ${res['error']}')));
-    }
+    if (res['status'] != 'ok') showNotice(context, 'Rollback 失败: ${res['error']}', error: true);
     widget.onFilesReverted?.call([for (final p in targets) _workspacePath(p)]);
     await _refresh();
     widget.onCommitted();
@@ -267,11 +265,7 @@ class _CommitPanelState extends State<CommitPanel> {
       _amend = false;
       widget.onCommitted();
     }
-    ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(
-      content: Text(ok
-          ? '已提交 ${res['commit_hash'] ?? ''}'
-          : '提交失败: ${res['error'] ?? res}'),
-    ));
+    showNotice(context, ok ? '已提交 ${res['commit_hash'] ?? ''}' : '提交失败: ${res['error'] ?? res}', error: !ok);
     await _refresh();
   }
 

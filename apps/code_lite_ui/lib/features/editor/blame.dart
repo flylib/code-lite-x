@@ -7,6 +7,7 @@ import '../git/diff_view.dart';
 import 'context_menu_region.dart';
 import 'editor_appearance.dart';
 import 'visible_lines.dart';
+import '../notifications/notifications.dart';
 
 const String _uncommitted = '0000000000000000000000000000000000000000';
 const double _lineHeight = 20;
@@ -391,7 +392,7 @@ Future<void> showAnnotatedRevision(
   final blame = await BlameData.load(client, path, rev: rev);
   if (!context.mounted) return;
   if (file['status'] != 'ok' || file['binary'] == true) {
-    ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(content: Text('无法读取 $path @ ${rev.substring(0, 8)}')));
+    showNotice(context, '无法读取 $path @ ${rev.substring(0, 8)}', error: true);
     return;
   }
   final lines = (file['content'] as String? ?? '').split('\n');

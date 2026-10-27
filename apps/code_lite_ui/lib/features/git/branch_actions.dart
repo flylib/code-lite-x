@@ -11,6 +11,7 @@ import 'merge_model.dart' show MergeSide;
 import 'merge_window.dart';
 import 'push_pull_dialogs.dart';
 import 'repo_operation.dart';
+import '../notifications/notifications.dart';
 
 const TextStyle _text = TextStyle(color: IntelliJTheme.textPrimary, fontSize: 12);
 const TextStyle _muted = TextStyle(color: IntelliJTheme.textMuted, fontSize: 12);
@@ -24,15 +25,8 @@ class BranchActions {
   final VoidCallback showCommitWindow;
 
   void _toast(BuildContext context, String message, {bool error = false}) {
-    if (!context.mounted) return;
-    final messenger = ScaffoldMessenger.maybeOf(context);
-    // 新提示直接顶掉还在显示的旧提示,不排队等它
-    messenger?.hideCurrentSnackBar();
-    messenger?.showSnackBar(SnackBar(
-      content: Text(message),
-      backgroundColor: error ? const Color(0xFF5E2B2E) : null,
-      duration: Duration(seconds: error ? 8 : 3),
-    ));
+    // 右下角弹卡片;错误还记进 Problems 工具窗
+    showNotice(context, message, error: error);
   }
 
   /// 跑一个操作,成功 / 失败都给提示。成功返回 true。

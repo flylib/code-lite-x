@@ -335,7 +335,9 @@ void main() {
       expect(File('${repo.path}/src/keep.txt').readAsStringSync(), 'k\n');
       expect(File('${repo.path}/untracked.md').existsSync(), isTrue);
 
-      // 一个都没勾:只回滚选中的行
+      // 一个都没勾:只回滚选中的行。先等回滚后面跟着的刷新都跑完,免得它晚到、盖掉下面这次刷新的结果
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 800)));
+      await tester.pump();
       write('src/a.txt', 'again\n');
       write('src/keep.txt', 'again\n');
       await tapReal(find.byTooltip('刷新'));

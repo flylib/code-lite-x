@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/client/api_client.dart';
 import '../../core/theme/intellij_theme.dart';
 import '../git/diff_view.dart';
+import '../notifications/notifications.dart';
 
 const TextStyle _kText = TextStyle(color: IntelliJTheme.textPrimary, fontSize: 12.5);
 const TextStyle _kMuted = TextStyle(color: IntelliJTheme.textMuted, fontSize: 12);
@@ -59,10 +60,7 @@ class _StashPanelState extends State<StashPanel> {
     if (!mounted) return;
     setState(() => _busy = false);
     final ok = res['status'] == 'ok';
-    ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(
-      content: Text(ok ? success : '${res['error']}'),
-      backgroundColor: ok ? null : const Color(0xFF5E2B2E),
-    ));
+    showNotice(context, ok ? success : 'Stash 操作失败: ${res['error']}', error: !ok);
     await _refresh();
     widget.onRepoChanged();
   }

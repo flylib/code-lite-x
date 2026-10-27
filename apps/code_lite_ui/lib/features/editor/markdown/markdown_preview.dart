@@ -14,6 +14,7 @@ import '../syntax/document_highlighter.dart';
 import '../syntax/language.dart';
 import '../syntax/languages.dart';
 import 'markdown_links.dart';
+import '../../notifications/notifications.dart';
 
 /// 预览用到的系统能力(文件是否存在、读图片、开网址)。测试里换成假的。
 class MarkdownEnv {
@@ -159,9 +160,7 @@ class _MarkdownPreviewState extends State<MarkdownPreview> {
   // ---------------------------------------------------------------------------
 
   void _toast(String message) {
-    final messenger = ScaffoldMessenger.maybeOf(context);
-    messenger?.hideCurrentSnackBar();
-    messenger?.showSnackBar(SnackBar(content: Text(message)));
+    showNotice(context, message);
   }
 
   Future<void> _tapLink(String text, String? href, String title) async {

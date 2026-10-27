@@ -44,6 +44,7 @@ abstract final class KeymapIds {
   static const build = 'ActivateMavenToolWindow';
   static const terminal = 'ActivateTerminalToolWindow';
   static const git = 'ActivateVersionControlToolWindow';
+  static const problems = 'ActivateProblemsViewToolWindow';
   static const hideAll = 'HideAllWindows';
   static const gotoFile = 'GotoFile';
   static const make = 'ActivateMakeToolWindow';
@@ -68,6 +69,7 @@ const List<KeymapAction> keymapActions = [
   KeymapAction(id: KeymapIds.build, title: '构建工具(Maven)', group: '工具窗', intellijIds: ['ActivateGradleToolWindow']),
   KeymapAction(id: KeymapIds.terminal, title: '终端', group: '工具窗', mac: ['alt F12'], other: ['alt F12']),
   KeymapAction(id: KeymapIds.git, title: 'Git 提交与日志', group: '工具窗', mac: ['meta 9'], other: ['alt 9']),
+  KeymapAction(id: KeymapIds.problems, title: 'Problems(错误日志)', group: '工具窗', mac: ['meta 6'], other: ['alt 6']),
   KeymapAction(id: KeymapIds.hideAll, title: '隐藏 / 恢复所有工具窗', group: '工具窗', mac: ['shift meta F12'], other: ['ctrl shift F12']),
   KeymapAction(id: KeymapIds.make, title: 'make', group: '工具窗', intellijIds: ['ActivatemakeToolWindow']),
   KeymapAction(id: KeymapIds.gotoFile, title: '按文件名打开(Go to File)', group: '导航', mac: ['shift meta O'], other: ['ctrl shift N']),

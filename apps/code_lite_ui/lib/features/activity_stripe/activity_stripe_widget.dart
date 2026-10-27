@@ -29,6 +29,7 @@ class ActivityStripeWidget extends StatelessWidget {
     this.slotOf,
     this.sideOf,
     this.keymap,
+    this.hasErrors = false,
   });
 
   final SideTool leftTool;
@@ -37,6 +38,9 @@ class ActivityStripeWidget extends StatelessWidget {
   final bool isBottomOpen;
   final ValueChanged<SideTool> onSelectTool;
   final ValueChanged<BottomToolTab> onSelectBottomTab;
+
+  /// 有没看过的错误:Problems 按钮上亮红点。
+  final bool hasErrors;
 
   /// 项目里检测到了构建工具(Maven……)时为它的名字,活动条多出构建工具窗的按钮;null 时不显示。
   final String? buildToolTitle;
@@ -89,6 +93,15 @@ class ActivityStripeWidget extends StatelessWidget {
             tooltip: withShortcut('终端', KeymapIds.terminal, keymap),
             isActive: isBottomOpen && bottomTab == BottomToolTab.terminal,
             onTap: () => onSelectBottomTab(BottomToolTab.terminal),
+          ),
+          const SizedBox(height: _gap),
+          StripeButton(
+            key: const ValueKey('stripe-problems'),
+            icon: Icons.error_outline,
+            tooltip: withShortcut('Problems', KeymapIds.problems, keymap),
+            isActive: isBottomOpen && bottomTab == BottomToolTab.problems,
+            badgeColor: hasErrors ? IntelliJTheme.diagError : null,
+            onTap: () => onSelectBottomTab(BottomToolTab.problems),
           ),
           const SizedBox(height: _gap),
           StripeButton(
@@ -189,6 +202,8 @@ class RightStripeWidget extends StatelessWidget {
     this.buildToolTitle,
     this.showMake = false,
     this.hasNotification = false,
+    this.notificationsOpen = false,
+    this.onNotifications,
     this.keymap,
   });
 
@@ -201,8 +216,14 @@ class RightStripeWidget extends StatelessWidget {
   /// 项目里有 Makefile:显示 make 工具窗的按钮。
   final bool showMake;
 
-  /// 通知按钮上的小黄点。
+  /// 通知按钮上的红点:有没看过的错误。
   final bool hasNotification;
+
+  /// 右下角的「通知」卡片开着(按钮显示成按下)。
+  final bool notificationsOpen;
+
+  /// 点铃铛:打开 / 收起「通知」卡片。
+  final VoidCallback? onNotifications;
 
   /// 按钮提示里显示的快捷键;null 时按默认键位。
   final KeymapStore? keymap;
@@ -225,10 +246,11 @@ class RightStripeWidget extends StatelessWidget {
         children: [
           StripeButton(
             icon: Icons.notifications_none_outlined,
+            key: const ValueKey('stripe-notifications'),
             tooltip: '通知',
-            isActive: false,
-            badgeColor: hasNotification ? IntelliJTheme.accentYellow : null,
-            onTap: () {},
+            isActive: notificationsOpen,
+            badgeColor: hasNotification ? IntelliJTheme.diagError : null,
+            onTap: onNotifications ?? () {},
           ),
           if (upper.isNotEmpty) ...[const SizedBox(height: _gap), ...upper],
           if (lower.isNotEmpty) ...[

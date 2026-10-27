@@ -2,12 +2,13 @@ import 'package:flutter/material.dart';
 
 import '../../core/client/api_client.dart';
 import '../git/branch_store.dart';
+import '../notifications/notifications.dart';
 import '../git/git_log_store.dart';
 import '../git/git_log_window.dart';
 import '../terminal/terminal_store.dart';
 import '../terminal/terminal_view.dart';
 
-enum BottomToolTab { git, terminal }
+enum BottomToolTab { git, terminal, problems }
 
 /// 底部工具窗:Git(Log)与终端。两者都有 IntelliJ 式的独立标题栏,
 /// 所以这里只负责按选中项切换、给出高度(外面套着一块岛)。
@@ -24,6 +25,7 @@ class BottomToolsWidget extends StatelessWidget {
     this.onPull,
     this.onPush,
     this.branches,
+    this.notices,
   });
 
   /// Git 工具窗筛选栏右边的 Pull / Push。
@@ -32,6 +34,9 @@ class BottomToolsWidget extends StatelessWidget {
 
   /// Pull / Push 进行中时按钮转圈(看它的 busy)。
   final BranchStore? branches;
+
+  /// Problems 工具窗显示的错误日志。
+  final NotificationCenter? notices;
 
   final BottomToolTab activeTab;
 
@@ -63,6 +68,10 @@ class BottomToolsWidget extends StatelessWidget {
             onPull: onPull,
             onPush: onPush,
             branches: branches,
+          ),
+        BottomToolTab.problems => ProblemsPanel(
+            center: notices ?? NotificationCenter(),
+            onHide: () => onSelectTab(BottomToolTab.problems),
           ),
         BottomToolTab.terminal => TerminalPanel(
             store: terminals,
