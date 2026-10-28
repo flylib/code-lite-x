@@ -29,7 +29,6 @@ class ActivityStripeWidget extends StatelessWidget {
     this.slotOf,
     this.sideOf,
     this.keymap,
-    this.hasErrors = false,
   });
 
   final SideTool leftTool;
@@ -38,9 +37,6 @@ class ActivityStripeWidget extends StatelessWidget {
   final bool isBottomOpen;
   final ValueChanged<SideTool> onSelectTool;
   final ValueChanged<BottomToolTab> onSelectBottomTab;
-
-  /// 有没看过的错误:Problems 按钮上亮红点。
-  final bool hasErrors;
 
   /// 项目里检测到了构建工具(Maven……)时为它的名字,活动条多出构建工具窗的按钮;null 时不显示。
   final String? buildToolTitle;
@@ -93,15 +89,6 @@ class ActivityStripeWidget extends StatelessWidget {
             tooltip: withShortcut('终端', KeymapIds.terminal, keymap),
             isActive: isBottomOpen && bottomTab == BottomToolTab.terminal,
             onTap: () => onSelectBottomTab(BottomToolTab.terminal),
-          ),
-          const SizedBox(height: _gap),
-          StripeButton(
-            key: const ValueKey('stripe-problems'),
-            icon: Icons.error_outline,
-            tooltip: withShortcut('Problems', KeymapIds.problems, keymap),
-            isActive: isBottomOpen && bottomTab == BottomToolTab.problems,
-            badgeColor: hasErrors ? IntelliJTheme.diagError : null,
-            onTap: () => onSelectBottomTab(BottomToolTab.problems),
           ),
           const SizedBox(height: _gap),
           StripeButton(
@@ -204,6 +191,8 @@ class RightStripeWidget extends StatelessWidget {
     this.hasNotification = false,
     this.notificationsOpen = false,
     this.onNotifications,
+    this.problemsOpen = false,
+    this.onProblems,
     this.keymap,
   });
 
@@ -219,11 +208,15 @@ class RightStripeWidget extends StatelessWidget {
   /// 通知按钮上的红点:有没看过的错误。
   final bool hasNotification;
 
-  /// 右下角的「通知」卡片开着(按钮显示成按下)。
+  /// Problems 开着(铃铛显示成按下)。
   final bool notificationsOpen;
 
-  /// 点铃铛:打开 / 收起「通知」卡片。
+  /// 点铃铛:打开 / 收起 Problems。
   final VoidCallback? onNotifications;
+
+  /// 最下面(右下角)的 Problems 按钮:错误和通知的日志开着时显示成按下。为 null 时不显示按钮。
+  final bool problemsOpen;
+  final VoidCallback? onProblems;
 
   /// 按钮提示里显示的快捷键;null 时按默认键位。
   final KeymapStore? keymap;
@@ -256,6 +249,18 @@ class RightStripeWidget extends StatelessWidget {
           if (lower.isNotEmpty) ...[
             Container(width: 18, height: 1, margin: const EdgeInsets.symmetric(vertical: 6), color: IntelliJTheme.border),
             ...lower,
+          ],
+          // 右下角:Problems(错误和通知的日志),贴着它打开的底部工具窗
+          if (onProblems != null) ...[
+            const Spacer(),
+            StripeButton(
+              key: const ValueKey('stripe-problems'),
+              icon: Icons.error_outline,
+              tooltip: withShortcut('Problems', KeymapIds.problems, keymap),
+              isActive: problemsOpen,
+              badgeColor: hasNotification ? IntelliJTheme.diagError : null,
+              onTap: onProblems!,
+            ),
           ],
         ],
       ),

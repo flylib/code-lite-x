@@ -1,5 +1,6 @@
 // 通知(同 IntelliJ):提示和错误在窗口右下角弹一张卡片(balloon),过一会儿自己收起;
-// 错误另外记下最近 [NotificationCenter.maxErrors] 条,在底部的 Problems 工具窗(⌘6,同 IntelliJ 的 Problems)里看。
+// 错误和普通提示各记最近 [NotificationCenter.maxErrors] 条,在 Problems 工具窗(⌘6,按钮在右活动条最下面)里看:
+// 「全部 / Errors / Notify」三个标签,全部是两类按时间排在一起(新的在前)。
 // 全应用一份(不分项目),放在 MaterialApp 上面,对话框里也能找到。
 
 import 'dart:async';
@@ -31,8 +32,11 @@ class Notice {
   return (m.substring(0, i).trim(), body);
 }
 
+/// Problems 工具窗的标签。
+enum ProblemsFilter { all, errors, notify }
+
 class NotificationCenter extends ChangeNotifier {
-  /// 错误日志最多留几条(新的在前,多了丢最旧的)。
+  /// 错误、普通提示各最多留几条(新的在前,多了丢最旧的)。
   static const int maxErrors = 10;
 
   /// 同时最多弹几张卡片(再来新的就顶掉最早的)。
@@ -42,6 +46,27 @@ class NotificationCenter extends ChangeNotifier {
 
   /// 最近的错误,新的在前。
   final List<Notice> errors = [];
+
+  /// 最近的普通提示(已推送、已提交……),新的在前。
+  final List<Notice> notifies = [];
+
+  /// Problems 工具窗选中的标签(关了再开还是它)。
+  ProblemsFilter filter = ProblemsFilter.all;
+
+  /// 错误和提示按时间排在一起,新的在前。
+  List<Notice> get all => [...errors, ...notifies]..sort((a, b) => b.id.compareTo(a.id));
+
+  List<Notice> listFor(ProblemsFilter f) => switch (f) {
+        ProblemsFilter.all => all,
+        ProblemsFilter.errors => errors,
+        ProblemsFilter.notify => notifies,
+      };
+
+  void setFilter(ProblemsFilter f) {
+    if (filter == f) return;
+    filter = f;
+    notifyListeners();
+  }
 
   /// 正在右下角弹着的卡片,旧的在前(新的在最下面,贴着状态栏)。
   final List<Notice> balloons = [];
@@ -56,11 +81,10 @@ class NotificationCenter extends ChangeNotifier {
     final (title, body) = splitNotice(message);
     if (title.isEmpty) return;
     final notice = Notice(id: _nextId++, title: title, body: body, error: error, time: DateTime.now());
-    if (error) {
-      errors.insert(0, notice);
-      if (errors.length > maxErrors) errors.removeRange(maxErrors, errors.length);
-      if (!_viewing) unread = true;
-    }
+    final log = error ? errors : notifies;
+    log.insert(0, notice);
+    if (log.length > maxErrors) log.removeRange(maxErrors, log.length);
+    if (error && !_viewing) unread = true;
     balloons.add(notice);
     if (balloons.length > maxBalloons) balloons.removeRange(0, balloons.length - maxBalloons);
     notifyListeners();
@@ -81,9 +105,13 @@ class NotificationCenter extends ChangeNotifier {
     }
   }
 
-  void clear() {
-    errors.clear();
-    unread = false;
+  /// 清空 [f] 标签里的(全部 = 两类都清)。
+  void clear([ProblemsFilter f = ProblemsFilter.all]) {
+    if (f != ProblemsFilter.notify) {
+      errors.clear();
+      unread = false;
+    }
+    if (f != ProblemsFilter.errors) notifies.clear();
     notifyListeners();
   }
 }
@@ -256,8 +284,8 @@ class _NoticeText extends StatelessWidget {
   }
 }
 
-/// 底部的 Problems 工具窗(同 IntelliJ 的 Problems,⌘6):标题栏 Problems + 「Errors 条数」标签、⋮ / —;
-/// 左边一列竖着的工具按钮(清空);右边是最近的错误(新的在前),每条可复制;没有错误时居中一行灰字。
+/// 底部的 Problems 工具窗(同 IntelliJ 的 Problems,⌘6):标题栏 Problems + 「全部 / Errors / Notify」标签(带条数)、—;
+/// 左边一列竖着的工具按钮(复制全部、清空,都只管当前标签);右边按时间列出(新的在前),每条可复制;空的时候居中一行灰字。
 class ProblemsPanel extends StatefulWidget {
   const ProblemsPanel({super.key, required this.center, required this.onHide});
 
@@ -290,7 +318,33 @@ class _ProblemsPanelState extends State<ProblemsPanel> {
     return ListenableBuilder(
       listenable: center,
       builder: (context, _) {
-        final errors = center.errors;
+        final filter = center.filter;
+        final items = center.listFor(filter);
+        Widget tab(ProblemsFilter f, String label, int count) {
+          final selected = f == filter;
+          return Padding(
+            padding: const EdgeInsets.only(right: 4),
+            child: InkWell(
+              key: ValueKey('problems-tab-${f.name}'),
+              onTap: () => center.setFilter(f),
+              borderRadius: BorderRadius.circular(6),
+              child: Container(
+                height: 28,
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                decoration: selected ? BoxDecoration(color: IntelliJTheme.chipBg, borderRadius: BorderRadius.circular(6)) : null,
+                alignment: Alignment.center,
+                child: Text.rich(
+                  TextSpan(children: [
+                    TextSpan(text: label, style: TextStyle(color: selected ? IntelliJTheme.textHigh : IntelliJTheme.textPrimary)),
+                    if (count > 0) TextSpan(text: '  $count', style: const TextStyle(color: IntelliJTheme.textMuted)),
+                  ]),
+                  style: const TextStyle(fontSize: 13),
+                ),
+              ),
+            ),
+          );
+        }
+
         return Container(
           color: IntelliJTheme.panelBg,
           child: Column(
@@ -304,21 +358,9 @@ class _ProblemsPanelState extends State<ProblemsPanel> {
                   children: [
                     const Text('Problems', style: TextStyle(color: IntelliJTheme.textHigh, fontSize: 13, fontWeight: FontWeight.w600)),
                     const SizedBox(width: 16),
-                    Container(
-                      height: 28,
-                      padding: const EdgeInsets.symmetric(horizontal: 10),
-                      decoration: BoxDecoration(color: IntelliJTheme.chipBg, borderRadius: BorderRadius.circular(6)),
-                      alignment: Alignment.center,
-                      child: Text.rich(
-                        TextSpan(children: [
-                          const TextSpan(text: 'Errors', style: TextStyle(color: IntelliJTheme.textHigh)),
-                          if (errors.isNotEmpty)
-                            TextSpan(text: '  ${errors.length}', style: const TextStyle(color: IntelliJTheme.textMuted)),
-                        ]),
-                        key: const ValueKey('problems-tab'),
-                        style: const TextStyle(fontSize: 13),
-                      ),
-                    ),
+                    tab(ProblemsFilter.all, '全部', center.errors.length + center.notifies.length),
+                    tab(ProblemsFilter.errors, 'Errors', center.errors.length),
+                    tab(ProblemsFilter.notify, 'Notify', center.notifies.length),
                     const Spacer(),
                     _IconBtn(icon: Icons.remove, tooltip: '隐藏', onTap: widget.onHide, size: 16),
                   ],
@@ -340,7 +382,7 @@ class _ProblemsPanelState extends State<ProblemsPanel> {
                             icon: Icons.content_copy,
                             tooltip: '复制全部',
                             size: 16,
-                            onTap: errors.isEmpty ? null : () => Clipboard.setData(ClipboardData(text: [for (final n in errors) '[${_clock(n.time)}] ${n.text}'].join('\n'))),
+                            onTap: items.isEmpty ? null : () => Clipboard.setData(ClipboardData(text: [for (final n in items) '[${_clock(n.time)}] ${n.text}'].join('\n'))),
                           ),
                           const SizedBox(height: 4),
                           _IconBtn(
@@ -348,20 +390,28 @@ class _ProblemsPanelState extends State<ProblemsPanel> {
                             icon: Icons.delete_outline,
                             tooltip: '清空',
                             size: 16,
-                            onTap: errors.isEmpty ? null : center.clear,
+                            onTap: items.isEmpty ? null : () => center.clear(filter),
                           ),
                         ],
                       ),
                     ),
                     Expanded(
-                      child: errors.isEmpty
-                          ? const Center(
-                              child: Text('No errors.', key: ValueKey('problems-empty'), style: TextStyle(color: IntelliJTheme.textMuted, fontSize: 13)),
+                      child: items.isEmpty
+                          ? Center(
+                              child: Text(
+                                switch (filter) {
+                                  ProblemsFilter.all => 'No errors or notifications.',
+                                  ProblemsFilter.errors => 'No errors.',
+                                  ProblemsFilter.notify => 'No notifications.',
+                                },
+                                key: const ValueKey('problems-empty'),
+                                style: const TextStyle(color: IntelliJTheme.textMuted, fontSize: 13),
+                              ),
                             )
                           : ListView.builder(
                               padding: const EdgeInsets.only(right: 8, bottom: 8),
-                              itemCount: errors.length,
-                              itemBuilder: (context, i) => _ProblemRow(notice: errors[i]),
+                              itemCount: items.length,
+                              itemBuilder: (context, i) => _ProblemRow(notice: items[i]),
                             ),
                     ),
                   ],

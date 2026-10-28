@@ -2,7 +2,7 @@ import 'package:code_lite_ui/features/notifications/notifications.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-/// 提示 / 错误:右下角弹卡片,错误另记最近 10 条,在底部的 Problems 工具窗里看。
+/// 提示 / 错误:右下角弹卡片;错误、提示各记最近 10 条,在 Problems 工具窗(全部 / Errors / Notify)里看。
 void main() {
   test('a message splits into a short title and the reason', () {
     expect(splitNotice('Update 失败: 分支 feat/x 没有上游分支'), ('Update 失败', '分支 feat/x 没有上游分支'));
@@ -12,7 +12,7 @@ void main() {
     expect(splitNotice(long).$2, '', reason: '冒号前面太长就不当标题');
   });
 
-  test('keeps the latest 10 errors (newest first); plain notices are not logged', () {
+  test('keeps the latest 10 errors and the latest 10 notices (newest first); 全部 merges them by time', () {
     final c = NotificationCenter();
     for (var i = 1; i <= 12; i++) {
       c.post('第 $i 次失败: 原因 $i', error: true);
@@ -22,15 +22,25 @@ void main() {
     expect(c.errors.first.title, '第 12 次失败');
     expect(c.errors.last.title, '第 3 次失败');
     expect(c.errors.any((n) => n.title == '已提交 abc'), isFalse);
+    expect(c.notifies.single.title, '已提交 abc', reason: '普通提示记在 Notify');
+    expect([for (final n in c.all.take(3)) n.title], ['已提交 abc', '第 12 次失败', '第 11 次失败'], reason: '全部按时间,新的在前');
+    expect(c.listFor(ProblemsFilter.notify), c.notifies);
+    for (var i = 1; i <= 12; i++) {
+      c.post('提示 $i');
+    }
+    expect(c.notifies, hasLength(NotificationCenter.maxErrors));
     expect(c.unread, isTrue);
     expect(c.balloons, hasLength(NotificationCenter.maxBalloons), reason: '弹着的卡片最多 3 张');
-    expect(c.balloons.last.title, '已提交 abc');
+    expect(c.balloons.last.title, '提示 12');
 
     c.setViewing(true);
     expect(c.unread, isFalse, reason: 'Problems 开着就算看过');
     c.post('又失败: x', error: true);
     expect(c.unread, isFalse);
     c.setViewing(false);
+    c.clear(ProblemsFilter.notify);
+    expect(c.notifies, isEmpty);
+    expect(c.errors, isNotEmpty, reason: '只清当前标签');
     c.clear();
     expect(c.errors, isEmpty);
     c.dispose();
@@ -96,7 +106,7 @@ void main() {
     expect(find.text('Update 失败'), findsNothing);
   });
 
-  testWidgets('the Problems tool window lists the recent errors, with a count; empty state; clear', (tester) async {
+  testWidgets('Problems has 全部 / Errors / Notify tabs with counts; empty state; clear', (tester) async {
     final center = await pumpApp(tester, problems: true);
     await tester.pump();
     expect(find.byKey(const ValueKey('problems-empty')), findsOneWidget);
@@ -105,7 +115,15 @@ void main() {
     await tester.pump();
     center.post('Push 失败: 远程拒绝', error: true);
     await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('ok')));
+    await tester.pump();
+    expect(find.text('全部  3', findRichText: true), findsOneWidget);
     expect(find.text('Errors  2', findRichText: true), findsOneWidget);
+    expect(find.text('Notify  1', findRichText: true), findsOneWidget);
+    expect(find.byKey(ValueKey('problem-${center.notifies.first.id}')), findsOneWidget, reason: '全部里有通知');
+    await tester.tap(find.byKey(const ValueKey('problems-tab-errors')));
+    await tester.pump();
+    expect(find.byKey(ValueKey('problem-${center.notifies.first.id}')), findsNothing, reason: 'Errors 里只有错误');
     expect(find.byKey(ValueKey('problem-${center.errors.first.id}')), findsOneWidget);
     expect(find.textContaining('远程拒绝', findRichText: true), findsWidgets);
     expect(center.unread, isFalse, reason: '开着 Problems 时来的错误算看过了');
@@ -113,6 +131,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('problems-clear')));
     await tester.pump();
     expect(find.byKey(const ValueKey('problems-empty')), findsOneWidget);
+    expect(center.notifies, hasLength(1), reason: '在 Errors 标签清空只清错误');
     await tester.pump(const Duration(seconds: 11)); // 等卡片收起
   });
 

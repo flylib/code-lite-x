@@ -249,7 +249,7 @@ class _Workbench extends StatelessWidget {
                   children: [
                     // 左活动条:订阅 layout,以及构建工具(检测到 Maven 等才出现它的按钮)。
                     ListenableBuilder(
-                      listenable: Listenable.merge([layout, buildTools, make, settings.keymap, if (notices != null) notices]),
+                      listenable: Listenable.merge([layout, buildTools, make, settings.keymap]),
                       builder: (context, _) => ActivityStripeWidget(
                         buildToolTitle: buildTools.hasProjects ? buildTools.title : null,
                         showMake: make.hasMakefiles,
@@ -263,7 +263,6 @@ class _Workbench extends StatelessWidget {
                         onSelectTool: layout.selectTool,
                         onSelectBottomTab: layout.selectBottomTab,
                         keymap: settings.keymap,
-                        hasErrors: notices?.unread ?? false,
                       ),
                     ),
 
@@ -332,6 +331,8 @@ class _Workbench extends StatelessWidget {
                         hasNotification: notices?.unread ?? false,
                         notificationsOpen: layout.isBottomOpen && layout.bottomTab == BottomToolTab.problems,
                         onNotifications: () => layout.selectBottomTab(BottomToolTab.problems),
+                        problemsOpen: layout.isBottomOpen && layout.bottomTab == BottomToolTab.problems,
+                        onProblems: notices == null ? null : () => layout.selectBottomTab(BottomToolTab.problems),
                       ),
                     ),
                   ],

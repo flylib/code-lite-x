@@ -110,7 +110,7 @@ CodeLiteX 是一款高性能的原生跨平台代码编辑器，内置 Git 管�
 
 **通知与错误日志**
 - 提示和错误不再用底部整条的 SnackBar：一律在窗口**右下角弹卡片**（同 IntelliJ 的通知气泡；右活动条左边、状态栏上面，宽 380，`popupBg` 底、细边框、圆角、阴影）。卡片是「标题（加粗）+ 原因」（按第一个冒号拆，`splitNotice`），左边红色 / 蓝色图标，右上 ×；错误停 10 秒、普通提示 4 秒，鼠标停在上面不收；最多同时 3 张。
-- 错误另外记最近 **10 条**（新的在前），在底部的 **Problems** 工具窗里看（同 IntelliJ 的 Problems，⌘6 / 其它平台 Alt+6，action id `ActivateProblemsViewToolWindow`；左活动条终端和 Git 之间的按钮）：标题栏 Problems + 「Errors 条数」标签和 —；左边竖排工具按钮（复制全部、清空）；每条是图标、标题、原因、时间、复制；没有错误时居中灰字「No errors.」。有没看过的错误时 Problems 按钮和右活动条的铃铛亮红点，点铃铛也是打开 Problems。全应用一份，不分项目（`features/notifications/notifications.dart`：`NotificationCenter`、`showNotice`、`ProblemsPanel`）。
+- 错误和普通提示（已推送、已提交……）**各记最近 10 条**，在底部的 **Problems** 工具窗里看（同 IntelliJ 的 Problems，⌘6 / 其它平台 Alt+6，action id `ActivateProblemsViewToolWindow`）。按钮在**右活动条最下面（右下角）**。标题栏 Problems + **「全部 / Errors / Notify」**三个标签（带条数，默认「全部」，记住上次选的）和 —；「全部」是两类按时间排在一起，新的在前。左边竖排工具按钮（复制全部、清空，都只管当前标签）；每条是图标（错误红、提示蓝）、标题、原因、时间、复制；空的时候居中灰字。有没看过的**错误**时 Problems 按钮和右活动条顶上的铃铛亮红点（提示不亮），点铃铛也是打开 Problems。全应用一份，不分项目（`features/notifications/notifications.dart`：`NotificationCenter`、`ProblemsFilter`、`showNotice`、`ProblemsPanel`）。
 
 **窗口**
 - macOS 左上角是真的关闭 / 最小化 / 缩放按钮（系统红绿灯），不要弹窗。
