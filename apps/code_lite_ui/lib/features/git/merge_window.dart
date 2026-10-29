@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../core/l10n/l10n.dart';
 import '../../core/theme/intellij_theme.dart';
 import '../commit/diff_cells.dart';
 import '../editor/blame.dart';
@@ -105,7 +106,7 @@ class _MergeWindowState extends State<MergeWindow> {
     setState(() {
       if (data == null) {
         _blame.remove(side);
-        _blameError[side] = '读取修改记录失败';
+        _blameError[side] = tr('读取修改记录失败', 'Failed to load annotations');
       } else {
         _blame[side] = data;
       }
@@ -162,9 +163,9 @@ class _MergeWindowState extends State<MergeWindow> {
     return ContextMenuRegion(
       menuBuilder: (_) => [
         if (_blame.containsKey(side))
-          MenuItemButton(onPressed: () => _closeAnnotations(side), child: const Text('Close Annotations'))
+          MenuItemButton(onPressed: () => _closeAnnotations(side), child: Text(tr('关闭注解', 'Close Annotations')))
         else
-          MenuItemButton(onPressed: () => _annotate(side), child: const Text('Annotate with Git Blame')),
+          MenuItemButton(onPressed: () => _annotate(side), child: Text(tr('使用 Git Blame 注解', 'Annotate with Git Blame'))),
       ],
       child: child,
     );
@@ -221,9 +222,10 @@ class _MergeWindowState extends State<MergeWindow> {
     final left = m.unresolvedChanges;
     if (left > 0) {
       final ok = await _confirm(
-        'Apply',
-        '还有 $left 处改动没处理(其中 ${m.unresolvedConflicts} 处冲突)。没处理的地方保留共同祖先的版本。\n\n仍然保存结果并标记为已解决?',
-        action: 'Apply',
+        tr('应用', 'Apply'),
+        tr('还有 $left 处改动没处理(其中 ${m.unresolvedConflicts} 处冲突)。没处理的地方保留共同祖先的版本。\n\n仍然保存结果并标记为已解决?',
+            '$left change${left == 1 ? ' is' : 's are'} still unresolved (${m.unresolvedConflicts} of them conflicts). Unresolved places keep the common ancestor version.\n\nSave the result and mark the file as resolved anyway?'),
+        action: tr('应用', 'Apply'),
       );
       if (!ok || !mounted) return;
     }
@@ -232,7 +234,9 @@ class _MergeWindowState extends State<MergeWindow> {
 
   Future<void> _cancel() async {
     if (m.canUndo) {
-      final ok = await _confirm('Cancel', '放弃这次合并里做的修改?文件保持冲突状态。', action: 'Discard');
+      final ok = await _confirm(tr('取消', 'Cancel'),
+          tr('放弃这次合并里做的修改?文件保持冲突状态。', 'Discard the changes made in this merge? The file stays in conflict.'),
+          action: tr('放弃', 'Discard'));
       if (!ok || !mounted) return;
     }
     Navigator.pop(context);
@@ -246,7 +250,7 @@ class _MergeWindowState extends State<MergeWindow> {
         title: Text(title, style: const TextStyle(color: IntelliJTheme.textHigh, fontSize: 15)),
         content: SizedBox(width: 420, child: Text(message, style: const TextStyle(color: IntelliJTheme.textPrimary, fontSize: 13))),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Back')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(tr('返回', 'Back'))),
           FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(action)),
         ],
       ),
@@ -318,7 +322,7 @@ class _MergeWindowState extends State<MergeWindow> {
                       alignment: Alignment.center,
                       color: IntelliJTheme.headerBg,
                       padding: const EdgeInsets.symmetric(horizontal: 12),
-                      child: Text('Merge Revisions for ${widget.path}', style: _title, overflow: TextOverflow.ellipsis),
+                      child: Text(tr('合并 ${widget.path} 的修订', 'Merge Revisions for ${widget.path}'), style: _title, overflow: TextOverflow.ellipsis),
                     ),
                     _toolbar(),
                     _headers(),
@@ -346,25 +350,26 @@ class _MergeWindowState extends State<MergeWindow> {
   Widget _toolbar() {
     final pending = m.unresolvedChanges;
     final status = pending == 0
-        ? '所有改动都处理完了'
-        : '$pending ${pending == 1 ? 'change' : 'changes'}. ${m.unresolvedConflicts} ${m.unresolvedConflicts == 1 ? 'conflict' : 'conflicts'}.';
+        ? tr('所有改动都处理完了', 'All changes have been processed')
+        : tr('$pending 处改动。${m.unresolvedConflicts} 处冲突。',
+            '$pending ${pending == 1 ? 'change' : 'changes'}. ${m.unresolvedConflicts} ${m.unresolvedConflicts == 1 ? 'conflict' : 'conflicts'}.');
     return Container(
       height: 34,
       padding: const EdgeInsets.symmetric(horizontal: 8),
       child: Row(
         children: [
-          DiffToolIcon(icon: Icons.arrow_upward, tooltip: '上一处改动', onTap: pending == 0 ? null : () => _go(-1)),
-          DiffToolIcon(icon: Icons.arrow_downward, tooltip: '下一处改动', onTap: pending == 0 ? null : () => _go(1)),
+          DiffToolIcon(icon: Icons.arrow_upward, tooltip: tr('上一处改动', 'Previous Change'), onTap: pending == 0 ? null : () => _go(-1)),
+          DiffToolIcon(icon: Icons.arrow_downward, tooltip: tr('下一处改动', 'Next Change'), onTap: pending == 0 ? null : () => _go(1)),
           const SizedBox(width: 8),
-          const Text('Apply non-conflicting changes:', style: _muted),
+          Text(tr('应用不冲突的更改:', 'Apply non-conflicting changes:'), style: _muted),
           const SizedBox(width: 4),
-          DiffToolIcon(icon: Icons.keyboard_double_arrow_right, tooltip: '采用左侧所有不冲突的改动', onTap: () => m.applyNonConflicting(MergeSide.left)),
-          DiffToolIcon(icon: Icons.compare_arrows, tooltip: '采用两侧所有不冲突的改动', onTap: m.applyNonConflicting),
-          DiffToolIcon(icon: Icons.keyboard_double_arrow_left, tooltip: '采用右侧所有不冲突的改动', onTap: () => m.applyNonConflicting(MergeSide.right)),
+          DiffToolIcon(icon: Icons.keyboard_double_arrow_right, tooltip: tr('采用左侧所有不冲突的改动', 'Apply non-conflicting changes from the left side'), onTap: () => m.applyNonConflicting(MergeSide.left)),
+          DiffToolIcon(icon: Icons.compare_arrows, tooltip: tr('采用两侧所有不冲突的改动', 'Apply all non-conflicting changes'), onTap: m.applyNonConflicting),
+          DiffToolIcon(icon: Icons.keyboard_double_arrow_left, tooltip: tr('采用右侧所有不冲突的改动', 'Apply non-conflicting changes from the right side'), onTap: () => m.applyNonConflicting(MergeSide.right)),
           const SizedBox(width: 8),
-          DiffToolIcon(icon: Icons.undo, tooltip: '撤销 (⌘Z)', onTap: m.canUndo ? m.undo : null),
+          DiffToolIcon(icon: Icons.undo, tooltip: tr('撤销 (⌘Z)', 'Undo (⌘Z)'), onTap: m.canUndo ? m.undo : null),
           const SizedBox(width: 12),
-          const Flexible(child: Text('结果栏可以直接编辑', style: _muted, overflow: TextOverflow.ellipsis)),
+          Flexible(child: Text(tr('结果栏可以直接编辑', 'The result pane can be edited directly'), style: _muted, overflow: TextOverflow.ellipsis)),
           const Spacer(),
           Text(status, key: const ValueKey('merge-status'), style: _title),
         ],
@@ -377,7 +382,7 @@ class _MergeWindowState extends State<MergeWindow> {
     Widget side(String title, MergeSide s) => Row(children: [
           const Icon(Icons.lock_outline, size: 13, color: IntelliJTheme.textMuted),
           const SizedBox(width: 4),
-          Flexible(child: Text('Changes from $title', style: _title, overflow: TextOverflow.ellipsis)),
+          Flexible(child: Text(tr('来自 $title 的更改', 'Changes from $title'), style: _title, overflow: TextOverflow.ellipsis)),
           if (_blameError[s] case final e?) ...[
             const SizedBox(width: 8),
             Text(e, style: const TextStyle(color: IntelliJTheme.diagError, fontSize: 12)),
@@ -391,7 +396,7 @@ class _MergeWindowState extends State<MergeWindow> {
         SizedBox(width: leftBlame + _numWidth + _gutterWidth + _numWidth),
         Expanded(
           child: head(Row(children: [
-            const Text('Result', style: _title),
+            Text(tr('结果', 'Result'), style: _title),
             const SizedBox(width: 8),
             Flexible(child: Text(widget.path, style: _muted, overflow: TextOverflow.ellipsis)),
           ])),
@@ -412,13 +417,13 @@ class _MergeWindowState extends State<MergeWindow> {
       padding: const EdgeInsets.all(12),
       child: Row(
         children: [
-          outlined('Accept Left', () => Navigator.pop(context, const MergeOutcome(MergeOutcomeKind.acceptLeft))),
+          outlined(tr('接受左侧', 'Accept Left'), () => Navigator.pop(context, const MergeOutcome(MergeOutcomeKind.acceptLeft))),
           const SizedBox(width: 8),
-          outlined('Accept Right', () => Navigator.pop(context, const MergeOutcome(MergeOutcomeKind.acceptRight))),
+          outlined(tr('接受右侧', 'Accept Right'), () => Navigator.pop(context, const MergeOutcome(MergeOutcomeKind.acceptRight))),
           const Spacer(),
-          outlined('Cancel', _cancel),
+          outlined(tr('取消', 'Cancel'), _cancel),
           const SizedBox(width: 8),
-          FilledButton(onPressed: _apply, child: const Text('Apply')),
+          FilledButton(onPressed: _apply, child: Text(tr('应用', 'Apply'))),
         ],
       ),
     );
@@ -466,11 +471,11 @@ class _MergeWindowState extends State<MergeWindow> {
         ),
         gutter([
           if (showButtons && c.pending(MergeSide.left)) ...[
-            _ChunkButton(key: ValueKey('ignore-left-${m.chunks.indexOf(c)}'), icon: Icons.close, tooltip: '忽略左侧的这处改动', onTap: () => m.ignore(c, MergeSide.left)),
+            _ChunkButton(key: ValueKey('ignore-left-${m.chunks.indexOf(c)}'), icon: Icons.close, tooltip: tr('忽略左侧的这处改动', 'Ignore this change from the left side'), onTap: () => m.ignore(c, MergeSide.left)),
             _ChunkButton(
               key: ValueKey('apply-left-${m.chunks.indexOf(c)}'),
               icon: Icons.keyboard_double_arrow_right,
-              tooltip: c.applied.isEmpty ? '采用左侧的这处改动' : '把左侧的改动追加到结果',
+              tooltip: c.applied.isEmpty ? tr('采用左侧的这处改动', 'Accept this change from the left side') : tr('把左侧的改动追加到结果', 'Append the left change to the result'),
               onTap: () => m.apply(c, MergeSide.left),
             ),
           ],
@@ -500,10 +505,10 @@ class _MergeWindowState extends State<MergeWindow> {
             _ChunkButton(
               key: ValueKey('apply-right-${m.chunks.indexOf(c)}'),
               icon: Icons.keyboard_double_arrow_left,
-              tooltip: c.applied.isEmpty ? '采用右侧的这处改动' : '把右侧的改动追加到结果',
+              tooltip: c.applied.isEmpty ? tr('采用右侧的这处改动', 'Accept this change from the right side') : tr('把右侧的改动追加到结果', 'Append the right change to the result'),
               onTap: () => m.apply(c, MergeSide.right),
             ),
-            _ChunkButton(key: ValueKey('ignore-right-${m.chunks.indexOf(c)}'), icon: Icons.close, tooltip: '忽略右侧的这处改动', onTap: () => m.ignore(c, MergeSide.right)),
+            _ChunkButton(key: ValueKey('ignore-right-${m.chunks.indexOf(c)}'), icon: Icons.close, tooltip: tr('忽略右侧的这处改动', 'Ignore this change from the right side'), onTap: () => m.ignore(c, MergeSide.right)),
           ],
         ]),
         _withBlameMenu(

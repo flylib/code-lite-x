@@ -7,7 +7,7 @@
 // 格式(与插件市场的索引一致,目前随 IDE 打包在 builtin_catalog.dart):
 // {
 //   "id": "codelitex.java", "name": "Java", "version": "1.61.0", "publisher": "CodeLiteX",
-//   "description": "...", "categories": ["Programming Languages"], "sizeMB": 50,
+//   "description": {"zh": "...", "en": "..."}, "categories": ["Programming Languages"], "sizeMB": 50,
 //   "requires": [{"java": 21, "hint": "..."}, {"tool": "go"}],
 //   "contributes": {
 //     "languages": [{"id": "lua", "name": "Lua", "extensions": ["lua"], "syntax": {...LanguageSpec...}}],
@@ -35,16 +35,44 @@
 // 变量:${pluginDir} 插件安装目录,${dataDir} 插件在当前项目的缓存目录,${javaHome:N} 版本 ≥ N 的 JDK,
 // ${tool:name} 搜索路径里的可执行文件,${glob:相对路径模式} 插件目录下匹配的第一个文件,
 // ${eclipseConfig} Eclipse 启动器的平台配置目录名(config_mac_arm 等),${exe} Windows 下为 .exe。
+//
+// 给用户看的文字(description、requires 的 hint、options 的 label、install 的 guide)可以是一个字符串,
+// 也可以是 {"zh": "中文", "en": "English"},按界面语言取([LocalizedText])。
 
 import '../../features/editor/syntax/language.dart';
+import '../l10n/l10n.dart';
+
+/// 清单里给用户看的一段文字:中英两份,按当前界面语言取。只写了一种语言时两边都用它。
+class LocalizedText {
+  const LocalizedText(this.zh, this.en);
+
+  /// JSON 里的值:字符串(两种语言一样)或 `{"zh": ..., "en": ...}`;都不是时为 null。
+  static LocalizedText? fromJson(Object? v) {
+    if (v is String) return LocalizedText(v, v);
+    if (v is Map) {
+      final zh = v['zh'], en = v['en'];
+      if (zh == null && en == null) return null;
+      return LocalizedText('${zh ?? en}', '${en ?? zh}');
+    }
+    return null;
+  }
+
+  final String zh;
+  final String en;
+
+  String get text => tr(zh, en);
+
+  @override
+  String toString() => text;
+}
 
 class PluginRequirement {
-  const PluginRequirement({this.java, this.tool, this.hint});
+  const PluginRequirement({this.java, this.tool, this.hintText});
 
   factory PluginRequirement.fromJson(Map<String, dynamic> j) => PluginRequirement(
         java: (j['java'] as num?)?.toInt(),
         tool: j['tool'] as String?,
-        hint: j['hint'] as String?,
+        hintText: LocalizedText.fromJson(j['hint']),
       );
 
   /// 需要版本 ≥ [java] 的 JDK。
@@ -54,7 +82,10 @@ class PluginRequirement {
   final String? tool;
 
   /// 不满足时给用户的说明。
-  final String? hint;
+  final LocalizedText? hintText;
+
+  /// [hintText] 按当前界面语言取的文字。
+  String? get hint => hintText?.text;
 
   String get label => java != null ? 'JDK $java+' : (tool ?? '');
 }
@@ -152,7 +183,12 @@ class BuildToolContribution {
         options: [
           for (final o in (j['options'] as List? ?? const []))
             if (o is Map)
-              BuildToolOption(id: '${o['id']}', label: '${o['label'] ?? o['id']}', args: _strings(o['args']), icon: o['icon'] as String?),
+              BuildToolOption(
+                id: '${o['id']}',
+                labelText: LocalizedText.fromJson(o['label']) ?? LocalizedText('${o['id']}', '${o['id']}'),
+                args: _strings(o['args']),
+                icon: o['icon'] as String?,
+              ),
         ],
       );
 
@@ -187,10 +223,13 @@ class BuildTaskGroup {
 }
 
 class BuildToolOption {
-  const BuildToolOption({required this.id, required this.label, required this.args, this.icon});
+  const BuildToolOption({required this.id, required this.labelText, required this.args, this.icon});
 
   final String id;
-  final String label;
+  final LocalizedText labelText;
+
+  /// 按当前界面语言取的名字。
+  String get label => labelText.text;
   final List<String> args;
 
   /// 图标名(界面认识的几个:`cloud_off`、`skip`;不认识时用通用图标)。
@@ -199,7 +238,7 @@ class BuildToolOption {
 
 /// 一个安装步骤:下载并解压 / 运行命令 / 给用户的说明。
 class InstallStep {
-  const InstallStep({this.downloads, this.extract, this.to, this.run, this.env = const {}, this.guide, this.executable = false});
+  const InstallStep({this.downloads, this.extract, this.to, this.run, this.env = const {}, this.guideText, this.executable = false});
 
   factory InstallStep.fromJson(Map<String, dynamic> j) => InstallStep(
         downloads: j['download'] is String
@@ -211,7 +250,7 @@ class InstallStep {
         to: j['to'] as String?,
         run: j['run'] == null ? null : _strings(j['run']),
         env: {for (final e in ((j['env'] as Map?) ?? const {}).entries) e.key as String: e.value as String},
-        guide: j['guide'] as String?,
+        guideText: LocalizedText.fromJson(j['guide']),
         executable: j['executable'] == true,
       );
 
@@ -229,7 +268,10 @@ class InstallStep {
   final Map<String, String> env;
 
   /// 需要用户自己处理的说明(不执行任何操作)。
-  final String? guide;
+  final LocalizedText? guideText;
+
+  /// [guideText] 按当前界面语言取的文字。
+  String? get guide => guideText?.text;
 
   /// 下载的单个文件要加可执行权限。
   final bool executable;
@@ -243,7 +285,7 @@ class PluginManifest {
     required this.name,
     required this.version,
     this.publisher = '',
-    this.description = '',
+    this.descriptionText = const LocalizedText('', ''),
     this.categories = const [],
     this.sizeMB,
     this.requires = const [],
@@ -262,7 +304,7 @@ class PluginManifest {
       name: j['name'] as String? ?? j['id'] as String,
       version: j['version'] as String? ?? '0.0.0',
       publisher: j['publisher'] as String? ?? '',
-      description: j['description'] as String? ?? '',
+      descriptionText: LocalizedText.fromJson(j['description']) ?? const LocalizedText('', ''),
       categories: _strings(j['categories']),
       sizeMB: (j['sizeMB'] as num?)?.toDouble(),
       requires: [for (final r in (j['requires'] as List? ?? const [])) PluginRequirement.fromJson(Map<String, dynamic>.from(r as Map))],
@@ -286,7 +328,10 @@ class PluginManifest {
   final String name;
   final String version;
   final String publisher;
-  final String description;
+  final LocalizedText descriptionText;
+
+  /// 按当前界面语言取的说明。
+  String get description => descriptionText.text;
   final List<String> categories;
   final double? sizeMB;
   final List<PluginRequirement> requires;

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../core/platform/browsers.dart' as browsers;
 import '../../core/theme/intellij_theme.dart';
 import '../notifications/notifications.dart';
+import '../../core/l10n/l10n.dart';
 
 export '../../core/platform/paths.dart' show absoluteFilePath;
 
@@ -68,7 +69,7 @@ class OpenInBrowserBar extends StatelessWidget {
     await beforeOpen?.call();
     final error = await service.open(b, file, projectRoot: projectRoot);
     if (error != null && error.isNotEmpty && context.mounted) {
-      showNotice(context, '无法用 ${b.name} 打开:$error', error: true);
+      showNotice(context, tr('无法用 ${b.name} 打开:$error', 'Cannot open in ${b.name}: $error'), error: true);
     }
   }
 
@@ -92,7 +93,7 @@ class OpenInBrowserBar extends StatelessWidget {
             children: [
               for (final b in list)
                 Tooltip(
-                  message: '在 ${b.name} 中打开 $name',
+                  message: tr('在 ${b.name} 中打开 $name', 'Open $name in ${b.name}'),
                   waitDuration: const Duration(milliseconds: 400),
                   child: InkWell(
                     key: ValueKey('open-in-${b.id}'),

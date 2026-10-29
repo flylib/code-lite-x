@@ -79,14 +79,14 @@ void main() {
     ));
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
-    expect(find.text('Settings'), findsOneWidget);
+    expect(find.text('设置'), findsOneWidget);
     expect(find.text('自动保存文件'), findsOneWidget);
 
     await tester.tap(find.text('自动保存文件'));
     await tester.pump();
     expect(sessions.autosave, isFalse);
 
-    await tester.tap(find.text('Appearance'));
+    await tester.tap(find.text('外观'));
     await tester.pumpAndSettle();
     // 显示开关在字号、配色之后:滚动到可见
     await tester.scrollUntilVisible(find.text('显示行号'), 200, scrollable: find.byType(Scrollable).last);
@@ -97,7 +97,7 @@ void main() {
 
     await tester.tap(find.byTooltip('关闭'));
     await tester.pumpAndSettle();
-    expect(find.text('Settings'), findsNothing);
+    expect(find.text('设置'), findsNothing);
     s.dispose();
   });
 }

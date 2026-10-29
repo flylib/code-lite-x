@@ -1,14 +1,16 @@
 import 'dart:typed_data';
 
+import '../l10n/l10n.dart';
+
 // web 没有 dart:io:文件夹选择与最近项目都不可用,调用方按"不支持"处理。
 
 Future<String?> pickDirectory() async => null;
 
-Future<String?> createEmptyFile(String root, String relPath) async => 'web 预览不支持创建文件';
+Future<String?> createEmptyFile(String root, String relPath) async => tr('web 预览不支持创建文件', 'Creating files is not supported in the web preview');
 
 Future<String?> pickProject() async => null;
 
-Future<String?> renamePath(String from, String to) async => 'web 预览不支持改名';
+Future<String?> renamePath(String from, String to) async => tr('web 预览不支持改名', 'Renaming is not supported in the web preview');
 
 Future<bool> directoryExists(String path) async => false;
 
@@ -37,9 +39,9 @@ Future<String?> pickSavePath(String suggestedName) async => null;
 
 Future<String?> pickFile({String? message, String? directory}) async => null;
 
-Future<(String?, String?)> detectMake(String path) async => (null, '浏览器里不能运行 make');
+Future<(String?, String?)> detectMake(String path) async => (null, tr('浏览器里不能运行 make', 'make cannot run in the browser'));
 
-Future<String?> writeTextFile(String path, String content) async => 'web 预览不支持写文件';
+Future<String?> writeTextFile(String path, String content) async => tr('web 预览不支持写文件', 'Writing files is not supported in the web preview');
 
 Future<Map<String, dynamic>> loadSettings() async => const {};
 
@@ -50,6 +52,6 @@ String? homeDirectory() => null;
 String repositoryNameFromUrl(String url) => '';
 
 Future<(String?, String?)> cloneRepository(String url, String parentDir, {String? name}) async =>
-    (null, 'web 预览不支持克隆');
+    (null, tr('web 预览不支持克隆', 'Cloning is not supported in the web preview'));
 
-Future<(String?, String?)> createProject(String parentDir, String name) async => (null, 'web 预览不支持新建项目');
+Future<(String?, String?)> createProject(String parentDir, String name) async => (null, tr('web 预览不支持新建项目', 'Creating projects is not supported in the web preview'));

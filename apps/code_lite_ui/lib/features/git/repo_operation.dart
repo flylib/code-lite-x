@@ -1,3 +1,5 @@
+import '../../core/l10n/l10n.dart';
+
 /// 一个有冲突的文件。路径相对仓库根。
 class ConflictFile {
   const ConflictFile({required this.path, required this.yours, required this.theirs});
@@ -59,20 +61,20 @@ class RepoOperation {
 
   /// 标题栏上的进行时:Merging / Rebasing / Cherry-picking / Reverting。
   String get verb => switch (kind) {
-        'merge' => 'Merging',
-        'rebase' => 'Rebasing',
-        'cherry-pick' => 'Cherry-picking',
-        'revert' => 'Reverting',
-        _ => 'Conflicts',
+        'merge' => tr('正在合并', 'Merging'),
+        'rebase' => tr('正在变基', 'Rebasing'),
+        'cherry-pick' => tr('正在拣选', 'Cherry-picking'),
+        'revert' => tr('正在还原', 'Reverting'),
+        _ => tr('冲突', 'Conflicts'),
       };
 
   /// 放弃 / 完成按钮上的名字:Merge / Rebase / Cherry-pick / Revert。
   String get noun => switch (kind) {
-        'merge' => 'Merge',
-        'rebase' => 'Rebase',
-        'cherry-pick' => 'Cherry-pick',
-        'revert' => 'Revert',
-        _ => 'Operation',
+        'merge' => tr('合并', 'Merge'),
+        'rebase' => tr('变基', 'Rebase'),
+        'cherry-pick' => tr('拣选', 'Cherry-pick'),
+        'revert' => tr('还原', 'Revert'),
+        _ => tr('操作', 'Operation'),
       };
 
   /// 可以放弃:有明确的进行中操作才能 `--abort`(只有冲突没有操作时不行)。
@@ -81,6 +83,28 @@ class RepoOperation {
   /// 对话框第一行的说明,按 (文字, 是否粗体) 分段。
   List<(String, bool)> describe(String? currentBranch) {
     final name = branch ?? currentBranch;
+    if (!L10n.isEnglish) {
+      return switch (kind) {
+        'merge' => [
+            ('正在将分支 ', false),
+            (incoming ?? '?', true),
+            (' 合并到分支 ', false),
+            (name ?? 'HEAD', true),
+          ],
+        'rebase' => [
+            ('正在将分支 ', false),
+            (name ?? 'HEAD', true),
+            if (onto != null) ...[(' 变基到 ', false), (onto!, true)] else (' 变基', false),
+          ],
+        'cherry-pick' || 'revert' => [
+            ('正在分支 ', false),
+            (name ?? 'HEAD', true),
+            (kind == 'revert' ? ' 上还原提交 ' : ' 上拣选提交 ', false),
+            (incoming ?? '?', true),
+          ],
+        _ => [('这些文件有未解决的冲突', false)],
+      };
+    }
     return switch (kind) {
       'merge' => [
           ('Merging branch ', false),

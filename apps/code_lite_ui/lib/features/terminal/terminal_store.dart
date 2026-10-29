@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../core/client/api_client.dart';
 import '../../core/state/dispose_safe.dart';
+import '../../core/l10n/l10n.dart';
 
 class TerminalSession {
   TerminalSession(this.id, this.title);
@@ -39,12 +40,12 @@ class TerminalStore extends ChangeNotifier with DisposeSafeNotifier {
     final res = _client.ptyOpen(rows, cols);
     final id = res['id'] as String?;
     if (res['status'] != 'ok' || id == null) {
-      _error = (res['error'] as String?) ?? '无法启动终端';
+      _error = (res['error'] as String?) ?? tr('无法启动终端', 'Cannot start the terminal');
       notifyListeners();
       return null;
     }
     if (title == null) _opened++;
-    final session = TerminalSession(id, title ?? (_opened == 1 ? 'Local' : 'Local ($_opened)'));
+    final session = TerminalSession(id, title ?? (_opened == 1 ? tr('本地', 'Local') : tr('本地 ($_opened)', 'Local ($_opened)')));
     _sessions.add(session);
     _active = _sessions.length - 1;
     _error = null;

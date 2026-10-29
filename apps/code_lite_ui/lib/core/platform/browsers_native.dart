@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:typed_data';
 
+import '../l10n/l10n.dart';
 import 'browsers_stub.dart' show BrowserApp;
 
 export 'browsers_stub.dart' show BrowserApp;
@@ -136,7 +137,7 @@ Future<Uint8List?> browserIcon(BrowserApp browser) async {
 /// 成功返回 null,失败返回原因。只放行 http / https / mailto,别的协议不交给系统。
 Future<String?> openExternalUrl(String url) async {
   final uri = Uri.tryParse(url);
-  if (uri == null || !const {'http', 'https', 'mailto'}.contains(uri.scheme)) return '不支持的链接: $url';
+  if (uri == null || !const {'http', 'https', 'mailto'}.contains(uri.scheme)) return tr('不支持的链接: $url', 'Unsupported link: $url');
   try {
     final r = Platform.isMacOS
         ? await Process.run('open', [url])

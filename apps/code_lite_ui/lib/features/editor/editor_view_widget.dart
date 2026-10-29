@@ -28,6 +28,7 @@ import 'syntax/document_highlighter.dart';
 import 'syntax/language.dart';
 import 'syntax/languages.dart';
 import '../notifications/notifications.dart';
+import '../../core/l10n/l10n.dart';
 
 /// 差异标签的 id 前缀:`diff:<相对仓库根的路径>`。
 const String diffTabPrefix = 'diff:';
@@ -1022,9 +1023,9 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          button(MarkdownViewMode.editor, Icons.notes, 'Editor Only'),
-          button(MarkdownViewMode.split, Icons.chrome_reader_mode_outlined, 'Editor and Preview'),
-          button(MarkdownViewMode.preview, Icons.visibility_outlined, 'Preview Only'),
+          button(MarkdownViewMode.editor, Icons.notes, tr('仅编辑器', 'Editor Only')),
+          button(MarkdownViewMode.split, Icons.chrome_reader_mode_outlined, tr('编辑器和预览', 'Editor and Preview')),
+          button(MarkdownViewMode.preview, Icons.visibility_outlined, tr('仅预览', 'Preview Only')),
           const SizedBox(width: 4),
           Container(width: 1, height: 16, color: IntelliJTheme.border),
         ],
@@ -1057,11 +1058,11 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
                 final isPrTimeline = path.startsWith(prTimelineTabPrefix);
                 final fileName = widget.specialTabTitle?.call(path) ??
                     (path.startsWith(diffTabPrefix)
-                        ? 'Commit: ${path.split('/').last}'
+                        ? tr('提交: ${path.split('/').last}', 'Commit: ${path.split('/').last}')
                         : path.startsWith(prDiffTabPrefix)
-                            ? 'Diff for Pull Request #${path.substring(prDiffTabPrefix.length)}'
+                            ? tr('拉取请求 #${path.substring(prDiffTabPrefix.length)} 的差异', 'Diff for Pull Request #${path.substring(prDiffTabPrefix.length)}')
                             : isPrTimeline
-                                ? 'Pull Request #${path.substring(prTimelineTabPrefix.length)}'
+                                ? tr('拉取请求 #${path.substring(prTimelineTabPrefix.length)}', 'Pull Request #${path.substring(prTimelineTabPrefix.length)}')
                                 : path.split('/').last);
                 final isActive = path == widget.activeFile;
                 final isDirty = widget.isTabDirty?.call(path) ?? (isActive && _controller.isDirty);
@@ -1138,7 +1139,7 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Tooltip(
-                message: 'Split Right (Horizontal)',
+                message: tr('向右拆分(水平)', 'Split Right (Horizontal)'),
                 child: InkWell(
                   onTap: () => widget.onSplitChange?.call(
                     widget.splitDirection == SplitDirection.horizontal
@@ -1158,7 +1159,7 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
                 ),
               ),
               Tooltip(
-                message: 'Split Down (Vertical)',
+                message: tr('向下拆分(垂直)', 'Split Down (Vertical)'),
                 child: InkWell(
                   onTap: () => widget.onSplitChange?.call(
                     widget.splitDirection == SplitDirection.vertical
@@ -1179,7 +1180,7 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
               ),
               if (widget.splitDirection != SplitDirection.none)
                 Tooltip(
-                  message: 'Close Split',
+                  message: tr('关闭拆分', 'Close Split'),
                   child: InkWell(
                     onTap: () => widget.onCloseSplit?.call(),
                     child: const Padding(
@@ -1492,16 +1493,16 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                '$lineCount lines • UTF-8${isDirty ? ' • Modified' : ''}',
+                tr('$lineCount 行 • UTF-8${isDirty ? ' • 已修改' : ''}', '$lineCount lines • UTF-8${isDirty ? ' • Modified' : ''}'),
                 style: const TextStyle(color: IntelliJTheme.textMuted, fontSize: 10),
               ),
               if (!isPrimary) ...[
                 const SizedBox(width: 8),
                 InkWell(
                   onTap: () => widget.onCloseSplit?.call(),
-                  child: const Tooltip(
-                    message: 'Close Split Pane',
-                    child: Icon(Icons.close, size: 13, color: IntelliJTheme.textMuted),
+                  child: Tooltip(
+                    message: tr('关闭拆分窗格', 'Close Split Pane'),
+                    child: const Icon(Icons.close, size: 13, color: IntelliJTheme.textMuted),
                   ),
                 ),
               ],
@@ -1621,7 +1622,7 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
 
   /// 行号栏的运行按钮(绿色 ▶)。
   Widget _runMarker(String target, void Function(String target) onRun) => Tooltip(
-        message: "运行 'make $target'",
+        message: tr("运行 'make $target'", "Run 'make $target'"),
         waitDuration: const Duration(milliseconds: 400),
         child: _foldArrow(Icons.play_arrow, () => onRun(target), key: ValueKey('make-run-$target'), color: const Color(0xFF5FB865)),
       );
@@ -1785,18 +1786,18 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
     return [
       MenuItemButton(
         onPressed: widget.apiClient == null ? null : () => _toggleBlame(controller, filePath),
-        child: Text(blameOn ? 'Close Annotations' : 'Annotate with Git Blame'),
+        child: Text(blameOn ? tr('关闭注解', 'Close Annotations') : tr('使用 Git Blame 注解', 'Annotate with Git Blame')),
       ),
       const MenuDivider(),
       MenuItemButton(
         shortcut: const SingleActivator(LogicalKeyboardKey.f3),
         onPressed: () => controller.toggleBookmark(line),
-        child: Text(hasBookmark ? 'Remove Bookmark' : 'Add Bookmark'),
+        child: Text(hasBookmark ? tr('移除书签', 'Remove Bookmark') : tr('添加书签', 'Add Bookmark')),
       ),
       MenuItemButton(
         shortcut: const SingleActivator(LogicalKeyboardKey.f3, alt: true),
         onPressed: () => _editMnemonic(controller, line),
-        child: Text(mnemonic == null ? 'Add Mnemonic Bookmark…' : 'Edit Mnemonic Bookmark…'),
+        child: Text(mnemonic == null ? tr('添加助记书签…', 'Add Mnemonic Bookmark…') : tr('编辑助记书签…', 'Edit Mnemonic Bookmark…')),
       ),
       const MenuDivider(),
       SubmenuButton(
@@ -1804,20 +1805,20 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
           CheckboxMenuButton(
             value: _appearance.showLineNumbers,
             onChanged: (_) => _appearance.toggleLineNumbers(),
-            child: const Text('Show Line Numbers'),
+            child: Text(tr('显示行号', 'Show Line Numbers')),
           ),
           CheckboxMenuButton(
             value: _appearance.showIndentGuides,
             onChanged: (_) => _appearance.toggleIndentGuides(),
-            child: const Text('Show Indent Guides'),
+            child: Text(tr('显示缩进参考线', 'Show Indent Guides')),
           ),
           CheckboxMenuButton(
             value: _appearance.showBreadcrumbs,
             onChanged: (_) => _appearance.toggleBreadcrumbs(),
-            child: const Text('Breadcrumbs'),
+            child: Text(tr('痕迹导航', 'Breadcrumbs')),
           ),
         ],
-        child: const Text('Appearance'),
+        child: Text(tr('外观', 'Appearance')),
       ),
     ];
   }
@@ -1868,7 +1869,7 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
       session.data = data;
     });
     if (data == null) {
-      showNotice(context, '无法获取 Git Blame: $filePath 不在 Git 仓库中或尚未提交', error: true);
+      showNotice(context, tr('无法获取 Git Blame: $filePath 不在 Git 仓库中或尚未提交', 'Cannot get Git Blame: $filePath is not in a Git repository or not committed yet'), error: true);
       _blame.remove(controller)?.dispose(controller);
       setState(() {});
     }
@@ -1915,7 +1916,7 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
       DiffHunkKind.deleted => const Color(0xFFDB5860),
     };
     return Tooltip(
-      message: '${hunk.kind.name.toUpperCase()} (Line ${hunk.line}) - Click to inspect diff',
+      message: tr('${_hunkKindLabel(hunk.kind)}(第 ${hunk.line} 行)- 点击查看差异', '${_hunkKindLabel(hunk.kind)} (Line ${hunk.line}) - Click to inspect diff'),
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: () => onHunkTap(hunk),
@@ -1970,13 +1971,13 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
                         border: Border.all(color: badgeColor, width: 0.8),
                       ),
                       child: Text(
-                        hunk.kind.name.toUpperCase(),
+                        _hunkKindLabel(hunk.kind),
                         style: TextStyle(color: badgeColor, fontSize: 10, fontWeight: FontWeight.bold),
                       ),
                     ),
                     const SizedBox(width: 8),
                     Text(
-                      'Line ${hunk.line}',
+                      tr('第 ${hunk.line} 行', 'Line ${hunk.line}'),
                       style: const TextStyle(color: IntelliJTheme.textPrimary, fontSize: 11, fontWeight: FontWeight.w600),
                     ),
                     const Spacer(),
@@ -1999,12 +2000,12 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
                           borderRadius: BorderRadius.circular(4),
                           border: Border.all(color: const Color(0xFF4C5052), width: 0.8),
                         ),
-                        child: const Row(
+                        child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.undo, size: 11, color: Color(0xFF6CB4F8)),
-                            SizedBox(width: 4),
-                            Text('Revert', style: TextStyle(color: Color(0xFF6CB4F8), fontSize: 10, fontWeight: FontWeight.w600)),
+                            const Icon(Icons.undo, size: 11, color: Color(0xFF6CB4F8)),
+                            const SizedBox(width: 4),
+                            Text(tr('还原', 'Revert'), style: const TextStyle(color: Color(0xFF6CB4F8), fontSize: 10, fontWeight: FontWeight.w600)),
                           ],
                         ),
                       ),
@@ -2203,7 +2204,7 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
     if (tipDiags.isNotEmpty) {
       final diag = tipDiags.first;
       return Tooltip(
-        message: '[${diag.code ?? (diag.isError ? "Error" : "Warning")}] ${diag.message}',
+        message: '[${diag.code ?? (diag.isError ? tr('错误', 'Error') : tr('警告', 'Warning'))}] ${diag.message}',
         child: lineContent,
       );
     }
@@ -2307,7 +2308,7 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
               child: hover == null
                   ? stripe
                   : Tooltip(
-                      message: '${hover.isError ? '错误' : '警告'}(第 ${hover.line + 1} 行):${hover.message}',
+                      message: tr('${hover.isError ? '错误' : '警告'}(第 ${hover.line + 1} 行):${hover.message}', '${hover.isError ? 'Error' : 'Warning'} (line ${hover.line + 1}): ${hover.message}'),
                       waitDuration: const Duration(milliseconds: 300),
                       child: stripe,
                     ),
@@ -2374,3 +2375,10 @@ class _HoverBuilderState extends State<_HoverBuilder> {
     );
   }
 }
+
+/// 改动块类型的显示名(行号栏色条的提示、改动块浮层的标签)。
+String _hunkKindLabel(DiffHunkKind kind) => switch (kind) {
+      DiffHunkKind.added => tr('新增', 'ADDED'),
+      DiffHunkKind.modified => tr('修改', 'MODIFIED'),
+      DiffHunkKind.deleted => tr('删除', 'DELETED'),
+    };

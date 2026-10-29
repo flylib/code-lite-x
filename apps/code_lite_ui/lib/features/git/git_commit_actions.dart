@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../core/l10n/l10n.dart';
 import '../../core/platform/workspace_io.dart' as io;
 import '../../core/theme/intellij_theme.dart';
 import 'diff_view.dart';
@@ -34,31 +35,31 @@ class GitCommitActions {
     final children = store.childrenOf(commit.hash);
 
     final entries = <PopupMenuEntry<VoidCallback>>[
-      _item('Copy Revision Number', Icons.copy, () => copyHash(commit.hash), shortcut: '⌥⇧⌘C'),
-      _item('Create Patch...', Icons.add, () => createPatch(commit)),
-      _item('Cherry-Pick', Icons.local_florist_outlined, idle && !inHead ? () => cherryPick(commit.hash) : null),
+      _item(tr('复制修订号', 'Copy Revision Number'), Icons.copy, () => copyHash(commit.hash), shortcut: '⌥⇧⌘C'),
+      _item(tr('创建补丁...', 'Create Patch...'), Icons.add, () => createPatch(commit)),
+      _item(tr('拣选', 'Cherry-Pick'), Icons.local_florist_outlined, idle && !inHead ? () => cherryPick(commit.hash) : null),
       const PopupMenuDivider(height: 9),
-      _item('Checkout Revision', null, idle ? () => checkoutRevision(commit) : null),
-      _item('Show Repository at Revision', null, () => showRepositoryAt(commit)),
-      _item('Compare with Local', null, () => compareWithLocal(commit)),
+      _item(tr('签出修订', 'Checkout Revision'), null, idle ? () => checkoutRevision(commit) : null),
+      _item(tr('显示修订时的仓库', 'Show Repository at Revision'), null, () => showRepositoryAt(commit)),
+      _item(tr('与本地比较', 'Compare with Local'), null, () => compareWithLocal(commit)),
       const PopupMenuDivider(height: 9),
-      _item('Reset Current Branch to Here...', Icons.undo, idle && !store.detached ? () => resetTo(commit) : null),
-      _item('Revert Commit', null, idle && inHead ? () => revert(commit) : null),
-      _item('Undo Commit...', null, idle && isHead && commit.parents.isNotEmpty ? () => undoCommit(commit) : null),
+      _item(tr('将当前分支重置到此处...', 'Reset Current Branch to Here...'), Icons.undo, idle && !store.detached ? () => resetTo(commit) : null),
+      _item(tr('还原提交', 'Revert Commit'), null, idle && inHead ? () => revert(commit) : null),
+      _item(tr('撤销提交...', 'Undo Commit...'), null, idle && isHead && commit.parents.isNotEmpty ? () => undoCommit(commit) : null),
       const PopupMenuDivider(height: 9),
-      _item('Edit Commit Message...', null, idle && inHead ? () => editMessage(commit.hash) : null, shortcut: 'F2'),
-      _item('Fixup...', null, idle && inHead ? () => fixup(commit) : null),
-      _item('Squash Into...', null, idle && inHead ? () => squashInto(commit) : null),
-      _item('Drop Commit', null, idle && inHead ? () => drop(commit) : null),
-      _item('Interactively Rebase from Here...', null, idle && inHead ? () => interactiveRebase(commit) : null),
-      _item('Push All up to Here...', null, idle && inHead && !store.detached ? () => pushUpTo(commit) : null),
+      _item(tr('编辑提交消息...', 'Edit Commit Message...'), null, idle && inHead ? () => editMessage(commit.hash) : null, shortcut: 'F2'),
+      _item(tr('修正...', 'Fixup...'), null, idle && inHead ? () => fixup(commit) : null),
+      _item(tr('压缩到...', 'Squash Into...'), null, idle && inHead ? () => squashInto(commit) : null),
+      _item(tr('丢弃提交', 'Drop Commit'), null, idle && inHead ? () => drop(commit) : null),
+      _item(tr('从此处交互式变基...', 'Interactively Rebase from Here...'), null, idle && inHead ? () => interactiveRebase(commit) : null),
+      _item(tr('推送到此处为止的所有提交...', 'Push All up to Here...'), null, idle && inHead && !store.detached ? () => pushUpTo(commit) : null),
       const PopupMenuDivider(height: 9),
-      _item('New Branch...', null, idle ? () => newBranch(commit) : null),
-      _item('New Tag...', null, idle ? () => newTag(commit) : null),
+      _item(tr('新建分支...', 'New Branch...'), null, idle ? () => newBranch(commit) : null),
+      _item(tr('新建标签...', 'New Tag...'), null, idle ? () => newTag(commit) : null),
       const PopupMenuDivider(height: 9),
-      _item('Go to Child Commit', null, children.isEmpty ? null : () => onGoTo?.call(children.first), shortcut: '←'),
+      _item(tr('转到子提交', 'Go to Child Commit'), null, children.isEmpty ? null : () => onGoTo?.call(children.first), shortcut: '←'),
       _item(
-        'Go to Parent Commit',
+        tr('转到父提交', 'Go to Parent Commit'),
         null,
         commit.parents.isEmpty ? null : () => onGoTo?.call(commit.parents.first),
         shortcut: '→',
@@ -132,36 +133,39 @@ class GitCommitActions {
 
   Future<void> copyHash(String hash) async {
     await Clipboard.setData(ClipboardData(text: hash));
-    _toast('已复制 $hash');
+    _toast(tr('已复制 $hash', 'Copied $hash'));
   }
 
-  Future<void> cherryPick(String hash) => _run('Cherry-Pick', 'git.cherry_pick', {'hash': hash}, success: 'Cherry-pick 完成');
+  Future<void> cherryPick(String hash) => _run(tr('拣选', 'Cherry-Pick'), 'git.cherry_pick', {'hash': hash}, success: tr('拣选完成', 'Cherry-pick completed'));
 
   Future<void> checkoutRevision(GitCommit c) async {
     final ok = await _confirm(
-      'Checkout Revision',
-      '签出 ${c.short} 后会处于 detached HEAD 状态,之后的提交不属于任何分支。继续吗?',
-      action: 'Checkout',
+      tr('签出修订', 'Checkout Revision'),
+      tr('签出 ${c.short} 后会处于 detached HEAD 状态,之后的提交不属于任何分支。继续吗?',
+          'After checking out ${c.short} you will be in detached HEAD state, and new commits will not belong to any branch. Continue?'),
+      action: tr('签出', 'Checkout'),
     );
-    if (ok) await _run('Checkout', 'git.checkout_revision', {'hash': c.hash}, success: '已签出 ${c.short}');
+    if (ok) await _run(tr('签出', 'Checkout'), 'git.checkout_revision', {'hash': c.hash}, success: tr('已签出 ${c.short}', 'Checked out ${c.short}'));
   }
 
   Future<void> revert(GitCommit c) =>
-      _run('Revert', 'git.revert', {'hash': c.hash}, success: '已生成撤销 ${c.short} 的提交');
+      _run(tr('还原', 'Revert'), 'git.revert', {'hash': c.hash}, success: tr('已生成撤销 ${c.short} 的提交', 'Created a commit that reverts ${c.short}'));
 
   Future<void> undoCommit(GitCommit c) async {
     final ok = await _confirm(
-      'Undo Commit',
-      '撤销最近一次提交「${c.subject}」,其改动会保留为已暂存的修改。',
-      action: 'Undo',
+      tr('撤销提交', 'Undo Commit'),
+      tr('撤销最近一次提交「${c.subject}」,其改动会保留为已暂存的修改。',
+          'Undo the last commit "${c.subject}"; its changes will be kept as staged changes.'),
+      action: tr('撤销', 'Undo'),
     );
-    if (ok) await _run('Undo Commit', 'git.undo_commit', const {}, success: '已撤销提交');
+    if (ok) await _run(tr('撤销提交', 'Undo Commit'), 'git.undo_commit', const {}, success: tr('已撤销提交', 'Commit undone'));
   }
 
   Future<void> resetTo(GitCommit c) async {
     final mode = await showDialog<String>(context: context, builder: (_) => _ResetDialog(commit: c, branch: store.currentBranch));
     if (mode == null) return;
-    await _run('Reset', 'git.reset', {'hash': c.hash, 'mode': mode}, success: '已 $mode reset 到 ${c.short}');
+    await _run(tr('重置', 'Reset'), 'git.reset', {'hash': c.hash, 'mode': mode},
+        success: tr('已重置($mode)到 ${c.short}', 'Reset to ${c.short} ($mode)'));
   }
 
   /// 改写历史前的提醒:提交已推送时,改写后需要强制推送。
@@ -170,61 +174,66 @@ class GitCommitActions {
     if (res['pushed'] != true) return true;
     return _confirm(
       what,
-      '这个提交已经推送到远程。改写历史后本地与远程分叉,需要强制推送,可能影响其他协作者。仍然继续吗?',
-      action: '继续',
+      tr('这个提交已经推送到远程。改写历史后本地与远程分叉,需要强制推送,可能影响其他协作者。仍然继续吗?',
+          'This commit has already been pushed to the remote. Rewriting history makes the local and remote branches diverge and requires a force push, which may affect other collaborators. Continue anyway?'),
+      action: tr('继续', 'Continue'),
       danger: true,
     );
   }
 
   Future<void> editMessage(String hash) async {
     final res = await store.call('git.commit_details', {'hash': hash});
-    if (res['status'] != 'ok') return _toast(res['error'] as String? ?? '读取提交失败', error: true);
-    if (!await _guardRewrite(hash, 'Edit Commit Message')) return;
+    if (res['status'] != 'ok') return _toast(res['error'] as String? ?? tr('读取提交失败', 'Failed to read the commit'), error: true);
+    if (!await _guardRewrite(hash, tr('编辑提交消息', 'Edit Commit Message'))) return;
     final message = await promptText(
-      title: 'Edit Commit Message',
+      title: tr('编辑提交消息', 'Edit Commit Message'),
       label: hash.substring(0, 8),
       initial: res['message'] as String? ?? '',
       multiline: true,
-      action: 'OK',
     );
     if (message == null || message.trim().isEmpty) return;
-    await _run('Edit Commit Message', 'git.reword', {'hash': hash, 'message': message.trim()}, success: '提交信息已修改');
+    await _run(tr('编辑提交消息', 'Edit Commit Message'), 'git.reword', {'hash': hash, 'message': message.trim()},
+        success: tr('提交信息已修改', 'Commit message changed'));
   }
 
   Future<void> fixup(GitCommit c) async {
-    if (!await _guardRewrite(c.hash, 'Fixup')) return;
+    if (!await _guardRewrite(c.hash, tr('修正', 'Fixup'))) return;
     final ok = await _confirm(
-      'Fixup',
-      '把当前已暂存的修改合并进「${c.subject}」,保留它原来的提交信息。',
-      action: 'Fixup',
+      tr('修正', 'Fixup'),
+      tr('把当前已暂存的修改合并进「${c.subject}」,保留它原来的提交信息。',
+          'Merge the currently staged changes into "${c.subject}", keeping its original commit message.'),
+      action: tr('修正', 'Fixup'),
     );
-    if (ok) await _run('Fixup', 'git.fixup', {'hash': c.hash}, success: '已合并进 ${c.short}');
+    if (ok) await _run(tr('修正', 'Fixup'), 'git.fixup', {'hash': c.hash}, success: tr('已合并进 ${c.short}', 'Merged into ${c.short}'));
   }
 
   Future<void> squashInto(GitCommit c) async {
-    if (!await _guardRewrite(c.hash, 'Squash Into')) return;
+    if (!await _guardRewrite(c.hash, tr('压缩到', 'Squash Into'))) return;
     final res = await store.call('git.commit_details', {'hash': c.hash});
     final message = await promptText(
-      title: 'Squash Into ${c.short}',
-      label: '把当前已暂存的修改合并进这个提交,并使用下面的提交信息',
+      title: tr('压缩到 ${c.short}', 'Squash Into ${c.short}'),
+      label: tr('把当前已暂存的修改合并进这个提交,并使用下面的提交信息',
+          'Merge the currently staged changes into this commit and use the commit message below'),
       initial: res['message'] as String? ?? c.subject,
       multiline: true,
-      action: 'Squash',
+      action: tr('压缩', 'Squash'),
     );
     if (message == null || message.trim().isEmpty) return;
-    await _run('Squash', 'git.squash_into', {'hash': c.hash, 'message': message.trim()}, success: '已合并进 ${c.short}');
+    await _run(tr('压缩', 'Squash'), 'git.squash_into', {'hash': c.hash, 'message': message.trim()},
+        success: tr('已合并进 ${c.short}', 'Squashed into ${c.short}'));
   }
 
   Future<void> drop(GitCommit c) async {
-    if (!await _guardRewrite(c.hash, 'Drop Commit')) return;
-    final ok = await _confirm('Drop Commit', '从历史中删除提交「${c.subject}」?', action: 'Drop', danger: true);
-    if (ok) await _run('Drop', 'git.drop', {'hash': c.hash}, success: '已删除 ${c.short}');
+    if (!await _guardRewrite(c.hash, tr('丢弃提交', 'Drop Commit'))) return;
+    final ok = await _confirm(tr('丢弃提交', 'Drop Commit'), tr('从历史中删除提交「${c.subject}」?', 'Remove the commit "${c.subject}" from history?'),
+        action: tr('丢弃', 'Drop'), danger: true);
+    if (ok) await _run(tr('丢弃', 'Drop'), 'git.drop', {'hash': c.hash}, success: tr('已删除 ${c.short}', 'Dropped ${c.short}'));
   }
 
   Future<void> interactiveRebase(GitCommit c) async {
     final plan = await store.call('git.rebase_plan', {'hash': c.hash});
-    if (plan['status'] != 'ok') return _toast(plan['error'] as String? ?? '无法生成 rebase 计划', error: true);
-    if (!await _guardRewrite(c.hash, 'Interactive Rebase')) return;
+    if (plan['status'] != 'ok') return _toast(plan['error'] as String? ?? tr('无法生成 rebase 计划', 'Cannot create the rebase plan'), error: true);
+    if (!await _guardRewrite(c.hash, tr('交互式变基', 'Interactive Rebase'))) return;
     if (!context.mounted) return;
     final entries = [
       for (final e in (plan['entries'] as List? ?? const []))
@@ -236,7 +245,7 @@ class GitCommitActions {
     );
     if (result == null) return;
     await _run(
-      'Rebase',
+      tr('变基', 'Rebase'),
       'git.rebase_interactive',
       {
         'base': plan['base'],
@@ -249,7 +258,7 @@ class GitCommitActions {
             },
         ],
       },
-      success: 'Rebase 完成',
+      success: tr('变基完成', 'Rebase completed'),
     );
   }
 
@@ -257,13 +266,13 @@ class GitCommitActions {
     final local = store.localBranches.where((b) => b.current).firstOrNull;
     final target = local?.upstream ?? 'origin/${store.currentBranch}';
     final ok = await _confirm(
-      'Push All up to Here',
-      '把 ${c.short} 及之前的所有提交推送到 $target?',
-      action: 'Push',
+      tr('推送到此处为止的所有提交', 'Push All up to Here'),
+      tr('把 ${c.short} 及之前的所有提交推送到 $target?', 'Push ${c.short} and all commits before it to $target?'),
+      action: tr('推送', 'Push'),
     );
     if (!ok) return;
-    final err = await store.run('Push', 'git.push_up_to', {'hash': c.hash});
-    _toast(err ?? '已推送到 $target', error: err != null);
+    final err = await store.run(tr('推送', 'Push'), 'git.push_up_to', {'hash': c.hash});
+    _toast(err ?? tr('已推送到 $target', 'Pushed to $target'), error: err != null);
   }
 
   Future<void> newBranch(GitCommit c) async {
@@ -273,27 +282,29 @@ class GitCommitActions {
     );
     if (result == null) return;
     final (name, checkout) = result;
-    await _run('New Branch', 'git.new_branch', {'name': name, 'hash': c.hash, 'checkout': checkout},
-        success: checkout ? '已创建并切换到 $name' : '已创建分支 $name');
+    await _run(tr('新建分支', 'New Branch'), 'git.new_branch', {'name': name, 'hash': c.hash, 'checkout': checkout},
+        success: checkout ? tr('已创建并切换到 $name', 'Created and checked out $name') : tr('已创建分支 $name', 'Created branch $name'));
   }
 
   Future<void> newTag(GitCommit c) async {
     final result = await showDialog<(String, String)>(context: context, builder: (_) => _NewTagDialog(commit: c));
     if (result == null) return;
     final (name, message) = result;
-    await _run('New Tag', 'git.new_tag', {'name': name, 'hash': c.hash, if (message.isNotEmpty) 'message': message},
-        success: '已创建标签 $name');
+    await _run(tr('新建标签', 'New Tag'), 'git.new_tag', {'name': name, 'hash': c.hash, if (message.isNotEmpty) 'message': message},
+        success: tr('已创建标签 $name', 'Created tag $name'));
   }
 
   Future<void> goToRevision() async {
-    final rev = await promptText(title: 'Go to Hash/Branch/Tag', label: '输入提交哈希、分支名或标签名');
+    final rev = await promptText(
+        title: tr('转到哈希/分支/标签', 'Go to Hash/Branch/Tag'),
+        label: tr('输入提交哈希、分支名或标签名', 'Enter a commit hash, branch name or tag name'));
     if (rev == null || rev.trim().isEmpty) return;
     // 任意修订名(哈希 / 分支 / 标签)都可以当 log 的起点,取第一条就是它本身。
     final res = await store.call('git.log', {'branch': rev.trim(), 'limit': 1});
     final commits = res['commits'] as List?;
     final hash = commits == null || commits.isEmpty ? null : commits.first['hash'] as String?;
     if (hash == null || !await store.reveal(hash)) {
-      _toast('找不到 ${rev.trim()}(或它不在当前筛选结果中)', error: true);
+      _toast(tr('找不到 ${rev.trim()}(或它不在当前筛选结果中)', 'Cannot find ${rev.trim()} (or it is not in the current filter results)'), error: true);
     }
   }
 
@@ -305,7 +316,7 @@ class GitCommitActions {
       'path': change.path,
       if (change.oldPath != null) 'old_path': change.oldPath,
     });
-    if (res['status'] != 'ok') return _toast(res['error'] as String? ?? '读取 diff 失败', error: true);
+    if (res['status'] != 'ok') return _toast(res['error'] as String? ?? tr('读取 diff 失败', 'Failed to load the diff'), error: true);
     if (!context.mounted) return;
     await _showPanel(
       title: '${change.path}  (${hash.substring(0, 8)})',
@@ -315,19 +326,19 @@ class GitCommitActions {
 
   Future<void> createPatch(GitCommit c) async {
     final res = await store.call('git.create_patch', {'hash': c.hash});
-    if (res['status'] != 'ok') return _toast(res['error'] as String? ?? '生成 patch 失败', error: true);
+    if (res['status'] != 'ok') return _toast(res['error'] as String? ?? tr('生成 patch 失败', 'Failed to create the patch'), error: true);
     final patch = res['patch'] as String? ?? '';
     if (!context.mounted) return;
     await _showPanel(
-      title: 'Create Patch — ${c.short}',
+      title: tr('创建补丁 — ${c.short}', 'Create Patch — ${c.short}'),
       child: DiffView(diff: patch),
       actions: [
         TextButton(
           onPressed: () async {
             await Clipboard.setData(ClipboardData(text: patch));
-            _toast('Patch 已复制到剪贴板');
+            _toast(tr('补丁已复制到剪贴板', 'Patch copied to clipboard'));
           },
-          child: const Text('Copy to Clipboard'),
+          child: Text(tr('复制到剪贴板', 'Copy to Clipboard')),
         ),
         TextButton(
           onPressed: () async {
@@ -335,9 +346,9 @@ class GitCommitActions {
             final path = await io.pickSavePath('${name.length > 60 ? name.substring(0, 60) : name}.patch');
             if (path == null) return;
             final err = await io.writeTextFile(path, patch);
-            _toast(err == null ? '已保存到 $path' : '保存失败: $err', error: err != null);
+            _toast(err == null ? tr('已保存到 $path', 'Saved to $path') : tr('保存失败: $err', 'Save failed: $err'), error: err != null);
           },
-          child: const Text('Save...'),
+          child: Text(tr('保存...', 'Save...')),
         ),
       ],
     );
@@ -345,11 +356,11 @@ class GitCommitActions {
 
   Future<void> compareWithLocal(GitCommit c) async {
     final res = await store.call('git.compare_local', {'hash': c.hash});
-    if (res['status'] != 'ok') return _toast(res['error'] as String? ?? '比较失败', error: true);
+    if (res['status'] != 'ok') return _toast(res['error'] as String? ?? tr('比较失败', 'Comparison failed'), error: true);
     final files = [for (final f in (res['files'] as List? ?? const [])) GitFileChange.fromJson(f as Map<String, dynamic>)];
     if (!context.mounted) return;
     await _showPanel(
-      title: 'Compare ${c.short} with Local — ${files.length} files',
+      title: tr('将 ${c.short} 与本地比较 — ${files.length} 个文件', 'Compare ${c.short} with Local — ${files.length} files'),
       child: _FileBrowser(
         paths: [for (final f in files) f.path],
         statuses: {for (final f in files) f.path: f.status},
@@ -363,16 +374,16 @@ class GitCommitActions {
 
   Future<void> showRepositoryAt(GitCommit c) async {
     final res = await store.call('git.tree_at', {'hash': c.hash});
-    if (res['status'] != 'ok') return _toast(res['error'] as String? ?? '读取文件树失败', error: true);
+    if (res['status'] != 'ok') return _toast(res['error'] as String? ?? tr('读取文件树失败', 'Failed to read the file tree'), error: true);
     final paths = [for (final p in (res['paths'] as List? ?? const [])) p as String];
     if (!context.mounted) return;
     await _showPanel(
-      title: 'Repository at ${c.short} — ${c.subject}',
+      title: tr('${c.short} 时的仓库 — ${c.subject}', 'Repository at ${c.short} — ${c.subject}'),
       child: _FileBrowser(
         paths: paths,
         load: (path) async {
           final f = await store.call('git.file_at', {'hash': c.hash, 'path': path});
-          if (f['binary'] == true) return const Center(child: Text('二进制文件', style: _kMuted));
+          if (f['binary'] == true) return Center(child: Text(tr('二进制文件', 'Binary file'), style: _kMuted));
           return PlainTextView(text: f['content'] as String? ?? (f['error'] as String? ?? ''));
         },
       ),
@@ -427,7 +438,7 @@ class GitCommitActions {
         title: Text(title, style: const TextStyle(color: IntelliJTheme.textHigh, fontSize: 15)),
         content: SizedBox(width: 420, child: Text(message, style: _kText)),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(tr('取消', 'Cancel'))),
           FilledButton(
             style: danger ? FilledButton.styleFrom(backgroundColor: IntelliJTheme.gitRed) : null,
             onPressed: () => Navigator.pop(ctx, true),
@@ -444,7 +455,7 @@ class GitCommitActions {
     required String label,
     String initial = '',
     bool multiline = false,
-    String action = 'OK',
+    String? action,
   }) {
     final controller = TextEditingController(text: initial);
     return showDialog<String>(
@@ -473,8 +484,8 @@ class GitCommitActions {
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, controller.text), child: Text(action)),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: Text(tr('取消', 'Cancel'))),
+          FilledButton(onPressed: () => Navigator.pop(ctx, controller.text), child: Text(action ?? tr('确定', 'OK'))),
         ],
       ),
     ).whenComplete(controller.dispose);
@@ -498,17 +509,18 @@ class _ResetDialog extends StatefulWidget {
 class _ResetDialogState extends State<_ResetDialog> {
   String _mode = 'mixed';
 
-  static const _modes = [
-    ('soft', 'Soft', '保留工作区和暂存区:被撤掉的提交的改动变为已暂存。'),
-    ('mixed', 'Mixed', '保留工作区,重置暂存区:改动变为未暂存。'),
-    ('hard', 'Hard', '丢弃工作区和暂存区的所有改动。不可恢复!'),
-  ];
+  static List<(String, String, String)> get _modes => [
+        ('soft', tr('软', 'Soft'),
+            tr('保留工作区和暂存区:被撤掉的提交的改动变为已暂存。', 'Keeps the working tree and the index: changes from the undone commits become staged.')),
+        ('mixed', tr('混合', 'Mixed'), tr('保留工作区,重置暂存区:改动变为未暂存。', 'Keeps the working tree, resets the index: the changes become unstaged.')),
+        ('hard', tr('硬', 'Hard'), tr('丢弃工作区和暂存区的所有改动。不可恢复!', 'Discards all changes in the working tree and the index. This cannot be undone!')),
+      ];
 
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
       backgroundColor: IntelliJTheme.panelBg,
-      title: Text('Reset ${widget.branch ?? 'HEAD'} to ${widget.commit.short}',
+      title: Text(tr('将 ${widget.branch ?? 'HEAD'} 重置到 ${widget.commit.short}', 'Reset ${widget.branch ?? 'HEAD'} to ${widget.commit.short}'),
           style: const TextStyle(color: IntelliJTheme.textHigh, fontSize: 15)),
       content: SizedBox(
         width: 460,
@@ -532,11 +544,11 @@ class _ResetDialogState extends State<_ResetDialog> {
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+        TextButton(onPressed: () => Navigator.pop(context), child: Text(tr('取消', 'Cancel'))),
         FilledButton(
           style: _mode == 'hard' ? FilledButton.styleFrom(backgroundColor: IntelliJTheme.gitRed) : null,
           onPressed: () => Navigator.pop(context, _mode),
-          child: const Text('Reset'),
+          child: Text(tr('重置', 'Reset')),
         ),
       ],
     );
@@ -572,7 +584,7 @@ class _NewBranchDialogState extends State<_NewBranchDialog> {
   Widget build(BuildContext context) {
     return AlertDialog(
       backgroundColor: IntelliJTheme.panelBg,
-      title: Text('Create Branch from ${widget.commit.short}', style: const TextStyle(color: IntelliJTheme.textHigh, fontSize: 15)),
+      title: Text(tr('从 ${widget.commit.short} 创建分支', 'Create Branch from ${widget.commit.short}'), style: const TextStyle(color: IntelliJTheme.textHigh, fontSize: 15)),
       content: SizedBox(
         width: 420,
         child: Column(
@@ -582,7 +594,7 @@ class _NewBranchDialogState extends State<_NewBranchDialog> {
               controller: _name,
               autofocus: true,
               style: _kText,
-              decoration: const InputDecoration(labelText: 'New branch name', border: OutlineInputBorder(), isDense: true),
+              decoration: InputDecoration(labelText: tr('新分支名称', 'New branch name'), border: const OutlineInputBorder(), isDense: true),
               onSubmitted: (_) => _submit(),
             ),
             CheckboxListTile(
@@ -590,15 +602,15 @@ class _NewBranchDialogState extends State<_NewBranchDialog> {
               dense: true,
               contentPadding: EdgeInsets.zero,
               controlAffinity: ListTileControlAffinity.leading,
-              title: const Text('Checkout branch', style: _kText),
+              title: Text(tr('签出分支', 'Checkout branch'), style: _kText),
               onChanged: (v) => setState(() => _checkout = v ?? true),
             ),
           ],
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-        FilledButton(onPressed: _submit, child: const Text('Create')),
+        TextButton(onPressed: () => Navigator.pop(context), child: Text(tr('取消', 'Cancel'))),
+        FilledButton(onPressed: _submit, child: Text(tr('创建', 'Create'))),
       ],
     );
   }
@@ -634,7 +646,7 @@ class _NewTagDialogState extends State<_NewTagDialog> {
   Widget build(BuildContext context) {
     return AlertDialog(
       backgroundColor: IntelliJTheme.panelBg,
-      title: Text('Create Tag on ${widget.commit.short}', style: const TextStyle(color: IntelliJTheme.textHigh, fontSize: 15)),
+      title: Text(tr('在 ${widget.commit.short} 上创建标签', 'Create Tag on ${widget.commit.short}'), style: const TextStyle(color: IntelliJTheme.textHigh, fontSize: 15)),
       content: SizedBox(
         width: 420,
         child: Column(
@@ -644,7 +656,7 @@ class _NewTagDialogState extends State<_NewTagDialog> {
               controller: _name,
               autofocus: true,
               style: _kText,
-              decoration: const InputDecoration(labelText: 'Tag name', border: OutlineInputBorder(), isDense: true),
+              decoration: InputDecoration(labelText: tr('标签名称', 'Tag name'), border: const OutlineInputBorder(), isDense: true),
               onSubmitted: (_) => _submit(),
             ),
             const SizedBox(height: 10),
@@ -653,9 +665,9 @@ class _NewTagDialogState extends State<_NewTagDialog> {
               style: _kText,
               minLines: 2,
               maxLines: 5,
-              decoration: const InputDecoration(
-                labelText: 'Message(可选,填写则创建附注标签)',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: tr('消息(可选,填写则创建附注标签)', 'Message (optional; creates an annotated tag)'),
+                border: const OutlineInputBorder(),
                 isDense: true,
               ),
             ),
@@ -663,8 +675,8 @@ class _NewTagDialogState extends State<_NewTagDialog> {
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-        FilledButton(onPressed: _submit, child: const Text('Create')),
+        TextButton(onPressed: () => Navigator.pop(context), child: Text(tr('取消', 'Cancel'))),
+        FilledButton(onPressed: _submit, child: Text(tr('创建', 'Create'))),
       ],
     );
   }
@@ -710,7 +722,8 @@ class _InteractiveRebaseDialogState extends State<_InteractiveRebaseDialog> {
     final kept = _entries.where((e) => e.action != 'drop').toList();
     if (kept.isEmpty) return null;
     if (kept.first.action == 'squash' || kept.first.action == 'fixup') {
-      return '第一条保留的提交不能是 ${kept.first.action}(它之前没有可以合并进去的提交)';
+      return tr('第一条保留的提交不能是 ${kept.first.action}(它之前没有可以合并进去的提交)',
+          'The first kept commit cannot be ${kept.first.action} (there is no commit before it to merge into)');
     }
     return null;
   }
@@ -721,7 +734,7 @@ class _InteractiveRebaseDialogState extends State<_InteractiveRebaseDialog> {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: IntelliJTheme.panelBg,
-        title: Text('Reword ${e.hash.substring(0, 8)}', style: const TextStyle(color: IntelliJTheme.textHigh, fontSize: 15)),
+        title: Text(tr('改写 ${e.hash.substring(0, 8)}', 'Reword ${e.hash.substring(0, 8)}'), style: const TextStyle(color: IntelliJTheme.textHigh, fontSize: 15)),
         content: SizedBox(
           width: 500,
           child: TextField(
@@ -734,8 +747,8 @@ class _InteractiveRebaseDialogState extends State<_InteractiveRebaseDialog> {
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, controller.text), child: const Text('OK')),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: Text(tr('取消', 'Cancel'))),
+          FilledButton(onPressed: () => Navigator.pop(ctx, controller.text), child: Text(tr('确定', 'OK'))),
         ],
       ),
     );
@@ -753,7 +766,7 @@ class _InteractiveRebaseDialogState extends State<_InteractiveRebaseDialog> {
     return AlertDialog(
       backgroundColor: IntelliJTheme.panelBg,
       title: Text(
-        'Rebasing ${_entries.length} commits from ${widget.base.short}',
+        tr('从 ${widget.base.short} 变基 ${_entries.length} 个提交', 'Rebasing ${_entries.length} commits from ${widget.base.short}'),
         style: const TextStyle(color: IntelliJTheme.textHigh, fontSize: 15),
       ),
       content: SizedBox(
@@ -762,7 +775,7 @@ class _InteractiveRebaseDialogState extends State<_InteractiveRebaseDialog> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text('拖动调整顺序(上面的先应用);双击提交编辑信息。', style: _kMuted),
+            Text(tr('拖动调整顺序(上面的先应用);双击提交编辑信息。', 'Drag to reorder (the top ones are applied first); double-click a commit to edit its message.'), style: _kMuted),
             const SizedBox(height: 8),
             Expanded(
               child: Container(
@@ -827,7 +840,7 @@ class _InteractiveRebaseDialogState extends State<_InteractiveRebaseDialog> {
                             ),
                           ),
                           IconButton(
-                            tooltip: '编辑信息',
+                            tooltip: tr('编辑信息', 'Edit Message'),
                             icon: const Icon(Icons.edit_outlined, size: 14, color: IntelliJTheme.textMuted),
                             onPressed: () => _editMessage(e),
                           ),
@@ -846,10 +859,10 @@ class _InteractiveRebaseDialogState extends State<_InteractiveRebaseDialog> {
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+        TextButton(onPressed: () => Navigator.pop(context), child: Text(tr('取消', 'Cancel'))),
         FilledButton(
           onPressed: error == null ? () => Navigator.pop(context, _entries) : null,
-          child: const Text('Start Rebasing'),
+          child: Text(tr('开始变基', 'Start Rebasing')),
         ),
       ],
     );
@@ -888,18 +901,18 @@ class _FileBrowserState extends State<_FileBrowser> {
                 padding: const EdgeInsets.all(6),
                 child: TextField(
                   style: _kText,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     isDense: true,
-                    prefixIcon: Icon(Icons.search, size: 14),
-                    hintText: '筛选文件',
-                    border: OutlineInputBorder(),
+                    prefixIcon: const Icon(Icons.search, size: 14),
+                    hintText: tr('筛选文件', 'Filter files'),
+                    border: const OutlineInputBorder(),
                   ),
                   onChanged: (v) => setState(() => _query = v),
                 ),
               ),
               Expanded(
                 child: visible.isEmpty
-                    ? const Center(child: Text('没有文件', style: _kMuted))
+                    ? Center(child: Text(tr('没有文件', 'No files'), style: _kMuted))
                     : ListView.builder(
                         itemExtent: 24,
                         itemCount: visible.length,
@@ -930,12 +943,12 @@ class _FileBrowserState extends State<_FileBrowser> {
         const VerticalDivider(width: 1, color: IntelliJTheme.borderSubtle),
         Expanded(
           child: _selected == null
-              ? const Center(child: Text('选择左侧文件', style: _kMuted))
+              ? Center(child: Text(tr('选择左侧文件', 'Select a file on the left'), style: _kMuted))
               : FutureBuilder<Widget>(
                   key: ValueKey(_selected),
                   // 缓存:在筛选框里打字会重建本组件,不该每次都重新跑 git。
                   future: _loaded.putIfAbsent(_selected!, () => widget.load(_selected!)),
-                  builder: (context, snap) => snap.data ?? const Center(child: Text('加载中…', style: _kMuted)),
+                  builder: (context, snap) => snap.data ?? Center(child: Text(tr('加载中…', 'Loading…'), style: _kMuted)),
                 ),
         ),
       ],

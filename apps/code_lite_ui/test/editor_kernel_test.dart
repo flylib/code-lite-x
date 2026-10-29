@@ -384,13 +384,13 @@ void main() {
       expect(find.text('secondary.rs'), findsWidgets);
 
       // Verify Split Pane buttons in Tab Bar
-      final splitDownBtn = find.byTooltip('Split Down (Vertical)');
+      final splitDownBtn = find.byTooltip('向下拆分(垂直)');
       expect(splitDownBtn, findsOneWidget);
       await tester.tap(splitDownBtn);
       await tester.pump();
       expect(changedDirection, equals(SplitDirection.vertical));
 
-      final closeSplitBtn = find.byTooltip('Close Split');
+      final closeSplitBtn = find.byTooltip('关闭拆分');
       expect(closeSplitBtn, findsOneWidget);
       await tester.tap(closeSplitBtn);
       await tester.pump();
@@ -427,7 +427,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Look for Git diff tooltip on gutter
-      final diffMarker = find.byTooltip('ADDED (Line 2) - Click to inspect diff');
+      final diffMarker = find.byTooltip('新增(第 2 行)- 点击查看差异');
       expect(diffMarker, findsOneWidget);
 
       // Tap diff marker to trigger MiniDiffOverlay
@@ -435,16 +435,16 @@ void main() {
       await tester.pump();
 
       // Verify MiniDiffOverlay opened with Hunk details and Revert button
-      expect(find.text('ADDED'), findsOneWidget);
-      expect(find.text('Line 2'), findsOneWidget);
-      expect(find.text('Revert'), findsOneWidget);
+      expect(find.text('新增'), findsOneWidget);
+      expect(find.text('第 2 行'), findsOneWidget);
+      expect(find.text('还原'), findsOneWidget);
 
       // Click Revert
-      await tester.tap(find.text('Revert'));
+      await tester.tap(find.text('还原'));
       await tester.pump();
 
       expect(revertedPath, equals('src/op_store.rs'));
-      expect(find.text('ADDED'), findsNothing);
+      expect(find.text('新增'), findsNothing);
 
       ctrl.dispose();
     });

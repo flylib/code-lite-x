@@ -54,20 +54,20 @@ void main() {
     expect(pull, findsOneWidget);
     expect(push, findsOneWidget);
     // 工具按钮靠右、紧挨着 Pull / Push(刷新 … 跳转、Pull、Push),Push 是最右的一个;六个一样大
-    final tools = [for (final t in ['刷新', 'Cherry-Pick', '显示详情', '跳转到哈希 / 分支 / 标签']) tester.getRect(find.byTooltip(t).last)];
+    final tools = [for (final t in ['刷新', '拣选', '显示详情', '转到哈希/分支/标签']) tester.getRect(find.byTooltip(t).last)];
     final rects = [...tools, tester.getRect(pull), tester.getRect(push)];
     for (var i = 1; i < rects.length; i++) {
       expect(rects[i].left - rects[i - 1].right, inInclusiveRange(-0.5, 2), reason: '第 $i 个紧挨着前一个');
       expect(rects[i].size, rects[0].size, reason: '大小一致');
     }
-    expect(tools.first.left, greaterThan(tester.getRect(find.text('Paths')).right + 40), reason: '离开了左边的筛选,靠到右边');
+    expect(tools.first.left, greaterThan(tester.getRect(find.text('路径')).right + 40), reason: '离开了左边的筛选,靠到右边');
     final bar = tester.getRect(find.ancestor(of: push, matching: find.byType(Container)).first);
     expect(bar.right - tester.getRect(push).right, lessThan(12));
 
     // 默认和左边的工具按钮同色;按住时 Pull 变蓝、Push 变绿并带底色,松开恢复
     Color iconColor(Finder f) => ((tester.widget<CustomPaint>(find.descendant(of: f, matching: find.byType(CustomPaint)).last).painter!) as dynamic).color as Color;
     BoxDecoration? bg(Finder f) => tester.widget<Container>(find.descendant(of: f, matching: find.byType(Container)).first).decoration as BoxDecoration?;
-    final grey = tester.widget<Icon>(find.descendant(of: find.byTooltip('跳转到哈希 / 分支 / 标签'), matching: find.byType(Icon))).color;
+    final grey = tester.widget<Icon>(find.descendant(of: find.byTooltip('转到哈希/分支/标签'), matching: find.byType(Icon))).color;
     expect(iconColor(pull), grey);
     expect(iconColor(push), grey);
     expect(bg(pull), isNull);
@@ -98,7 +98,7 @@ void main() {
     expect(spinner, findsNothing);
     final size = tester.getSize(pull);
 
-    branches.setBusy('Update');
+    branches.setBusy(BranchStore.updateLabel);
     await tester.pump();
     expect(find.descendant(of: pull, matching: spinner), findsOneWidget);
     expect(find.descendant(of: push, matching: spinner), findsNothing);
@@ -109,7 +109,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 600));
     expect(events, isEmpty, reason: '进行中点不了');
 
-    branches.setBusy('Push');
+    branches.setBusy(BranchStore.pushLabel);
     await tester.pump();
     expect(find.descendant(of: push, matching: spinner), findsOneWidget);
     expect(tester.widget<CircularProgressIndicator>(spinner).color, const Color(0xFF3DD68C));

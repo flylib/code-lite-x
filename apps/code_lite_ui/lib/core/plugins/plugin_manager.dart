@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import '../../features/editor/syntax/language.dart';
 import '../../features/editor/syntax/languages.dart' as syntax;
 import '../client/api_client.dart';
+import '../l10n/l10n.dart';
 import '../lsp/lsp.dart';
 import 'builtin_catalog.dart';
 import 'plugin_host.dart';
@@ -35,7 +36,7 @@ class PluginTask {
   PluginTask(this.pluginId);
 
   final String pluginId;
-  String message = '准备安装…';
+  String message = tr('准备安装…', 'Preparing to install…');
   double? fraction;
   bool running = true;
   String? error;
@@ -248,7 +249,8 @@ class PluginManager extends ChangeNotifier {
     if (unmet.isNotEmpty) {
       task
         ..running = false
-        ..error = '缺少 ${unmet.map((r) => r.label).join('、')}:${unmet.map((r) => r.hint ?? '').where((h) => h.isNotEmpty).join(' ')}';
+        ..error = tr('缺少 ${unmet.map((r) => r.label).join('、')}:${unmet.map((r) => r.hint ?? '').where((h) => h.isNotEmpty).join(' ')}',
+            'Missing ${unmet.map((r) => r.label).join(', ')}: ${unmet.map((r) => r.hint ?? '').where((h) => h.isNotEmpty).join(' ')}');
       notifyListeners();
       return false;
     }

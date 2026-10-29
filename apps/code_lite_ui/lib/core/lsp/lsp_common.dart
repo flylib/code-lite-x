@@ -12,6 +12,8 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import '../l10n/l10n.dart';
+
 /// 一次诊断推送:[path] 为工作区相对路径(与编辑器 tab 的路径一致),
 /// [diagnostics] 为 LSP 标准 Diagnostic map(`EditorDiagnostic.fromJson` 可直接解析)。
 /// 由插件提供的语言服务器启动方式(变量已展开)。
@@ -855,7 +857,7 @@ List<Map<String, dynamic>> lspBracketDiagnostics(String text, String? languageId
       } else {
         final idx = stack.lastIndexWhere((e) => e.$1 == want);
         if (idx < 0) {
-          diags.add(_bracketDiagnostic(line, col, 'unmatched_bracket', "Unmatched closing bracket '$ch'"));
+          diags.add(_bracketDiagnostic(line, col, 'unmatched_bracket', tr("多余的右括号 '$ch'", "Unmatched closing bracket '$ch'")));
         } else {
           final top = stack.last;
           final open = String.fromCharCode(top.$1);
@@ -864,7 +866,10 @@ List<Map<String, dynamic>> lspBracketDiagnostics(String text, String? languageId
             line,
             col,
             'mismatched_bracket',
-            "Mismatched closing bracket '$ch': expected '$expected' to close '$open' at line ${top.$2 + 1}",
+            tr(
+              "右括号 '$ch' 不匹配:第 ${top.$2 + 1} 行的 '$open' 应以 '$expected' 闭合",
+              "Mismatched closing bracket '$ch': expected '$expected' to close '$open' at line ${top.$2 + 1}",
+            ),
           ));
           stack.length = idx;
         }
@@ -873,7 +878,7 @@ List<Map<String, dynamic>> lspBracketDiagnostics(String text, String? languageId
     col++;
   }
   for (final open in stack) {
-    diags.add(_bracketDiagnostic(open.$2, open.$3, 'unclosed_bracket', "Unclosed bracket '${String.fromCharCode(open.$1)}'"));
+    diags.add(_bracketDiagnostic(open.$2, open.$3, 'unclosed_bracket', tr("括号 '${String.fromCharCode(open.$1)}' 没有闭合", "Unclosed bracket '${String.fromCharCode(open.$1)}'")));
   }
   diags.sort((a, b) {
     final sa = (a['range'] as Map)['start'] as Map;

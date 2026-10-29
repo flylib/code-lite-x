@@ -48,6 +48,7 @@ import 'features/status_bar/status_bar_widget.dart';
 import 'features/terminal/terminal_store.dart';
 import 'features/title_bar/branch_menu.dart';
 import 'features/title_bar/operation_buttons.dart';
+import 'core/l10n/l10n.dart';
 import 'features/notifications/notifications.dart';
 import 'features/title_bar/project_dialogs.dart';
 import 'features/title_bar/project_menu.dart';
@@ -97,7 +98,19 @@ class _CodeLiteAppState extends State<CodeLiteApp> {
       // 切回来时和磁盘对一遍(IntelliJ 的「激活窗口时同步文件」):在别处改过的文件,已打开的标签跟上
       onResume: () => _projects.active.sessions.syncWithDisk(),
     );
+    L10n.language.addListener(_onLanguageChanged);
     _bootstrap();
+  }
+
+  /// 换了界面语言:所有元素(包括 const 的和开着的对话框)按新语言重画一遍,状态都留着。
+  void _onLanguageChanged() {
+    if (!mounted) return;
+    void rebuild(Element e) {
+      e.markNeedsBuild();
+      e.visitChildren(rebuild);
+    }
+
+    (context as Element).visitChildren(rebuild);
   }
 
   late final AppLifecycleListener _lifecycle;
@@ -115,6 +128,7 @@ class _CodeLiteAppState extends State<CodeLiteApp> {
   @override
   void dispose() {
     _lifecycle.dispose();
+    L10n.language.removeListener(_onLanguageChanged);
     _projects.dispose(); // 先于设置 / 插件:各项目的状态要从它们那里摘掉自己
     _settings.dispose();
     _plugins.dispose();
@@ -668,9 +682,9 @@ class _EditorRegion extends StatelessWidget {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: IntelliJTheme.panelBg,
-        title: const Text('保存改动？', style: TextStyle(color: IntelliJTheme.textHigh, fontSize: 14)),
+        title: Text(tr('保存改动？', 'Save Changes?'), style: const TextStyle(color: IntelliJTheme.textHigh, fontSize: 14)),
         content: Text(
-          '${path.split('/').last} 有未保存的改动。',
+          tr('${path.split('/').last} 有未保存的改动。', '${path.split('/').last} has unsaved changes.'),
           style: const TextStyle(color: IntelliJTheme.textPrimary, fontSize: 12),
         ),
         actions: [
@@ -679,11 +693,11 @@ class _EditorRegion extends StatelessWidget {
               Navigator.of(ctx).pop();
               workspace.closeTab(path, force: true);
             },
-            child: const Text('不保存', style: TextStyle(color: IntelliJTheme.gitRed)),
+            child: Text(tr('不保存', "Don't Save"), style: const TextStyle(color: IntelliJTheme.gitRed)),
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('取消', style: TextStyle(color: IntelliJTheme.textMuted)),
+            child: Text(tr('取消', 'Cancel'), style: const TextStyle(color: IntelliJTheme.textMuted)),
           ),
           ElevatedButton(
             onPressed: () async {
@@ -691,7 +705,7 @@ class _EditorRegion extends StatelessWidget {
               await workspace.saveFile(path);
               workspace.closeTab(path, force: true);
             },
-            child: const Text('保存'),
+            child: Text(tr('保存', 'Save')),
           ),
         ],
       ),
@@ -736,12 +750,12 @@ class _AppMenuBar extends StatelessWidget {
               ]),
               PlatformMenuItemGroup(members: <PlatformMenuItem>[
                 PlatformMenuItem(
-                  label: 'Settings…',
+                  label: tr('设置…', 'Settings…'),
                   shortcut: const SingleActivator(LogicalKeyboardKey.comma, meta: true),
                   onSelected: () => showSettingsDialog(context, settings, plugins: plugins),
                 ),
                 PlatformMenuItem(
-                  label: 'Plugins…',
+                  label: tr('插件…', 'Plugins…'),
                   onSelected: () => showSettingsDialog(context, settings, plugins: plugins, openPlugins: true),
                 ),
               ]),
@@ -760,9 +774,9 @@ class _AppMenuBar extends StatelessWidget {
           ),
           _fileMenu(context, workspace),
           _gitMenu(context),
-          const PlatformMenu(
-            label: 'Window',
-            menus: <PlatformMenuItem>[
+          PlatformMenu(
+            label: tr('窗口', 'Window'),
+            menus: const <PlatformMenuItem>[
               PlatformProvidedMenuItem(
                   type: PlatformProvidedMenuItemType.minimizeWindow),
               PlatformProvidedMenuItem(
@@ -786,29 +800,29 @@ class _AppMenuBar extends StatelessWidget {
       menus: <PlatformMenuItem>[
         PlatformMenuItemGroup(members: <PlatformMenuItem>[
           PlatformMenuItem(
-            label: 'Update Project…',
+            label: tr('更新项目…', 'Update Project…'),
             shortcut: const SingleActivator(LogicalKeyboardKey.keyT, meta: true),
             onSelected: when(() => branchActions.update(context)),
           ),
           PlatformMenuItem(
-            label: 'Commit…',
+            label: tr('提交…', 'Commit…'),
             shortcut: const SingleActivator(LogicalKeyboardKey.keyK, meta: true),
             onSelected: when(branchActions.showCommitWindow),
           ),
           PlatformMenuItem(
-            label: 'Push…',
+            label: tr('推送…', 'Push…'),
             shortcut: const SingleActivator(LogicalKeyboardKey.keyP, meta: true, shift: true),
             onSelected: when(() => branchActions.push(context)),
           ),
         ]),
         PlatformMenuItemGroup(members: <PlatformMenuItem>[
           PlatformMenuItem(
-            label: 'New Branch…',
+            label: tr('新建分支…', 'New Branch…'),
             shortcut: const SingleActivator(LogicalKeyboardKey.keyN, meta: true, alt: true),
             onSelected: when(() => branchActions.newBranch(context)),
           ),
           PlatformMenuItem(
-            label: 'Checkout Tag or Revision…',
+            label: tr('签出标签或修订…', 'Checkout Tag or Revision…'),
             onSelected: when(() => branchActions.checkoutRevision(context)),
           ),
         ]),
@@ -819,14 +833,14 @@ class _AppMenuBar extends StatelessWidget {
   PlatformMenu _fileMenu(BuildContext context, WorkspaceStore workspace) {
     final recent = manager.recent;
     return PlatformMenu(
-      label: 'File',
+      label: tr('文件', 'File'),
       menus: <PlatformMenuItem>[
         PlatformMenuItemGroup(members: <PlatformMenuItem>[
           PlatformMenu(
-            label: 'New',
+            label: tr('新建', 'New'),
             menus: <PlatformMenuItem>[
               PlatformMenuItem(
-                label: 'File…',
+                label: tr('文件…', 'File…'),
                 shortcut:
                     const SingleActivator(LogicalKeyboardKey.keyN, meta: true),
                 onSelected: workspace.hasProject
@@ -836,17 +850,17 @@ class _AppMenuBar extends StatelessWidget {
             ],
           ),
           PlatformMenuItem(
-            label: 'Open…',
+            label: tr('打开…', 'Open…'),
             shortcut:
                 const SingleActivator(LogicalKeyboardKey.keyO, meta: true),
             onSelected: () => _openFolder(context, manager),
           ),
           PlatformMenu(
-            label: 'Recent Projects',
+            label: tr('最近的项目', 'Recent Projects'),
             menus: <PlatformMenuItem>[
               PlatformMenuItemGroup(members: <PlatformMenuItem>[
                 if (recent.isEmpty)
-                  const PlatformMenuItem(label: 'No Recent Projects')
+                  PlatformMenuItem(label: tr('没有最近的项目', 'No Recent Projects'))
                 else
                   for (final path in recent)
                     PlatformMenuItem(
@@ -857,13 +871,13 @@ class _AppMenuBar extends StatelessWidget {
               if (recent.isNotEmpty)
                 PlatformMenuItemGroup(members: <PlatformMenuItem>[
                   PlatformMenuItem(
-                      label: 'Clear Recent Projects',
+                      label: tr('清除最近的项目', 'Clear Recent Projects'),
                       onSelected: manager.clearRecent),
                 ]),
             ],
           ),
           PlatformMenuItem(
-            label: 'Close Project',
+            label: tr('关闭项目', 'Close Project'),
             onSelected: manager.activeProject != null
                 ? () => _closeProject(context, manager, manager.activeProject!)
                 : null,
@@ -872,7 +886,7 @@ class _AppMenuBar extends StatelessWidget {
         PlatformMenuItemGroup(members: <PlatformMenuItem>[
           // ⌘S 已由编辑器自己处理,这里不再绑定快捷键以免触发两次。
           PlatformMenuItem(
-              label: 'Save',
+              label: tr('保存', 'Save'),
               onSelected: workspace.hasProject ? workspace.save : null),
         ]),
       ],
@@ -890,30 +904,30 @@ class _AppMenuBar extends StatelessWidget {
     final name = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('New File'),
+        title: Text(tr('新建文件', 'New File')),
         content: SizedBox(
           width: 380,
           child: TextField(
             controller: controller,
             autofocus: true,
-            decoration:
-                const InputDecoration(hintText: 'path/to/file.rs(相对项目根目录)'),
+            decoration: InputDecoration(
+                hintText: tr('path/to/file.rs(相对项目根目录)', 'path/to/file.rs (relative to the project root)')),
             onSubmitted: (v) => Navigator.pop(ctx, v),
           ),
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
+              onPressed: () => Navigator.pop(ctx), child: Text(tr('取消', 'Cancel'))),
           TextButton(
               onPressed: () => Navigator.pop(ctx, controller.text),
-              child: const Text('创建')),
+              child: Text(tr('创建', 'Create'))),
         ],
       ),
     );
     controller.dispose();
     if (name == null || !context.mounted) return;
     final err = await workspace.createFile(name);
-    if (err != null && context.mounted) showNotice(context, '创建失败: $err', error: true);
+    if (err != null && context.mounted) showNotice(context, tr('创建失败: $err', 'Could not create file: $err'), error: true);
   }
 }
 
@@ -1003,12 +1017,12 @@ Future<bool> _confirmClose(BuildContext context, OpenProject entry) async {
   final choice = await showDialog<String>(
     context: context,
     builder: (dialog) => AlertDialog(
-      title: Text('关闭 ${entry.name}'),
-      content: const Text('这个项目有未保存的修改。'),
+      title: Text(tr('关闭 ${entry.name}', 'Close ${entry.name}')),
+      content: Text(tr('这个项目有未保存的修改。', 'This project has unsaved changes.')),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(dialog, 'cancel'), child: const Text('取消')),
-        TextButton(onPressed: () => Navigator.pop(dialog, 'discard'), child: const Text('不保存')),
-        TextButton(onPressed: () => Navigator.pop(dialog, 'save'), child: const Text('保存并关闭')),
+        TextButton(onPressed: () => Navigator.pop(dialog, 'cancel'), child: Text(tr('取消', 'Cancel'))),
+        TextButton(onPressed: () => Navigator.pop(dialog, 'discard'), child: Text(tr('不保存', "Don't Save"))),
+        TextButton(onPressed: () => Navigator.pop(dialog, 'save'), child: Text(tr('保存并关闭', 'Save and Close'))),
       ],
     ),
   );
@@ -1049,7 +1063,7 @@ Future<void> _openFolder(BuildContext context, ProjectManager manager) async {
 Future<void> _openProject(BuildContext context, ProjectManager manager, String path) async {
   final ok = await manager.open(path);
   if (!ok && context.mounted) {
-    showNotice(context, '无法打开项目: $path', error: true);
+    showNotice(context, tr('无法打开项目: $path', 'Cannot open project: $path'), error: true);
   }
 }
 

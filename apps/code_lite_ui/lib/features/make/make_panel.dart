@@ -6,6 +6,7 @@ import '../../core/theme/intellij_theme.dart';
 import '../build_tools/build_tools_panel.dart' show ToolTreeRow, ToolWindowTitleRow, ToolbarIconButton, ToolbarSeparator;
 import '../project_explorer/project_explorer_widget.dart' show MakefileIcon;
 import 'make_store.dart';
+import '../../core/l10n/l10n.dart';
 
 const TextStyle _muted = TextStyle(color: IntelliJTheme.textMuted, fontSize: 12);
 const Color _run = Color(0xFF5FB865);
@@ -39,14 +40,14 @@ class MakePanel extends StatelessWidget {
             selected: store.selectedFile == f.path && store.selectedTarget == null,
             icon: const MakefileIcon(size: 15),
             label: f.path,
-            trailing: f.targets.isEmpty ? '(没有目标)' : null,
+            trailing: f.targets.isEmpty ? tr('(没有目标)', '(no targets)') : null,
             tooltip: f.path,
             onTap: (_) => store.select(f.path),
             onDoubleTap: () => store.toggleExpanded(f.path),
             onToggle: () => store.toggleExpanded(f.path),
             menu: () => [
-              MenuItemButton(onPressed: onOpenFileAt == null ? null : () => onOpenFileAt!(f.path, 0), child: Text('打开 ${f.path.split('/').last}')),
-              MenuItemButton(onPressed: store.reload, child: const Text('重新加载')),
+              MenuItemButton(onPressed: onOpenFileAt == null ? null : () => onOpenFileAt!(f.path, 0), child: Text(tr('打开 ${f.path.split('/').last}', 'Open ${f.path.split('/').last}'))),
+              MenuItemButton(onPressed: store.reload, child: Text(tr('重新加载', 'Reload'))),
             ],
           ));
           if (!open) continue;
@@ -65,7 +66,7 @@ class MakePanel extends StatelessWidget {
               Expanded(
                 child: store.files.isEmpty
                     ? Center(
-                        child: Text(store.loading ? '正在查找 Makefile…' : '项目里没有 Makefile', style: _muted),
+                        child: Text(store.loading ? tr('正在查找 Makefile…', 'Looking for Makefiles…') : tr('项目里没有 Makefile', 'No Makefiles in the project'), style: _muted),
                       )
                     // 回车运行选中的目标(同 IntelliJ)
                     : CallbackShortcuts(
@@ -99,15 +100,15 @@ class MakePanel extends StatelessWidget {
         MenuItemButton(
           leadingIcon: const Icon(Icons.play_arrow, size: 16, color: _run),
           onPressed: () => store.run(f.path, t.name),
-          child: Text("运行 'make ${t.name}'"),
+          child: Text(tr("运行 'make ${t.name}'", "Run 'make ${t.name}'")),
         ),
         MenuItemButton(
           onPressed: onOpenFileAt == null ? null : () => onOpenFileAt!(f.path, t.line),
-          child: const Text('跳到定义'),
+          child: Text(tr('跳到定义', 'Jump to Source')),
         ),
         MenuItemButton(
           onPressed: () => Clipboard.setData(ClipboardData(text: command)),
-          child: const Text('复制命令行'),
+          child: Text(tr('复制命令行', 'Copy Command Line')),
         ),
       ],
     );
@@ -139,30 +140,32 @@ class _Toolbar extends StatelessWidget {
               key: const ValueKey('make-run'),
               icon: Icons.play_arrow,
               color: _run,
-              tooltip: store.selectedTarget == null ? '运行目标(先选中一个目标)' : "运行 'make ${store.selectedTarget}'",
+              tooltip: store.selectedTarget == null
+                  ? tr('运行目标(先选中一个目标)', 'Run Target (select a target first)')
+                  : tr("运行 'make ${store.selectedTarget}'", "Run 'make ${store.selectedTarget}'"),
               onTap: store.canRunSelected ? store.runSelected : null,
             ),
-            ToolbarIconButton(key: const ValueKey('make-reload'), icon: Icons.sync, tooltip: '重新加载 Makefile', onTap: store.loading ? null : store.reload),
+            ToolbarIconButton(key: const ValueKey('make-reload'), icon: Icons.sync, tooltip: tr('重新加载 Makefile', 'Reload Makefiles'), onTap: store.loading ? null : store.reload),
             const ToolbarSeparator(),
-            ToolbarIconButton(icon: Icons.unfold_more, tooltip: '全部展开', onTap: has ? store.expandAll : null),
-            ToolbarIconButton(icon: Icons.unfold_less, tooltip: '全部折叠', onTap: has ? store.collapseAll : null),
+            ToolbarIconButton(icon: Icons.unfold_more, tooltip: tr('全部展开', 'Expand All'), onTap: has ? store.expandAll : null),
+            ToolbarIconButton(icon: Icons.unfold_less, tooltip: tr('全部折叠', 'Collapse All'), onTap: has ? store.collapseAll : null),
             const ToolbarSeparator(),
             ToolbarIconButton(
               key: const ValueKey('make-sort'),
               icon: Icons.sort_by_alpha,
-              tooltip: '按名字排序',
+              tooltip: tr('按名字排序', 'Sort by Name'),
               active: store.sortByName,
               onTap: store.toggleSortByName,
             ),
             ToolbarIconButton(
               key: const ValueKey('make-special'),
               icon: Icons.visibility_outlined,
-              tooltip: '显示特殊目标(.PHONY 等)',
+              tooltip: tr('显示特殊目标(.PHONY 等)', 'Show Special Targets (.PHONY etc.)'),
               active: store.showSpecial,
               onTap: store.toggleShowSpecial,
             ),
             const ToolbarSeparator(),
-            ToolbarIconButton(key: const ValueKey('make-settings'), icon: Icons.settings_outlined, tooltip: 'make 设置(可执行文件路径)', onTap: onOpenSettings),
+            ToolbarIconButton(key: const ValueKey('make-settings'), icon: Icons.settings_outlined, tooltip: tr('make 设置(可执行文件路径)', 'make Settings (executable path)'), onTap: onOpenSettings),
           ],
         ),
       ),

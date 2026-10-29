@@ -15,6 +15,7 @@ import '../syntax/language.dart';
 import '../syntax/languages.dart';
 import 'markdown_links.dart';
 import '../../notifications/notifications.dart';
+import '../../../core/l10n/l10n.dart';
 
 /// 预览用到的系统能力(文件是否存在、读图片、开网址)。测试里换成假的。
 class MarkdownEnv {
@@ -170,7 +171,7 @@ class _MarkdownPreviewState extends State<MarkdownPreview> {
         return;
       case LinkKind.external:
         final err = await widget.env.openUrl(target.url);
-        if (err != null && err.isNotEmpty) _toast('无法打开 ${target.url}:$err');
+        if (err != null && err.isNotEmpty) _toast(tr('无法打开 ${target.url}:$err', 'Cannot open ${target.url}: $err'));
       case LinkKind.file:
         for (final path in target.candidates) {
           if (await widget.env.fileExists(path)) {
@@ -178,7 +179,7 @@ class _MarkdownPreviewState extends State<MarkdownPreview> {
             return;
           }
         }
-        _toast('找不到文件: ${target.candidates.first}');
+        _toast(tr('找不到文件: ${target.candidates.first}', 'File not found: ${target.candidates.first}'));
     }
   }
 

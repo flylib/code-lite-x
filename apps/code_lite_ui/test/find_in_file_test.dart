@@ -112,7 +112,7 @@ void main() {
 
       await tester.enterText(f, 'nope');
       await tester.pump();
-      expect(count(tester), '0 results');
+      expect(count(tester), '0 个结果');
 
       // Esc:关掉查找条,焦点回到编辑器,高亮消失
       await tester.enterText(f, 'mysql');

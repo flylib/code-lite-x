@@ -10,6 +10,7 @@ import '../editor/context_menu_region.dart' show darculaMenuTheme;
 import '../editor/syntax/languages.dart';
 import '../tool_window/tool_window_actions.dart';
 import 'rename_dialog.dart';
+import '../../core/l10n/l10n.dart';
 
 /// 左侧 Project 文件树。
 ///
@@ -231,7 +232,7 @@ class _ProjectExplorerWidgetState extends State<ProjectExplorerWidget> {
         key: const ValueKey('tree-menu-rename'),
         onPressed: _canRename(r) ? () => _rename(r) : null,
         shortcut: keys.isEmpty ? null : keys.first.activator as SingleActivator,
-        child: const Text('Rename...'),
+        child: Text(tr('重命名...', 'Rename...')),
       ),
     ];
   }
@@ -358,19 +359,19 @@ class _ProjectExplorerWidgetState extends State<ProjectExplorerWidget> {
             // 侧栏可拖窄到 160px:标题可省略,按钮用 InkWell 不占 Material 默认的大点击区。
             child: Row(
               children: [
-                const Flexible(
+                Flexible(
                   child: Text(
-                    'Project',
+                    tr('项目', 'Project'),
                     overflow: TextOverflow.ellipsis,
                     maxLines: 1,
-                    style: TextStyle(color: IntelliJTheme.textHigh, fontSize: 13, fontWeight: FontWeight.w600),
+                    style: const TextStyle(color: IntelliJTheme.textHigh, fontSize: 13, fontWeight: FontWeight.w600),
                   ),
                 ),
                 const SizedBox(width: 4),
                 const Icon(Icons.arrow_drop_down, size: 16, color: IntelliJTheme.textMuted),
                 const Spacer(),
                 Tooltip(
-                  message: 'Collapse All',
+                  message: tr('全部折叠', 'Collapse All'),
                   child: InkWell(
                     onTap: () => setState(_expanded.clear),
                     borderRadius: BorderRadius.circular(4),
@@ -465,7 +466,7 @@ class _ProjectExplorerWidgetState extends State<ProjectExplorerWidget> {
       if (!_loading.contains(path) && !_failed.contains(path)) {
         WidgetsBinding.instance.addPostFrameCallback((_) => _load(path));
       }
-      rows.add(_Row.hint(_failed.contains(path) ? '无法读取' : '加载中…', depth + 1));
+      rows.add(_Row.hint(_failed.contains(path) ? tr('无法读取', 'Cannot read') : tr('加载中…', 'Loading…'), depth + 1));
       return;
     }
     final childInSource = inSourceRoot || _sourceRoots.contains(dir['name']);

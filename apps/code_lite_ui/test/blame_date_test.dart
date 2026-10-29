@@ -7,8 +7,8 @@ void main() {
   final now = DateTime(2026, 10, 12, 19, 30);
 
   test('today (any time of day) is "Today"; yesterday and other years keep the date', () {
-    expect(blameDate(DateTime(2026, 10, 12, 0, 0, 1), now: now), 'Today');
-    expect(blameDate(DateTime(2026, 10, 12, 23, 59), now: now), 'Today');
+    expect(blameDate(DateTime(2026, 10, 12, 0, 0, 1), now: now), '今天');
+    expect(blameDate(DateTime(2026, 10, 12, 23, 59), now: now), '今天');
     expect(blameDate(DateTime(2026, 10, 11, 23, 59), now: now), '2026/10/11');
     expect(blameDate(DateTime(2025, 10, 12, 12), now: now), '2025/10/12', reason: '去年的同一天不是今天');
   });
@@ -23,7 +23,7 @@ void main() {
     }, 'a.sql');
     final a = EditorAppearance();
     // 名字最多 6 个字符,多的用 ... 省略
-    expect(blameLabel(c, a, now: now), 'Today  zanson...');
+    expect(blameLabel(c, a, now: now), '今天  zanson...');
     expect(blameLabel(c, a, now: DateTime(2026, 10, 13, 8)), '2026/10/12  zanson...');
     // 悬停的小窗里是完整的名字
     expect(blameTooltip(c).split('\n').first, 'zanson2023');

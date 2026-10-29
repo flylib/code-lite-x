@@ -11,6 +11,7 @@ import '../editor/context_menu_region.dart';
 import 'terminal_selection.dart';
 import '../../core/theme/intellij_theme.dart';
 import 'terminal_store.dart';
+import '../../core/l10n/l10n.dart';
 
 /// IntelliJ 风格的终端工具窗:标题栏(Terminal | 会话标签 | +)加一块可直接输入的屏幕。
 ///
@@ -43,7 +44,7 @@ class TerminalPanel extends StatelessWidget {
               _TerminalHeader(store: store, onHide: onHide),
               Expanded(
                 child: !store.isAvailable
-                    ? const _Placeholder('终端需要 Rust Core(当前为离线预览)')
+                    ? _Placeholder(tr('终端需要 Rust Core(当前为离线预览)', 'The terminal needs the Rust Core (offline preview now)'))
                     : current == null
                         ? _AutoOpen(store: store, error: store.error)
                         : TerminalView(
@@ -81,9 +82,9 @@ class _TerminalHeader extends StatelessWidget {
       color: IntelliJTheme.panelBg,
       child: Row(
         children: [
-          const Text(
-            'Terminal',
-            style: TextStyle(color: IntelliJTheme.textHigh, fontSize: 13, fontWeight: FontWeight.w600),
+          Text(
+            tr('终端', 'Terminal'),
+            style: const TextStyle(color: IntelliJTheme.textHigh, fontSize: 13, fontWeight: FontWeight.w600),
           ),
           const SizedBox(width: 16),
           // 会话标签和「+」占满中间,「—」贴右边(之前 Flexible + Spacer 平分空间,「—」跑到了中间)
@@ -106,7 +107,7 @@ class _TerminalHeader extends StatelessWidget {
                       ),
                     _HeaderIcon(
                       icon: Icons.add,
-                      tooltip: '新建会话',
+                      tooltip: tr('新建会话', 'New Session'),
                       // 尺寸由视图在下一次布局时修正,这里给个常见默认值即可。
                       onTap: store.isAvailable ? () => store.open(24, 100) : null,
                     ),
@@ -115,7 +116,7 @@ class _TerminalHeader extends StatelessWidget {
               ),
             ),
           ),
-          _HeaderIcon(icon: Icons.remove, tooltip: '隐藏', onTap: onHide),
+          _HeaderIcon(icon: Icons.remove, tooltip: tr('隐藏', 'Hide'), onTap: onHide),
         ],
       ),
     );
@@ -229,7 +230,7 @@ class _AutoOpenState extends State<_AutoOpen> {
 
   @override
   Widget build(BuildContext context) {
-    if (widget.error != null) return _Placeholder('终端启动失败: ${widget.error}');
+    if (widget.error != null) return _Placeholder(tr('终端启动失败: ${widget.error}', 'Failed to start the terminal: ${widget.error}'));
     return LayoutBuilder(
       builder: (context, constraints) {
         if (!_tried) {
@@ -869,9 +870,9 @@ class _TerminalViewState extends State<TerminalView> implements TextInputClient 
         _syncSize(rows, cols);
         final menu = ContextMenuRegion(
           menuBuilder: (_) => [
-            MenuItemButton(onPressed: _hasSelection ? _copy : null, child: const Text('复制')),
-            MenuItemButton(onPressed: _paste, child: const Text('粘贴')),
-            MenuItemButton(onPressed: _selectAll, child: const Text('全选')),
+            MenuItemButton(onPressed: _hasSelection ? _copy : null, child: Text(tr('复制', 'Copy'))),
+            MenuItemButton(onPressed: _paste, child: Text(tr('粘贴', 'Paste'))),
+            MenuItemButton(onPressed: _selectAll, child: Text(tr('全选', 'Select All'))),
           ],
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,

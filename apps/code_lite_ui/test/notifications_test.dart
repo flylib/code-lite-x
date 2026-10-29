@@ -118,8 +118,8 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('ok')));
     await tester.pump();
     expect(find.text('全部  3', findRichText: true), findsOneWidget);
-    expect(find.text('Errors  2', findRichText: true), findsOneWidget);
-    expect(find.text('Notify  1', findRichText: true), findsOneWidget);
+    expect(find.text('错误  2', findRichText: true), findsOneWidget);
+    expect(find.text('通知  1', findRichText: true), findsOneWidget);
     expect(find.byKey(ValueKey('problem-${center.notifies.first.id}')), findsOneWidget, reason: '全部里有通知');
     await tester.tap(find.byKey(const ValueKey('problems-tab-errors')));
     await tester.pump();

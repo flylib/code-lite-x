@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/github/github_service.dart';
+import '../../core/l10n/l10n.dart';
 import '../../core/theme/intellij_theme.dart';
 import '../commit/diff_cells.dart';
 import '../commit/line_diff.dart';
@@ -141,7 +142,7 @@ class _PrDiffTabState extends State<PrDiffTab> {
     if (f == null) {
       setState(() {
         _loading = false;
-        _error = '文件不在这个 PR 里: $path';
+        _error = tr('文件不在这个 PR 里: $path', 'File is not in this pull request: $path');
       });
       return;
     }
@@ -190,7 +191,7 @@ class _PrDiffTabState extends State<PrDiffTab> {
       final b = await _session.blame(path);
       if (mounted && _path == path) setState(() => _blame = b);
     } on GhException catch (e) {
-      if (mounted) prSnack(context, 'Blame 失败: ${e.message}', error: true);
+      if (mounted) prSnack(context, tr('Blame 失败: ${e.message}', 'Blame failed: ${e.message}'), error: true);
     }
   }
 
@@ -242,7 +243,12 @@ class _PrDiffTabState extends State<PrDiffTab> {
 
   void _startComment() {
     if (!_canComment) {
-      prSnack(context, _selection == null ? '先选中要评论的行' : 'GitHub 只允许评论改动附近的行(改动上下 $_contextLines 行内)');
+      prSnack(
+          context,
+          _selection == null
+              ? tr('先选中要评论的行', 'Select the lines to comment on first')
+              : tr('GitHub 只允许评论改动附近的行(改动上下 $_contextLines 行内)',
+                  'GitHub only allows comments on lines near a change (within $_contextLines lines of it)'));
       return;
     }
     final s = _selection!;
@@ -301,7 +307,9 @@ class _PrDiffTabState extends State<PrDiffTab> {
     await showDialog<void>(
       context: context,
       builder: (ctx) => _ClipboardCompareDialog(
-        title: s == null ? '${_path!.split('/').last} ↔ Clipboard' : 'Selection ↔ Clipboard',
+        title: s == null
+            ? tr('${_path!.split('/').last} ↔ 剪贴板', '${_path!.split('/').last} ↔ Clipboard')
+            : tr('选区 ↔ 剪贴板', 'Selection ↔ Clipboard'),
         left: mine,
         right: splitDiffLines(clip),
       ),
@@ -387,8 +395,8 @@ class _PrDiffTabState extends State<PrDiffTab> {
   Widget build(BuildContext context) {
     final d = _session.detail;
     if (_session.error != null && d == null) return Center(child: Text(_session.error!, style: diffSmallStyle));
-    if (d == null || _session.mergeBase == null) return const Center(child: Text('加载中…', style: diffSmallStyle));
-    if (_session.files.isEmpty) return const Center(child: Text('这个 PR 没有改动文件', style: diffSmallStyle));
+    if (d == null || _session.mergeBase == null) return Center(child: Text(tr('正在加载…', 'Loading…'), style: diffSmallStyle));
+    if (_session.files.isEmpty) return Center(child: Text(tr('这个 PR 没有改动文件', 'This pull request has no changed files'), style: diffSmallStyle));
 
     return CallbackShortcuts(
       bindings: {
@@ -425,21 +433,21 @@ class _PrDiffTabState extends State<PrDiffTab> {
       ),
       child: Row(
         children: [
-          DiffToolIcon(icon: Icons.arrow_upward, tooltip: '上一处改动 (⇧F7)', onTap: diffs == 0 ? null : () => _gotoBlock(-1)),
-          DiffToolIcon(icon: Icons.arrow_downward, tooltip: '下一处改动 (F7)', onTap: diffs == 0 ? null : () => _gotoBlock(1)),
-          DiffToolIcon(icon: Icons.edit_outlined, tooltip: '打开本地文件', onTap: _path == null ? null : _openLocal),
+          DiffToolIcon(icon: Icons.arrow_upward, tooltip: tr('上一处差异 (⇧F7)', 'Previous Difference (⇧F7)'), onTap: diffs == 0 ? null : () => _gotoBlock(-1)),
+          DiffToolIcon(icon: Icons.arrow_downward, tooltip: tr('下一处差异 (F7)', 'Next Difference (F7)'), onTap: diffs == 0 ? null : () => _gotoBlock(1)),
+          DiffToolIcon(icon: Icons.edit_outlined, tooltip: tr('打开本地文件', 'Open Local File'), onTap: _path == null ? null : _openLocal),
           const SizedBox(width: 6),
-          DiffToolIcon(icon: Icons.arrow_back, tooltip: '上一个文件', onTap: index <= 0 ? null : () => _gotoFile(-1)),
+          DiffToolIcon(icon: Icons.arrow_back, tooltip: tr('上一个文件', 'Previous File'), onTap: index <= 0 ? null : () => _gotoFile(-1)),
           DiffToolIcon(
             icon: Icons.arrow_forward,
-            tooltip: '下一个文件',
+            tooltip: tr('下一个文件', 'Next File'),
             onTap: index < 0 || index >= files.length - 1 ? null : () => _gotoFile(1),
           ),
           const SizedBox(width: 4),
           Flexible(child: _filePicker(files, index)),
           const SizedBox(width: 6),
-          DiffToolIcon(icon: Icons.person_search_outlined, tooltip: 'Annotate with Git Blame', active: _blameOn, onTap: _toggleBlame),
-          DiffToolIcon(icon: Icons.refresh, tooltip: '刷新', onTap: _session.reload),
+          DiffToolIcon(icon: Icons.person_search_outlined, tooltip: tr('使用 Git Blame 注解', 'Annotate with Git Blame'), active: _blameOn, onTap: _toggleBlame),
+          DiffToolIcon(icon: Icons.refresh, tooltip: tr('刷新', 'Refresh'), onTap: _session.reload),
           const Spacer(),
           if (viewed != null) ...[
             InkWell(
@@ -452,14 +460,14 @@ class _PrDiffTabState extends State<PrDiffTab> {
                   children: [
                     Icon(viewed ? Icons.check_box : Icons.check_box_outline_blank, size: 15, color: IntelliJTheme.textSecondary),
                     const SizedBox(width: 4),
-                    const Text('Viewed', style: diffSmallStyle),
+                    Text(tr('已查看', 'Viewed'), style: diffSmallStyle),
                   ],
                 ),
               ),
             ),
             const SizedBox(width: 10),
           ],
-          const Text('Review:', style: diffSmallStyle),
+          Text(tr('审查:', 'Review:'), style: diffSmallStyle),
           const SizedBox(width: 6),
           OutlinedButton(
             onPressed: () => showSubmitReviewDialog(context, _session),
@@ -469,10 +477,14 @@ class _PrDiffTabState extends State<PrDiffTab> {
               minimumSize: const Size(0, 26),
               side: const BorderSide(color: IntelliJTheme.border),
             ),
-            child: const Text('Submit…', style: TextStyle(color: IntelliJTheme.textHigh, fontSize: 12)),
+            child: Text(tr('提交…', 'Submit…'), style: const TextStyle(color: IntelliJTheme.textHigh, fontSize: 12)),
           ),
           const SizedBox(width: 12),
-          Text(diffs == 0 ? '没有差异' : '$diffs ${diffs == 1 ? 'difference' : 'differences'}', style: diffSmallStyle),
+          Text(
+              diffs == 0
+                  ? tr('没有差异', 'No differences')
+                  : tr('$diffs 处差异', '$diffs ${diffs == 1 ? 'difference' : 'differences'}'),
+              style: diffSmallStyle),
         ],
       ),
     );
@@ -480,7 +492,7 @@ class _PrDiffTabState extends State<PrDiffTab> {
 
   Widget _filePicker(List<PrFile> files, int index) {
     return PopupMenuButton<String>(
-      tooltip: '切换文件',
+      tooltip: tr('切换文件', 'Switch File'),
       color: IntelliJTheme.panelBg,
       onSelected: _session.showFile,
       itemBuilder: (_) => [
@@ -543,18 +555,18 @@ class _PrDiffTabState extends State<PrDiffTab> {
       decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: IntelliJTheme.borderSubtle))),
       child: Row(
         children: [
-          Expanded(child: side(_session.mergeBase!, f == null ? '' : (f.status == 'added' ? '(新文件)' : f.basePath))),
+          Expanded(child: side(_session.mergeBase!, f == null ? '' : (f.status == 'added' ? tr('(新文件)', '(new file)') : f.basePath))),
           SizedBox(width: _gutterWidth + (_blameOn ? _blameWidth : 0)),
-          Expanded(child: side(d.headSha, f == null ? '' : (f.status == 'removed' ? '(已删除)' : f.path))),
+          Expanded(child: side(d.headSha, f == null ? '' : (f.status == 'removed' ? tr('(已删除)', '(deleted)') : f.path))),
         ],
       ),
     );
   }
 
   Widget _body() {
-    if (_loading) return const Center(child: Text('加载中…', style: diffSmallStyle));
+    if (_loading) return Center(child: Text(tr('正在加载…', 'Loading…'), style: diffSmallStyle));
     if (_error != null) return Center(child: Text(_error!, style: diffSmallStyle));
-    if (_binary) return const Center(child: Text('二进制文件,不显示差异', style: diffSmallStyle));
+    if (_binary) return Center(child: Text(tr('二进制文件,不显示差异', 'Binary file, differences not shown'), style: diffSmallStyle));
     final entries = _entries();
     return Theme(
       data: darculaMenuTheme(Theme.of(context)),
@@ -585,22 +597,22 @@ class _PrDiffTabState extends State<PrDiffTab> {
       MenuItemButton(
         leadingIcon: const Icon(Icons.content_paste_go, size: 16),
         onPressed: _compareWithClipboard,
-        child: const Text('Compare with Clipboard'),
+        child: Text(tr('与剪贴板比较', 'Compare with Clipboard')),
       ),
       const Divider(height: 10),
       MenuItemButton(
         onPressed: _toggleBlame,
-        child: Text(_blameOn ? 'Close Annotations' : 'Annotate with Git Blame'),
+        child: Text(_blameOn ? tr('关闭注解', 'Close Annotations') : tr('使用 Git Blame 注解', 'Annotate with Git Blame')),
       ),
       MenuItemButton(
         onPressed: _canComment ? _startComment : null,
         shortcut: const SingleActivator(LogicalKeyboardKey.keyX, meta: true, shift: true),
-        child: const Text('Add Review Comment'),
+        child: Text(tr('添加审查评论', 'Add Review Comment')),
       ),
       MenuItemButton(
         onPressed: viewed == null ? null : _toggleViewed,
         shortcut: const SingleActivator(LogicalKeyboardKey.keyS, meta: true, shift: true),
-        child: Text(viewed == true ? 'Mark File as Not Viewed' : 'Mark File as Viewed'),
+        child: Text(viewed == true ? tr('将文件标记为未查看', 'Mark File as Not Viewed') : tr('将文件标记为已查看', 'Mark File as Viewed')),
       ),
     ];
   }
@@ -610,7 +622,9 @@ class _PrDiffTabState extends State<PrDiffTab> {
       for (var i = _composeFrom!; i <= _composeRow!; i++)
         if ((_composeSide == 'LEFT' ? _rows[i].left : _rows[i].right) case final n?) n + 1,
     ];
-    final label = lines.length > 1 ? '第 ${lines.first}–${lines.last} 行' : '第 ${lines.first} 行';
+    final label = lines.length > 1
+        ? tr('第 ${lines.first}–${lines.last} 行', 'lines ${lines.first}–${lines.last}')
+        : tr('第 ${lines.first} 行', 'line ${lines.first}');
     return Container(
       margin: const EdgeInsets.fromLTRB(40, 4, 40, 8),
       padding: const EdgeInsets.all(10),
@@ -622,10 +636,14 @@ class _PrDiffTabState extends State<PrDiffTab> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('评论 ${_composeSide == 'LEFT' ? '旧版本' : '新版本'} $label', style: prMuted),
+          Text(
+              _composeSide == 'LEFT'
+                  ? tr('评论 旧版本 $label', 'Comment on the old version, $label')
+                  : tr('评论 新版本 $label', 'Comment on the new version, $label'),
+              style: prMuted),
           const SizedBox(height: 8),
           PrCommentComposer(
-            submitLabel: 'Add Comment',
+            submitLabel: tr('添加评论', 'Add Comment'),
             onSubmit: _submitComment,
             onCancel: () => setState(() => _composeRow = _composeFrom = null),
           ),
@@ -747,7 +765,9 @@ class _ClipboardCompareDialog extends StatelessWidget {
                 children: [
                   Expanded(child: Text(title, overflow: TextOverflow.ellipsis, style: prText)),
                   Text(
-                    rows.every((r) => r.kind == DiffRowKind.equal) ? '内容相同' : '${changeBlockStarts(rows).length} differences',
+                    rows.every((r) => r.kind == DiffRowKind.equal)
+                        ? tr('内容相同', 'Contents are identical')
+                        : tr('${changeBlockStarts(rows).length} 处差异', '${changeBlockStarts(rows).length} ${changeBlockStarts(rows).length == 1 ? 'difference' : 'differences'}'),
                     style: prMuted,
                   ),
                   IconButton(
@@ -760,11 +780,11 @@ class _ClipboardCompareDialog extends StatelessWidget {
             Container(
               height: 24,
               decoration: const BoxDecoration(border: Border.symmetric(horizontal: BorderSide(color: IntelliJTheme.borderSubtle))),
-              child: const Row(
+              child: Row(
                 children: [
-                  Expanded(child: Padding(padding: EdgeInsets.symmetric(horizontal: 10), child: Text('Selection', style: prMuted))),
-                  SizedBox(width: 80),
-                  Expanded(child: Padding(padding: EdgeInsets.symmetric(horizontal: 10), child: Text('Clipboard', style: prMuted))),
+                  Expanded(child: Padding(padding: const EdgeInsets.symmetric(horizontal: 10), child: Text(tr('选区', 'Selection'), style: prMuted))),
+                  const SizedBox(width: 80),
+                  Expanded(child: Padding(padding: const EdgeInsets.symmetric(horizontal: 10), child: Text(tr('剪贴板', 'Clipboard'), style: prMuted))),
                 ],
               ),
             ),

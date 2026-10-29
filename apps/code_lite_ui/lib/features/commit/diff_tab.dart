@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../core/client/api_client.dart';
+import '../../core/l10n/l10n.dart';
 import '../../core/theme/intellij_theme.dart';
 import '../editor/code_editor_controller.dart';
 import 'diff_cells.dart';
@@ -91,7 +92,7 @@ class _DiffTabState extends State<DiffTab> {
     if (info['status'] != 'ok') {
       setState(() {
         _loading = false;
-        _error = info['error'] as String? ?? '不是 Git 仓库';
+        _error = info['error'] as String? ?? tr('不是 Git 仓库', 'Not a Git repository');
       });
       return;
     }
@@ -161,7 +162,7 @@ class _DiffTabState extends State<DiffTab> {
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) return const Center(child: Text('加载中…', style: _small));
+    if (_loading) return Center(child: Text(tr('正在加载…', 'Loading…'), style: _small));
     if (_error != null) return Center(child: Text(_error!, style: _small));
     final diffs = _blocks.length;
     return Column(
@@ -177,17 +178,19 @@ class _DiffTabState extends State<DiffTab> {
           ),
           child: Row(
             children: [
-              DiffToolIcon(icon: Icons.arrow_upward, tooltip: '上一处改动', onTap: diffs == 0 ? null : () => _goto(-1)),
-              DiffToolIcon(icon: Icons.arrow_downward, tooltip: '下一处改动', onTap: diffs == 0 ? null : () => _goto(1)),
+              DiffToolIcon(icon: Icons.arrow_upward, tooltip: tr('上一处差异', 'Previous Difference'), onTap: diffs == 0 ? null : () => _goto(-1)),
+              DiffToolIcon(icon: Icons.arrow_downward, tooltip: tr('下一处差异', 'Next Difference'), onTap: diffs == 0 ? null : () => _goto(1)),
               DiffToolIcon(
                 icon: Icons.edit_outlined,
-                tooltip: '跳到源文件',
+                tooltip: tr('跳转到源', 'Jump to Source'),
                 onTap: () => _openAtRow(_currentBlock < 0 || _blocks.isEmpty ? 0 : _blocks[_currentBlock]),
               ),
-              DiffToolIcon(icon: Icons.refresh, tooltip: '刷新', onTap: _load),
+              DiffToolIcon(icon: Icons.refresh, tooltip: tr('刷新', 'Refresh'), onTap: _load),
               const Spacer(),
               Text(
-                diffs == 0 ? '没有差异' : '$diffs ${diffs == 1 ? 'difference' : 'differences'}',
+                diffs == 0
+                    ? tr('没有差异', 'No differences')
+                    : tr('$diffs 处差异', '$diffs ${diffs == 1 ? 'difference' : 'differences'}'),
                 style: _small,
               ),
             ],
@@ -208,7 +211,7 @@ class _DiffTabState extends State<DiffTab> {
                       const SizedBox(width: 4),
                       Flexible(
                         child: Text(
-                          _left.isEmpty && _headShort.isNotEmpty ? '$_headShort  (新文件)' : '$_headShort  ${widget.repoPath}',
+                          _left.isEmpty && _headShort.isNotEmpty ? tr('$_headShort  (新文件)', '$_headShort  (new file)') : '$_headShort  ${widget.repoPath}',
                           overflow: TextOverflow.ellipsis,
                           style: _small,
                         ),
@@ -218,10 +221,10 @@ class _DiffTabState extends State<DiffTab> {
                 ),
               ),
               const SizedBox(width: _gutterWidth),
-              const Expanded(
+              Expanded(
                 child: Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 10),
-                  child: Text('Current version', overflow: TextOverflow.ellipsis, style: _small),
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  child: Text(tr('当前版本', 'Current version'), overflow: TextOverflow.ellipsis, style: _small),
                 ),
               ),
             ],
@@ -276,7 +279,7 @@ class _DiffTabState extends State<DiffTab> {
     final res = await widget.client.saveFile(_sourcePath, text);
     if (!mounted) return;
     if (res['status'] != 'ok') {
-      showNotice(context, '恢复失败: ${res['error']}', error: true);
+      showNotice(context, tr('恢复失败: ${res['error']}', 'Revert failed: ${res['error']}'), error: true);
       return;
     }
     if (live != null) {
@@ -320,7 +323,7 @@ class _DiffTabState extends State<DiffTab> {
                 child: blockStart < 0
                     ? null
                     : Tooltip(
-                        message: '恢复为 HEAD 版本',
+                        message: tr('恢复为 HEAD 版本', 'Revert to HEAD version'),
                         waitDuration: const Duration(milliseconds: 400),
                         child: InkWell(
                           onTap: () => _revertBlock(blockStart),

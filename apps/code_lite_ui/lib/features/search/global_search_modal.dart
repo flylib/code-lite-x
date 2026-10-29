@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/client/api_client.dart';
 import '../../core/theme/intellij_theme.dart';
+import '../../core/l10n/l10n.dart';
 
 class GlobalSearchModal extends StatefulWidget {
   final ApiClient client;
@@ -73,7 +74,7 @@ class _GlobalSearchModalState extends State<GlobalSearchModal> {
 
     setState(() {
       _isSearching = true;
-      _statusMessage = 'Searching workspace...';
+      _statusMessage = tr('正在搜索工作区…', 'Searching workspace...');
     });
 
     final options = {
@@ -91,8 +92,8 @@ class _GlobalSearchModalState extends State<GlobalSearchModal> {
       _isSearching = false;
       _matches = matches;
       _statusMessage = matches.isEmpty
-          ? 'No occurrences found for "$query"'
-          : 'Found ${matches.length} occurrences across ${_uniqueFilesCount(matches)} files';
+          ? tr('没有找到“$query”', 'No occurrences found for "$query"')
+          : tr('在 ${_uniqueFilesCount(matches)} 个文件中找到 ${matches.length} 处匹配', 'Found ${matches.length} occurrences across ${_uniqueFilesCount(matches)} files');
     });
   }
 
@@ -120,7 +121,7 @@ class _GlobalSearchModalState extends State<GlobalSearchModal> {
     final count = (res['replaced_count'] as int?) ?? 0;
 
     setState(() {
-      _statusMessage = 'Successfully replaced $count occurrences across workspace';
+      _statusMessage = tr('已在工作区中替换 $count 处', 'Successfully replaced $count occurrences across workspace');
     });
 
     _performSearch();
@@ -198,7 +199,7 @@ class _GlobalSearchModalState extends State<GlobalSearchModal> {
           const Icon(Icons.search, size: 16, color: IntelliJTheme.accentBlue),
           const SizedBox(width: 8),
           Text(
-            _isReplaceMode ? 'Replace in Files' : 'Find in Files',
+            _isReplaceMode ? tr('在文件中替换', 'Replace in Files') : tr('在文件中查找', 'Find in Files'),
             style: const TextStyle(
               color: IntelliJTheme.textHigh,
               fontSize: 13,
@@ -233,7 +234,7 @@ class _GlobalSearchModalState extends State<GlobalSearchModal> {
                   ),
                   const SizedBox(width: 4),
                   Text(
-                    _isReplaceMode ? 'Hide Replace' : 'Replace Mode',
+                    _isReplaceMode ? tr('隐藏替换', 'Hide Replace') : tr('替换模式', 'Replace Mode'),
                     style: TextStyle(
                       color: _isReplaceMode ? IntelliJTheme.accentBlue : IntelliJTheme.textSecondary,
                       fontSize: 11,
@@ -287,12 +288,12 @@ class _GlobalSearchModalState extends State<GlobalSearchModal> {
                             fontSize: 12,
                             fontFamily: 'monospace',
                           ),
-                          decoration: const InputDecoration(
-                            hintText: 'Search in workspace files...',
-                            hintStyle: TextStyle(color: IntelliJTheme.textMuted, fontSize: 12),
+                          decoration: InputDecoration(
+                            hintText: tr('在工作区文件中搜索…', 'Search in workspace files...'),
+                            hintStyle: const TextStyle(color: IntelliJTheme.textMuted, fontSize: 12),
                             border: InputBorder.none,
                             isDense: true,
-                            contentPadding: EdgeInsets.symmetric(vertical: 8),
+                            contentPadding: const EdgeInsets.symmetric(vertical: 8),
                           ),
                           onSubmitted: (_) => _performSearch(),
                         ),
@@ -313,17 +314,17 @@ class _GlobalSearchModalState extends State<GlobalSearchModal> {
               ),
               const SizedBox(width: 8),
               // Filter Toggle Buttons (Cc, W, .*)
-              _buildOptionToggle('Cc', 'Match Case', _caseSensitive, () {
+              _buildOptionToggle('Cc', tr('区分大小写', 'Match Case'), _caseSensitive, () {
                 setState(() => _caseSensitive = !_caseSensitive);
                 _performSearch();
               }),
               const SizedBox(width: 4),
-              _buildOptionToggle('W', 'Whole Words', _wholeWord, () {
+              _buildOptionToggle('W', tr('整词', 'Whole Words'), _wholeWord, () {
                 setState(() => _wholeWord = !_wholeWord);
                 _performSearch();
               }),
               const SizedBox(width: 4),
-              _buildOptionToggle('.*', 'Regular Expression', _isRegex, () {
+              _buildOptionToggle('.*', tr('正则表达式', 'Regular Expression'), _isRegex, () {
                 setState(() => _isRegex = !_isRegex);
                 _performSearch();
               }),
@@ -337,7 +338,7 @@ class _GlobalSearchModalState extends State<GlobalSearchModal> {
                   padding: const EdgeInsets.symmetric(horizontal: 12),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
                 ),
-                child: const Text('Find', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                child: Text(tr('查找', 'Find'), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
               ),
             ],
           ),
@@ -369,12 +370,12 @@ class _GlobalSearchModalState extends State<GlobalSearchModal> {
                               fontSize: 12,
                               fontFamily: 'monospace',
                             ),
-                            decoration: const InputDecoration(
-                              hintText: 'Replace with...',
-                              hintStyle: TextStyle(color: IntelliJTheme.textMuted, fontSize: 12),
+                            decoration: InputDecoration(
+                              hintText: tr('替换为…', 'Replace with...'),
+                              hintStyle: const TextStyle(color: IntelliJTheme.textMuted, fontSize: 12),
                               border: InputBorder.none,
                               isDense: true,
-                              contentPadding: EdgeInsets.symmetric(vertical: 8),
+                              contentPadding: const EdgeInsets.symmetric(vertical: 8),
                             ),
                           ),
                         ),
@@ -392,7 +393,7 @@ class _GlobalSearchModalState extends State<GlobalSearchModal> {
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
                   ),
-                  child: const Text('Replace All', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  child: Text(tr('全部替换', 'Replace All'), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                 ),
               ],
             ),
@@ -452,9 +453,9 @@ class _GlobalSearchModalState extends State<GlobalSearchModal> {
         children: [
           Icon(Icons.manage_search, size: 48, color: IntelliJTheme.textMuted.withOpacity(0.5)),
           const SizedBox(height: 12),
-          const Text(
-            'Type a search term and press Find to scan the workspace',
-            style: TextStyle(color: IntelliJTheme.textMuted, fontSize: 12),
+          Text(
+            tr('输入要搜索的内容,按「查找」搜索整个工作区', 'Type a search term and press Find to scan the workspace'),
+            style: const TextStyle(color: IntelliJTheme.textMuted, fontSize: 12),
           ),
         ],
       ),

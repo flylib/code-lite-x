@@ -19,7 +19,7 @@ void main() {
       local('dev', current: true, upstream: 'origin/dev'),
     ], remote: const []);
     final rows = flattenBranchTree(tree, {});
-    expect(labels(rows), ['Local', '  dev', '  feat', '    login', '    pay', '      refund', '  main']);
+    expect(labels(rows), ['本地', '  dev', '  feat', '    login', '    pay', '      refund', '  main']);
     final dev = rows.firstWhere((r) => r.node.label == 'dev').node;
     expect(dev.isCurrent, isTrue);
     expect(dev.upstream, 'origin/dev');
@@ -34,7 +34,7 @@ void main() {
       remote: [remote('origin/main'), remote('origin/feat/x'), remote('upstream/dev')],
     );
     final rows = flattenBranchTree(tree, {});
-    expect(labels(rows).skipWhile((l) => l != 'Remote').toList(), ['Remote', '  origin', '    feat', '      x', '    main', '  upstream', '    dev']);
+    expect(labels(rows).skipWhile((l) => l != '远程').toList(), ['远程', '  origin', '    feat', '      x', '    main', '  upstream', '    dev']);
     expect(rows.firstWhere((r) => r.node.label == 'x').node.revision, 'origin/feat/x');
     expect(rows.firstWhere((r) => r.node.label == 'main' && r.depth == 2).node.isMain, isTrue);
   });
@@ -46,19 +46,19 @@ void main() {
       recent: ['b', 'gone', 'feat/a'],
     );
     final rows = flattenBranchTree(tree, {});
-    expect(labels(rows).takeWhile((l) => l != 'Local').toList(), ['Recent', '  b', '  feat', '    a']);
-    expect(tree.first.label, 'Recent');
+    expect(labels(rows).takeWhile((l) => l != '本地').toList(), ['最近', '  b', '  feat', '    a']);
+    expect(tree.first.label, '最近');
     // no recent branches: no Recent section
-    expect(buildBranchMenuTree(local: [local('main')], remote: const []).map((n) => n.label), ['Local']);
+    expect(buildBranchMenuTree(local: [local('main')], remote: const []).map((n) => n.label), ['本地']);
   });
 
   test('collapsing a group hides its rows; searching ignores the folding', () {
     final all = buildBranchMenuTree(local: [local('a'), local('feat/b')], remote: const []);
-    final folded = flattenBranchTree(all, {'/Local/feat'});
-    expect(labels(folded), ['Local', '  a', '  feat']);
+    final folded = flattenBranchTree(all, {'/本地/feat'});
+    expect(labels(folded), ['本地', '  a', '  feat']);
     expect(folded.last.expandable && !folded.last.expanded, isTrue);
-    expect(labels(flattenBranchTree(all, {'/Local'})), ['Local']);
-    expect(labels(flattenBranchTree(all, {'/Local'}, expandAll: true)), ['Local', '  a', '  feat', '    b']);
+    expect(labels(flattenBranchTree(all, {'/本地'})), ['本地']);
+    expect(labels(flattenBranchTree(all, {'/本地'}, expandAll: true)), ['本地', '  a', '  feat', '    b']);
   });
 
   test('the search keeps matching branches (any case) and drops empty sections', () {
@@ -68,9 +68,9 @@ void main() {
       recent: ['feat/Login'],
       query: 'LOGIN',
     );
-    expect(labels(flattenBranchTree(tree, {})), ['Recent', '  feat', '    Login', 'Local', '  feat', '    Login']);
+    expect(labels(flattenBranchTree(tree, {})), ['最近', '  feat', '    Login', '本地', '  feat', '    Login']);
     expect(buildBranchMenuTree(local: [local('main')], remote: [remote('origin/main')], query: 'zzz'), isEmpty);
     // without a query the Local title stays even with no branches (a fresh repo)
-    expect(buildBranchMenuTree(local: const [], remote: const []).map((n) => n.label), ['Local']);
+    expect(buildBranchMenuTree(local: const [], remote: const []).map((n) => n.label), ['本地']);
   });
 }

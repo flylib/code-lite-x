@@ -82,7 +82,7 @@ void main() {
   testWidgets('the chip shows the current branch; a plain folder shows nothing', (tester) async {
     await show(tester);
     expect(find.text('main'), findsOneWidget);
-    expect(find.byTooltip('Git Branch: main'), findsOneWidget);
+    expect(find.byTooltip('Git 分支: main'), findsOneWidget);
 
     client.isRepo = false;
     await store.load();
@@ -94,20 +94,20 @@ void main() {
     await show(tester);
     await openPopup(tester);
 
-    expect(find.text('Search for branches and actions'), findsOneWidget);
+    expect(find.text('搜索分支和操作'), findsOneWidget);
     for (final (label, shortcut) in [
-      ('Update Project…', '⌘T'),
-      ('Commit…', '⌘K'),
-      ('Push…', '⇧⌘P'),
-      ('New Branch…', '⌥⌘N'),
-      ('Checkout Tag or Revision…', null),
+      ('更新项目…', '⌘T'),
+      ('提交…', '⌘K'),
+      ('推送…', '⇧⌘P'),
+      ('新建分支…', '⌥⌘N'),
+      ('签出标签或修订…', null),
     ]) {
       expect(find.text(label), findsOneWidget, reason: label);
       if (shortcut != null) expect(find.text(shortcut), findsOneWidget, reason: label);
     }
-    expect(find.text('Recent'), findsOneWidget);
-    expect(find.text('Local'), findsOneWidget);
-    expect(find.text('Remote'), findsOneWidget);
+    expect(find.text('最近'), findsOneWidget);
+    expect(find.text('本地'), findsOneWidget);
+    expect(find.text('远程'), findsOneWidget);
     expect(find.text('feat'), findsOneWidget, reason: 'feat/login 折成文件夹');
     expect(find.text('login'), findsOneWidget);
     expect(find.text('origin'), findsOneWidget);
@@ -148,13 +148,13 @@ void main() {
     await tester.enterText(find.byType(TextField), 'LOGIN');
     await tester.pumpAndSettle();
     expect(find.text('login'), findsOneWidget);
-    expect(find.text('Update Project…'), findsNothing);
+    expect(find.text('更新项目…'), findsNothing);
     expect(find.text('dev'), findsNothing);
 
-    await tester.enterText(find.byType(TextField), 'push');
+    await tester.enterText(find.byType(TextField), '推送');
     await tester.pumpAndSettle();
-    expect(find.text('Push…'), findsOneWidget);
-    expect(find.text('New Branch…'), findsNothing);
+    expect(find.text('推送…'), findsOneWidget);
+    expect(find.text('新建分支…'), findsNothing);
 
     await tester.enterText(find.byType(TextField), 'zzzz');
     await tester.pumpAndSettle();
@@ -164,11 +164,11 @@ void main() {
   testWidgets('a section can be folded', (tester) async {
     await show(tester);
     await openPopup(tester);
-    await tester.tap(find.text('Local'));
+    await tester.tap(find.text('本地'));
     await tester.pumpAndSettle();
     expect(find.text('feat'), findsNothing);
-    expect(find.text('Remote'), findsOneWidget);
-    await tester.tap(find.text('Local'));
+    expect(find.text('远程'), findsOneWidget);
+    await tester.tap(find.text('本地'));
     await tester.pumpAndSettle();
     expect(find.text('feat'), findsOneWidget);
   });
@@ -176,10 +176,10 @@ void main() {
   testWidgets('Commit… opens the commit window and closes the popup', (tester) async {
     await show(tester);
     await openPopup(tester);
-    await tester.tap(find.text('Commit…'));
+    await tester.tap(find.text('提交…'));
     await tester.pumpAndSettle();
     expect(commitWindowOpened, 1);
-    expect(find.text('Search for branches and actions'), findsNothing);
+    expect(find.text('搜索分支和操作'), findsNothing);
   });
 
   Map<String, dynamic> outgoing({bool setUpstream = false, int count = 2}) => {
@@ -200,16 +200,16 @@ void main() {
     await show(tester);
 
     await openPopup(tester);
-    await tester.tap(find.text('Update Project…'));
+    await tester.tap(find.text('更新项目…'));
     await tester.pumpAndSettle();
     expect(client.callsTo('git.update'), [{'stash': false}], reason: '没有本地改动:不问,直接更新');
     expect(find.textContaining('已更新: 1 file changed'), findsOneWidget);
 
     await openPopup(tester);
-    await tester.tap(find.text('Push…'));
+    await tester.tap(find.text('推送…'));
     await tester.pumpAndSettle();
     // 先弹确认框,列出要推的提交
-    expect(find.text('Push Commits'), findsOneWidget);
+    expect(find.text('推送提交'), findsOneWidget);
     expect(find.text('commit number 0'), findsOneWidget);
     expect(find.text('commit number 1'), findsOneWidget);
     expect(find.byKey(const ValueKey('push-new-branch')), findsOneWidget);
@@ -224,7 +224,7 @@ void main() {
     client.responses['git.outgoing'] = outgoing();
     await show(tester);
     await openPopup(tester);
-    await tester.tap(find.text('Push…'));
+    await tester.tap(find.text('推送…'));
     await tester.pumpAndSettle();
     expect(tester.widget<Text>(find.byKey(const ValueKey('push-count'))).data, '2 个提交');
     expect(tester.widget<Text>(find.byKey(const ValueKey('push-target'))).data, 'origin : main');
@@ -234,7 +234,7 @@ void main() {
 
     client.responses['git.outgoing'] = outgoing(count: 0);
     await openPopup(tester);
-    await tester.tap(find.text('Push…'));
+    await tester.tap(find.text('推送…'));
     await tester.pumpAndSettle();
     expect(find.text('没有要推送的提交,已经和远程一致'), findsOneWidget);
     expect(tester.widget<FilledButton>(find.byKey(const ValueKey('push-confirm'))).onPressed, isNull);
@@ -255,7 +255,7 @@ void main() {
 
     Future<void> update() async {
       await openPopup(tester);
-      await tester.tap(find.text('Update Project…'));
+      await tester.tap(find.text('更新项目…'));
       await tester.pumpAndSettle();
     }
 
@@ -291,10 +291,10 @@ void main() {
     final flags = <bool>[];
     store.onChanged = flags.add;
     await openPopup(tester);
-    await tester.tap(find.text('Update Project…'));
+    await tester.tap(find.text('更新项目…'));
     await tester.pumpAndSettle();
     await openPopup(tester);
-    await tester.tap(find.text('Push…'));
+    await tester.tap(find.text('推送…'));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('push-confirm')));
     await tester.pumpAndSettle();
@@ -306,9 +306,9 @@ void main() {
     await show(tester);
     await openPopup(tester);
     final loads = client.callsTo('git.branches').length;
-    await tester.tap(find.text('Update Project…'));
+    await tester.tap(find.text('更新项目…'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('Update 失败: 分支 main 没有上游分支'), findsOneWidget);
+    expect(find.textContaining('更新失败: 分支 main 没有上游分支'), findsOneWidget);
     expect(client.callsTo('git.branches').length, greaterThan(loads), reason: '失败后也以磁盘为准重新加载');
   });
 
@@ -317,11 +317,11 @@ void main() {
     await openPopup(tester);
     await tester.tap(find.text('login'));
     await tester.pumpAndSettle();
-    for (final label in ['Checkout', "New Branch from 'feat/login'…", "Merge 'feat/login' into 'main'", "Rebase 'main' onto 'feat/login'", 'Rename…', 'Delete']) {
+    for (final label in ['签出', "从 'feat/login' 新建分支…", "将 'feat/login' 合并到 'main'", "将 'main' 变基到 'feat/login'", '重命名…', '删除']) {
       expect(find.text(label), findsOneWidget, reason: label);
     }
     client.current = 'feat/login'; // git 的效果
-    await tester.tap(find.text('Checkout'));
+    await tester.tap(find.text('签出'));
     await tester.pumpAndSettle();
 
     expect(client.callsTo('git.checkout'), [
@@ -338,11 +338,11 @@ void main() {
     // 第一个 main 在标题栏,第二个是 Local 里的(当前分支),最后一个是 Remote 里 origin 下的
     await tester.tap(find.text('main').at(1));
     await tester.pumpAndSettle();
-    for (final label in ['Checkout', "Merge 'main' into 'main'", "Rebase 'main' onto 'main'", 'Delete']) {
+    for (final label in ['签出', "将 'main' 合并到 'main'", "将 'main' 变基到 'main'", '删除']) {
       final item = tester.widget<PopupMenuItem<String>>(find.widgetWithText(PopupMenuItem<String>, label));
       expect(item.enabled, isFalse, reason: label);
     }
-    expect(tester.widget<PopupMenuItem<String>>(find.widgetWithText(PopupMenuItem<String>, 'Rename…')).enabled, isTrue);
+    expect(tester.widget<PopupMenuItem<String>>(find.widgetWithText(PopupMenuItem<String>, '重命名…')).enabled, isTrue);
   });
 
   testWidgets('a remote branch offers Checkout but not Rename or Delete, and checks it out by its remote name', (tester) async {
@@ -351,9 +351,9 @@ void main() {
     // 本地 dev(Recent 和 Local 各一个)和远程 dev 同名,Remote 段在最后,取最后一个
     await tester.tap(find.text('dev').last);
     await tester.pumpAndSettle();
-    expect(find.widgetWithText(PopupMenuItem<String>, 'Rename…'), findsNothing);
-    expect(find.widgetWithText(PopupMenuItem<String>, 'Delete'), findsNothing);
-    await tester.tap(find.text('Checkout'));
+    expect(find.widgetWithText(PopupMenuItem<String>, '重命名…'), findsNothing);
+    expect(find.widgetWithText(PopupMenuItem<String>, '删除'), findsNothing);
+    await tester.tap(find.text('签出'));
     await tester.pumpAndSettle();
     expect(client.callsTo('git.checkout'), [
       {'name': 'origin/dev'}
@@ -363,11 +363,11 @@ void main() {
   testWidgets('New Branch… asks for a name and creates it from HEAD', (tester) async {
     await show(tester);
     await openPopup(tester);
-    await tester.tap(find.text('New Branch…'));
+    await tester.tap(find.text('新建分支…'));
     await tester.pumpAndSettle();
-    expect(find.text('Checkout branch'), findsOneWidget);
+    expect(find.text('签出分支'), findsOneWidget);
     await tester.enterText(find.byType(TextField), 'feat/brand-new');
-    await tester.tap(find.text('Create'));
+    await tester.tap(find.text('创建'));
     await tester.pumpAndSettle();
     expect(client.callsTo('git.new_branch'), [
       {'name': 'feat/brand-new', 'hash': 'HEAD', 'checkout': true}
@@ -379,12 +379,12 @@ void main() {
     await openPopup(tester);
     await tester.tap(find.text('login'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text("New Branch from 'feat/login'…"));
+    await tester.tap(find.text("从 'feat/login' 新建分支…"));
     await tester.pumpAndSettle();
     expect(find.text("从 'feat/login' 创建"), findsOneWidget);
     await tester.tap(find.byType(CheckboxListTile));
     await tester.enterText(find.byType(TextField), 'side');
-    await tester.tap(find.text('Create'));
+    await tester.tap(find.text('创建'));
     await tester.pumpAndSettle();
     expect(client.callsTo('git.new_branch'), [
       {'name': 'side', 'hash': 'feat/login', 'checkout': false}
@@ -394,12 +394,12 @@ void main() {
   testWidgets('an empty name creates nothing; Cancel does nothing', (tester) async {
     await show(tester);
     await openPopup(tester);
-    await tester.tap(find.text('New Branch…'));
+    await tester.tap(find.text('新建分支…'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Create'));
+    await tester.tap(find.text('创建'));
     await tester.pumpAndSettle();
-    expect(find.text('Checkout branch'), findsOneWidget, reason: '名字为空,对话框还在');
-    await tester.tap(find.text('Cancel'));
+    expect(find.text('签出分支'), findsOneWidget, reason: '名字为空,对话框还在');
+    await tester.tap(find.text('取消'));
     await tester.pumpAndSettle();
     expect(client.callsTo('git.new_branch'), isEmpty);
   });
@@ -409,10 +409,10 @@ void main() {
     await openPopup(tester);
     await tester.tap(find.text('login'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text("Merge 'feat/login' into 'main'"));
+    await tester.tap(find.text("将 'feat/login' 合并到 'main'"));
     await tester.pumpAndSettle();
     expect(client.callsTo('git.merge'), isEmpty, reason: '先确认');
-    await tester.tap(find.widgetWithText(FilledButton, 'Merge'));
+    await tester.tap(find.widgetWithText(FilledButton, '合并'));
     await tester.pumpAndSettle();
     expect(client.callsTo('git.merge'), [
       {'name': 'feat/login'}
@@ -421,10 +421,10 @@ void main() {
     await openPopup(tester);
     await tester.tap(find.text('login'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text("Rebase 'main' onto 'feat/login'"));
+    await tester.tap(find.text("将 'main' 变基到 'feat/login'"));
     await tester.pumpAndSettle();
     expect(find.textContaining('这会改写'), findsOneWidget);
-    await tester.tap(find.widgetWithText(FilledButton, 'Rebase'));
+    await tester.tap(find.widgetWithText(FilledButton, '变基'));
     await tester.pumpAndSettle();
     expect(client.callsTo('git.rebase_onto'), [
       {'name': 'feat/login'}
@@ -436,19 +436,19 @@ void main() {
     await openPopup(tester);
     await tester.tap(find.text('login'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Rename…'));
+    await tester.tap(find.text('重命名…'));
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(FilledButton, 'Rename'));
+    await tester.tap(find.widgetWithText(FilledButton, '重命名'));
     await tester.pumpAndSettle();
     expect(client.callsTo('git.rename_branch'), isEmpty, reason: '没改名字');
 
     await openPopup(tester);
     await tester.tap(find.text('login'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Rename…'));
+    await tester.tap(find.text('重命名…'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField), 'feat/signin');
-    await tester.tap(find.widgetWithText(FilledButton, 'Rename'));
+    await tester.tap(find.widgetWithText(FilledButton, '重命名'));
     await tester.pumpAndSettle();
     expect(client.callsTo('git.rename_branch'), [
       {'name': 'feat/login', 'new_name': 'feat/signin'}
@@ -461,12 +461,12 @@ void main() {
       await openPopup(tester);
       await tester.tap(find.text('login'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Delete'));
+      await tester.tap(find.text('删除'));
       await tester.pumpAndSettle();
-      expect(find.text("Delete Branch 'feat/login'"), findsOneWidget);
+      expect(find.text("删除分支 'feat/login'"), findsOneWidget);
       if (force) await tester.tap(find.byType(CheckboxListTile));
       await tester.pump();
-      await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
+      await tester.tap(find.widgetWithText(FilledButton, '删除'));
       await tester.pumpAndSettle();
     }
     expect(client.callsTo('git.delete_branch'), [
@@ -478,10 +478,10 @@ void main() {
   testWidgets('Checkout Tag or Revision… passes what was typed', (tester) async {
     await show(tester);
     await openPopup(tester);
-    await tester.tap(find.text('Checkout Tag or Revision…'));
+    await tester.tap(find.text('签出标签或修订…'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField), '  v1.2.0 ');
-    await tester.tap(find.widgetWithText(FilledButton, 'Checkout'));
+    await tester.tap(find.widgetWithText(FilledButton, '签出'));
     await tester.pumpAndSettle();
     expect(client.callsTo('git.checkout_revision'), [
       {'hash': 'v1.2.0'}

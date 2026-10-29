@@ -151,11 +151,11 @@ void main() {
 
       await tester.tap(find.text('2'), buttons: kSecondaryButton);
       await tester.pumpAndSettle();
-      expect(find.text('Annotate with Git Blame'), findsOneWidget);
-      expect(find.text('Add Bookmark'), findsOneWidget);
-      expect(find.text('Add Mnemonic Bookmark…'), findsOneWidget);
+      expect(find.text('使用 Git Blame 注解'), findsOneWidget);
+      expect(find.text('添加书签'), findsOneWidget);
+      expect(find.text('添加助记书签…'), findsOneWidget);
 
-      await tester.tap(find.text('Add Bookmark'));
+      await tester.tap(find.text('添加书签'));
       await tester.pumpAndSettle();
       expect(ctrl.hasBookmark(1), isTrue);
       expect(find.byIcon(Icons.bookmark), findsOneWidget);
@@ -163,10 +163,10 @@ void main() {
       // 再次右键,同一行显示 Remove Bookmark;打开 Appearance 关掉行号。
       await tester.tap(find.text('2'), buttons: kSecondaryButton);
       await tester.pumpAndSettle();
-      expect(find.text('Remove Bookmark'), findsOneWidget);
-      await tester.tap(find.text('Appearance'));
+      expect(find.text('移除书签'), findsOneWidget);
+      await tester.tap(find.text('外观'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Show Line Numbers'));
+      await tester.tap(find.text('显示行号'));
       await tester.pumpAndSettle();
       expect(appearance.showLineNumbers, isFalse);
       expect(find.text('2'), findsNothing);
@@ -241,18 +241,18 @@ void main() {
 
       await tester.tap(find.text('2026/4/24  ronnie...'), buttons: kSecondaryButton);
       await tester.pumpAndSettle();
-      for (final item in ['Close Annotations', 'Show Diff', 'View', 'Copy Revision Number', 'Annotate Revision', 'Annotate Previous Revision', 'Show in File History']) {
+      for (final item in ['关闭注解', '显示差异', '视图', '复制修订号', '注解修订', '注解上一修订', '在文件历史记录中显示']) {
         expect(find.text(item), findsOneWidget, reason: item);
       }
-      await tester.tap(find.text('View'));
+      await tester.tap(find.text('视图'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Revision'));
+      await tester.tap(find.text('修订'));
       await tester.pumpAndSettle();
       expect(find.text('aaaaaaaa  2026/4/24  ronnie...'), findsOneWidget);
 
       await tester.tap(find.text('aaaaaaaa  2026/4/24  ronnie...'), buttons: kSecondaryButton);
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Close Annotations'));
+      await tester.tap(find.text('关闭注解'));
       await tester.pumpAndSettle();
       expect(closed, isTrue);
     });

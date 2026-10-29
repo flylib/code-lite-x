@@ -129,7 +129,7 @@ void main() {
     ));
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Appearance'));
+    await tester.tap(find.text('外观'));
     await tester.pumpAndSettle();
     expect(find.text('Darcula'), findsOneWidget);
     expect(find.text('Monokai'), findsOneWidget);

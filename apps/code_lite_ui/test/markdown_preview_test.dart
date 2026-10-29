@@ -269,9 +269,9 @@ void main() {
 
     testWidgets('three buttons for markdown files only; default is editor and preview; each button switches', (tester) async {
       await editor(tester, 'README.md');
-      expect(find.byTooltip('Editor Only'), findsOneWidget);
-      expect(find.byTooltip('Editor and Preview'), findsOneWidget);
-      expect(find.byTooltip('Preview Only'), findsOneWidget);
+      expect(find.byTooltip('仅编辑器'), findsOneWidget);
+      expect(find.byTooltip('编辑器和预览'), findsOneWidget);
+      expect(find.byTooltip('仅预览'), findsOneWidget);
       expect(preview(), findsOneWidget, reason: '默认:编辑器 | 预览');
       expect(sourceLine('# Title'), findsOneWidget, reason: '编辑器还在');
 
@@ -295,7 +295,7 @@ void main() {
 
     testWidgets('other files get no buttons and no preview', (tester) async {
       await editor(tester, 'src/Main.java', text: 'class A {}');
-      expect(find.byTooltip('Preview Only'), findsNothing);
+      expect(find.byTooltip('仅预览'), findsNothing);
       expect(preview(), findsNothing);
       await finish(tester);
     });

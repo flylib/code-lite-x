@@ -124,18 +124,18 @@ void main() {
             ),
           ),
         ));
-        for (var i = 0; i < 40 && find.text('2 differences').evaluate().isEmpty; i++) {
+        for (var i = 0; i < 40 && find.text('2 处差异').evaluate().isEmpty; i++) {
           await Future<void>.delayed(const Duration(milliseconds: 50));
           await tester.pump();
         }
       });
-      expect(find.text('2 differences'), findsOneWidget); // two→TWO 修改 + four 新增
-      expect(find.text('Current version'), findsOneWidget);
+      expect(find.text('2 处差异'), findsOneWidget); // two→TWO 修改 + four 新增
+      expect(find.text('当前版本'), findsOneWidget);
       // 双击右侧新增的那一行 → 打开源文件对应行(0 起)。
-      await tester.tap(find.byTooltip('下一处改动'));
-      await tester.tap(find.byTooltip('下一处改动'));
+      await tester.tap(find.byTooltip('下一处差异'));
+      await tester.tap(find.byTooltip('下一处差异'));
       await tester.pump();
-      await tester.tap(find.byTooltip('跳到源文件'));
+      await tester.tap(find.byTooltip('跳转到源'));
       expect(openedPath, 'src/a.txt');
       expect(openedLine, 3);
       await tester.pumpWidget(const SizedBox());
@@ -234,12 +234,12 @@ void main() {
             body: DiffTab(client: client, repoPath: 'brand_new.txt', findOpenController: (_) => null, onOpenSource: (_, __) {}),
           ),
         ));
-        for (var i = 0; i < 40 && find.text('1 difference').evaluate().isEmpty; i++) {
+        for (var i = 0; i < 40 && find.text('1 处差异').evaluate().isEmpty; i++) {
           await Future<void>.delayed(const Duration(milliseconds: 50));
           await tester.pump();
         }
       });
-      expect(find.text('1 difference'), findsOneWidget);
+      expect(find.text('1 处差异'), findsOneWidget);
       expect(find.textContaining('新文件'), findsOneWidget);
       await tester.pumpWidget(const SizedBox());
       await tester.runAsync(client.dispose);
@@ -263,27 +263,27 @@ void main() {
             ),
           ),
         ));
-        for (var i = 0; i < 40 && find.text('Unversioned Files', findRichText: true).evaluate().isEmpty; i++) {
+        for (var i = 0; i < 40 && find.text('未进行版本管理的文件', findRichText: true).evaluate().isEmpty; i++) {
           await Future<void>.delayed(const Duration(milliseconds: 50));
           await tester.pump();
         }
       });
-      expect(find.textContaining('Changes', findRichText: true), findsWidgets);
-      expect(find.textContaining('Unversioned Files', findRichText: true), findsOneWidget);
+      expect(find.textContaining('更改', findRichText: true), findsWidgets);
+      expect(find.textContaining('未进行版本管理的文件', findRichText: true), findsOneWidget);
       expect(find.textContaining('a.txt', findRichText: true), findsOneWidget);
 
       await tester.tap(find.textContaining('a.txt', findRichText: true));
       await tester.pump();
       expect(opened, ['src/a.txt']);
 
-      await tester.tap(find.text('Stash'));
+      await tester.tap(find.text('储藏'));
       await tester.runAsync(() async {
-        for (var i = 0; i < 40 && find.text('没有 stash').evaluate().isEmpty; i++) {
+        for (var i = 0; i < 40 && find.text('没有储藏').evaluate().isEmpty; i++) {
           await Future<void>.delayed(const Duration(milliseconds: 50));
           await tester.pump();
         }
       });
-      expect(find.text('没有 stash'), findsOneWidget);
+      expect(find.text('没有储藏'), findsOneWidget);
       await tester.pumpWidget(const SizedBox());
       await tester.runAsync(client.dispose);
     });
@@ -325,11 +325,11 @@ void main() {
       await tester.tap(a); // 只选中(高亮)了 a.txt
       await tester.pump();
 
-      await tapReal(find.byTooltip('Rollback…'));
+      await tapReal(find.byTooltip('回滚…'));
       expect(find.text('  src/a.txt'), findsOneWidget);
       expect(find.text('  src/keep.txt'), findsOneWidget, reason: '勾选的全部都算,不只是选中的那一行');
       expect(find.text('  untracked.md'), findsNothing);
-      await tapReal(find.widgetWithText(FilledButton, 'Rollback'));
+      await tapReal(find.widgetWithText(FilledButton, '回滚'));
       await settle(() => a.evaluate().isEmpty);
       expect(File('${repo.path}/src/a.txt').readAsStringSync(), 'one\ntwo\nthree\n');
       expect(File('${repo.path}/src/keep.txt').readAsStringSync(), 'k\n');
@@ -344,10 +344,10 @@ void main() {
       await settle(() => a.evaluate().isNotEmpty && find.textContaining('keep.txt', findRichText: true).evaluate().isNotEmpty);
       await tester.tap(a);
       await tester.pump();
-      await tapReal(find.byTooltip('Rollback…'));
+      await tapReal(find.byTooltip('回滚…'));
       expect(find.text('  src/a.txt'), findsOneWidget);
       expect(find.text('  src/keep.txt'), findsNothing);
-      await tapReal(find.text('Cancel'));
+      await tapReal(find.text('取消'));
 
       await tester.pumpWidget(const SizedBox());
       await tester.runAsync(client.dispose);

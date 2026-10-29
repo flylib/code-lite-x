@@ -8,6 +8,7 @@ import 'context_menu_region.dart';
 import 'editor_appearance.dart';
 import 'visible_lines.dart';
 import '../notifications/notifications.dart';
+import '../../core/l10n/l10n.dart';
 
 const String _uncommitted = '0000000000000000000000000000000000000000';
 const double _lineHeight = 20;
@@ -102,7 +103,7 @@ class BlameData {
 String blameDate(DateTime t, {DateTime? now}) {
   final n = now ?? DateTime.now();
   final l = t.toLocal();
-  if (l.year == n.year && l.month == n.month && l.day == n.day) return 'Today';
+  if (l.year == n.year && l.month == n.month && l.day == n.day) return tr('今天', 'Today');
   return '${l.year}/${l.month}/${l.day}';
 }
 
@@ -284,36 +285,36 @@ List<Widget> blameMenu({
   final c = commit;
   final committed = c != null && !c.isUncommitted;
   return [
-    MenuItemButton(onPressed: onClose, child: const Text('Close Annotations')),
+    MenuItemButton(onPressed: onClose, child: Text(tr('关闭注解', 'Close Annotations'))),
     MenuItemButton(
       leadingIcon: const Icon(Icons.compare_arrows, size: 16),
       onPressed: committed ? () => showBlameDiff(context, client, c) : null,
-      child: const Text('Show Diff'),
+      child: Text(tr('显示差异', 'Show Diff')),
     ),
     SubmenuButton(
       menuChildren: [
         CheckboxMenuButton(
           value: appearance.blameRevision,
           onChanged: (_) => appearance.toggleBlameRevision(),
-          child: const Text('Revision'),
+          child: Text(tr('修订', 'Revision')),
         ),
         CheckboxMenuButton(
           value: appearance.blameDate,
           onChanged: (_) => appearance.toggleBlameDate(),
-          child: const Text('Date'),
+          child: Text(tr('日期', 'Date')),
         ),
         CheckboxMenuButton(
           value: appearance.blameAuthor,
           onChanged: (_) => appearance.toggleBlameAuthor(),
-          child: const Text('Author'),
+          child: Text(tr('作者', 'Author')),
         ),
         const MenuDivider(),
         SubmenuButton(
           menuChildren: [
-            for (final (mode, label) in const [
-              (BlameColorMode.none, 'Hide'),
-              (BlameColorMode.author, 'Color by Author'),
-              (BlameColorMode.age, 'Color by Age'),
+            for (final (mode, label) in [
+              (BlameColorMode.none, tr('隐藏', 'Hide')),
+              (BlameColorMode.author, tr('按作者着色', 'Color by Author')),
+              (BlameColorMode.age, tr('按时间着色', 'Color by Age')),
             ])
               RadioMenuButton<BlameColorMode>(
                 value: mode,
@@ -322,16 +323,16 @@ List<Widget> blameMenu({
                 child: Text(label),
               ),
           ],
-          child: const Text('Colors'),
+          child: Text(tr('颜色', 'Colors')),
         ),
         SubmenuButton(
           menuChildren: [
-            for (final (mode, label) in const [
-              (BlameNameMode.full, 'Full Name'),
-              (BlameNameMode.first, 'First Name'),
-              (BlameNameMode.last, 'Last Name'),
-              (BlameNameMode.initials, 'Initials'),
-              (BlameNameMode.email, 'Email'),
+            for (final (mode, label) in [
+              (BlameNameMode.full, tr('全名', 'Full Name')),
+              (BlameNameMode.first, tr('名字', 'First Name')),
+              (BlameNameMode.last, tr('姓氏', 'Last Name')),
+              (BlameNameMode.initials, tr('首字母缩写', 'Initials')),
+              (BlameNameMode.email, tr('电子邮件', 'Email')),
             ])
               RadioMenuButton<BlameNameMode>(
                 value: mode,
@@ -340,32 +341,32 @@ List<Widget> blameMenu({
                 child: Text(label),
               ),
           ],
-          child: const Text('Names'),
+          child: Text(tr('名称', 'Names')),
         ),
       ],
-      child: const Text('View'),
+      child: Text(tr('视图', 'View')),
     ),
     MenuItemButton(
       leadingIcon: const Icon(Icons.copy, size: 16),
       onPressed: committed ? () => Clipboard.setData(ClipboardData(text: c.hash)) : null,
-      child: const Text('Copy Revision Number'),
+      child: Text(tr('复制修订号', 'Copy Revision Number')),
     ),
     const MenuDivider(),
     MenuItemButton(
       leadingIcon: const Icon(Icons.article_outlined, size: 16),
       onPressed: committed ? () => showAnnotatedRevision(context, client, appearance, c.hash, c.path) : null,
-      child: const Text('Annotate Revision'),
+      child: Text(tr('注解修订', 'Annotate Revision')),
     ),
     MenuItemButton(
       leadingIcon: const Icon(Icons.article_outlined, size: 16),
       onPressed: committed && c.previousHash != null
           ? () => showAnnotatedRevision(context, client, appearance, c.previousHash!, c.previousPath ?? c.path)
           : null,
-      child: const Text('Annotate Previous Revision'),
+      child: Text(tr('注解上一修订', 'Annotate Previous Revision')),
     ),
     MenuItemButton(
       onPressed: committed && onShowInHistory != null ? () => onShowInHistory(c.hash, c.path) : null,
-      child: const Text('Show in File History'),
+      child: Text(tr('在文件历史记录中显示', 'Show in File History')),
     ),
   ];
 }
@@ -392,7 +393,7 @@ Future<void> showAnnotatedRevision(
   final blame = await BlameData.load(client, path, rev: rev);
   if (!context.mounted) return;
   if (file['status'] != 'ok' || file['binary'] == true) {
-    showNotice(context, '无法读取 $path @ ${rev.substring(0, 8)}', error: true);
+    showNotice(context, tr('无法读取 $path @ ${rev.substring(0, 8)}', 'Cannot read $path @ ${rev.substring(0, 8)}'), error: true);
     return;
   }
   final lines = (file['content'] as String? ?? '').split('\n');
@@ -412,11 +413,11 @@ Future<void> showAnnotatedRevision(
               menuBuilder: (_, c) => [
                 MenuItemButton(
                   onPressed: c == null || c.isUncommitted ? null : () => showBlameDiff(context, client, c),
-                  child: const Text('Show Diff'),
+                  child: Text(tr('显示差异', 'Show Diff')),
                 ),
                 MenuItemButton(
                   onPressed: c == null || c.isUncommitted ? null : () => Clipboard.setData(ClipboardData(text: c.hash)),
-                  child: const Text('Copy Revision Number'),
+                  child: Text(tr('复制修订号', 'Copy Revision Number')),
                 ),
               ],
             ),
@@ -462,7 +463,7 @@ Future<String?> pickMnemonic(BuildContext context, {String? current, Set<String>
     context: context,
     builder: (ctx) => AlertDialog(
       backgroundColor: IntelliJTheme.panelBg,
-      title: const Text('Add Mnemonic Bookmark', style: TextStyle(color: IntelliJTheme.textHigh, fontSize: 15)),
+      title: Text(tr('添加助记书签', 'Add Mnemonic Bookmark'), style: const TextStyle(color: IntelliJTheme.textHigh, fontSize: 15)),
       content: SizedBox(
         width: 360,
         child: Wrap(
@@ -500,7 +501,7 @@ Future<String?> pickMnemonic(BuildContext context, {String? current, Set<String>
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+        TextButton(onPressed: () => Navigator.pop(ctx), child: Text(tr('取消', 'Cancel'))),
       ],
     ),
   );

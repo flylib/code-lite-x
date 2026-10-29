@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/client/api_client.dart';
+import '../../core/l10n/l10n.dart';
 import '../../core/theme/intellij_theme.dart';
 import '../git/diff_view.dart';
 import '../notifications/notifications.dart';
@@ -60,7 +61,7 @@ class _StashPanelState extends State<StashPanel> {
     if (!mounted) return;
     setState(() => _busy = false);
     final ok = res['status'] == 'ok';
-    showNotice(context, ok ? success : 'Stash 操作失败: ${res['error']}', error: !ok);
+    showNotice(context, ok ? success : tr('储藏操作失败: ${res['error']}', 'Stash operation failed: ${res['error']}'), error: !ok);
     await _refresh();
     widget.onRepoChanged();
   }
@@ -73,7 +74,7 @@ class _StashPanelState extends State<StashPanel> {
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setD) => AlertDialog(
           backgroundColor: IntelliJTheme.panelBg,
-          title: const Text('Stash Changes', style: TextStyle(color: IntelliJTheme.textHigh, fontSize: 15)),
+          title: Text(tr('储藏更改', 'Stash Changes'), style: const TextStyle(color: IntelliJTheme.textHigh, fontSize: 15)),
           content: SizedBox(
             width: 420,
             child: Column(
@@ -83,14 +84,14 @@ class _StashPanelState extends State<StashPanel> {
                   controller: message,
                   autofocus: true,
                   style: _kText,
-                  decoration: const InputDecoration(labelText: 'Message', border: OutlineInputBorder(), isDense: true),
+                  decoration: InputDecoration(labelText: tr('消息', 'Message'), border: const OutlineInputBorder(), isDense: true),
                 ),
                 CheckboxListTile(
                   value: keepIndex,
                   dense: true,
                   contentPadding: EdgeInsets.zero,
                   controlAffinity: ListTileControlAffinity.leading,
-                  title: const Text('Keep index', style: _kText),
+                  title: Text(tr('保留索引', 'Keep index'), style: _kText),
                   onChanged: (v) => setD(() => keepIndex = v ?? false),
                 ),
                 CheckboxListTile(
@@ -98,15 +99,15 @@ class _StashPanelState extends State<StashPanel> {
                   dense: true,
                   contentPadding: EdgeInsets.zero,
                   controlAffinity: ListTileControlAffinity.leading,
-                  title: const Text('Include untracked files', style: _kText),
+                  title: Text(tr('包括未进行版本管理的文件', 'Include untracked files'), style: _kText),
                   onChanged: (v) => setD(() => untracked = v ?? false),
                 ),
               ],
             ),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Create Stash')),
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(tr('取消', 'Cancel'))),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(tr('创建储藏', 'Create Stash'))),
           ],
         ),
       ),
@@ -114,7 +115,7 @@ class _StashPanelState extends State<StashPanel> {
     final text = message.text;
     message.dispose();
     if (ok != true) return;
-    await _run('git.stash_push', {'message': text, 'keep_index': keepIndex, 'include_untracked': untracked}, '已创建 stash');
+    await _run('git.stash_push', {'message': text, 'keep_index': keepIndex, 'include_untracked': untracked}, tr('已创建储藏', 'Stash created'));
   }
 
   Future<void> _drop(String ref) async {
@@ -122,19 +123,19 @@ class _StashPanelState extends State<StashPanel> {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: IntelliJTheme.panelBg,
-        title: const Text('Drop Stash', style: TextStyle(color: IntelliJTheme.textHigh, fontSize: 15)),
-        content: Text('删除 $ref?其中的改动将无法恢复。', style: _kText),
+        title: Text(tr('删除储藏', 'Drop Stash'), style: const TextStyle(color: IntelliJTheme.textHigh, fontSize: 15)),
+        content: Text(tr('删除 $ref?其中的改动将无法恢复。', 'Drop $ref? Its changes cannot be recovered.'), style: _kText),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(tr('取消', 'Cancel'))),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: IntelliJTheme.gitRed),
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Drop'),
+            child: Text(tr('删除', 'Drop')),
           ),
         ],
       ),
     );
-    if (ok == true) await _run('git.stash_drop', {'ref': ref}, '已删除 $ref');
+    if (ok == true) await _run('git.stash_drop', {'ref': ref}, tr('已删除 $ref', 'Dropped $ref'));
   }
 
   Future<void> _showFileDiff(String ref, String path) async {
@@ -190,19 +191,19 @@ class _StashPanelState extends State<StashPanel> {
           padding: const EdgeInsets.symmetric(horizontal: 6),
           child: Row(
             children: [
-              _Btn(icon: Icons.refresh, tooltip: '刷新', onTap: _refresh),
-              _Btn(icon: Icons.add, tooltip: 'Stash Changes…', onTap: _busy ? null : _stashChanges),
+              _Btn(icon: Icons.refresh, tooltip: tr('刷新', 'Refresh'), onTap: _refresh),
+              _Btn(icon: Icons.add, tooltip: tr('储藏更改…', 'Stash Changes…'), onTap: _busy ? null : _stashChanges),
               const SizedBox(width: 6),
-              _TextBtn('Apply', sel == null || _busy ? null : () => _run('git.stash_apply', {'ref': sel}, '已应用 $sel')),
-              _TextBtn('Pop', sel == null || _busy ? null : () => _run('git.stash_apply', {'ref': sel, 'pop': true}, '已应用并删除 $sel')),
-              _TextBtn('Drop', sel == null || _busy ? null : () => _drop(sel)),
+              _TextBtn(tr('应用', 'Apply'), sel == null || _busy ? null : () => _run('git.stash_apply', {'ref': sel}, tr('已应用 $sel', 'Applied $sel'))),
+              _TextBtn(tr('弹出', 'Pop'), sel == null || _busy ? null : () => _run('git.stash_apply', {'ref': sel, 'pop': true}, tr('已应用并删除 $sel', 'Applied and dropped $sel'))),
+              _TextBtn(tr('删除', 'Drop'), sel == null || _busy ? null : () => _drop(sel)),
             ],
           ),
         ),
         const Divider(height: 1, color: IntelliJTheme.borderSubtle),
         Expanded(
           child: _stashes.isEmpty
-              ? const Center(child: Text('没有 stash', style: _kMuted))
+              ? Center(child: Text(tr('没有储藏', 'No stashes'), style: _kMuted))
               : ListView(
                   padding: const EdgeInsets.symmetric(vertical: 4),
                   children: [

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../core/l10n/l10n.dart';
 import '../../core/theme/intellij_theme.dart';
 import 'branch_store.dart';
 import 'repo_operation.dart';
@@ -73,8 +74,8 @@ class _ConflictsDialogState extends State<ConflictsDialog> {
         final files = _selectedFiles(op);
         final busy = _working || widget.store.busy != null;
         // Yours 永远是自己的分支(变基时 git 的左右是反的,后端已经换过来);Theirs 是合进来的分支,变基时是变基的目标
-        final yoursLabel = _sideLabel('Yours', op.branch ?? widget.store.current);
-        final theirsLabel = _sideLabel('Theirs', op.kind == 'rebase' ? op.onto : op.incoming);
+        final yoursLabel = _sideLabel(tr('你的', 'Yours'), op.branch ?? widget.store.current);
+        final theirsLabel = _sideLabel(tr('他们的', 'Theirs'), op.kind == 'rebase' ? op.onto : op.incoming);
 
         return Dialog(
           backgroundColor: IntelliJTheme.panelBg,
@@ -88,7 +89,7 @@ class _ConflictsDialogState extends State<ConflictsDialog> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Center(child: Text('Conflicts', style: TextStyle(color: IntelliJTheme.textHigh, fontSize: 14, fontWeight: FontWeight.w600))),
+                  Center(child: Text(tr('冲突', 'Conflicts'), style: const TextStyle(color: IntelliJTheme.textHigh, fontSize: 14, fontWeight: FontWeight.w600))),
                   const SizedBox(height: 14),
                   Text.rich(TextSpan(style: _text, children: [
                     for (final (t, bold) in op.describe(widget.store.current)) TextSpan(text: t, style: bold ? const TextStyle(fontWeight: FontWeight.w700) : null),
@@ -106,13 +107,13 @@ class _ConflictsDialogState extends State<ConflictsDialog> {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.stretch,
                                   children: [
-                                    _button('Accept Yours', files.isEmpty || busy ? null : () => _guarded(() => widget.accept(context, files, 'yours'))),
+                                    _button(tr('接受你的', 'Accept Yours'), files.isEmpty || busy ? null : () => _guarded(() => widget.accept(context, files, 'yours'))),
                                     const SizedBox(height: 8),
-                                    _button('Accept Theirs', files.isEmpty || busy ? null : () => _guarded(() => widget.accept(context, files, 'theirs'))),
+                                    _button(tr('接受他们的', 'Accept Theirs'), files.isEmpty || busy ? null : () => _guarded(() => widget.accept(context, files, 'theirs'))),
                                     const SizedBox(height: 8),
                                     // 一侧把文件删了(或没有)时没什么可逐块合并的,用 Accept 选一侧
                                     _button(
-                                      'Merge...',
+                                      tr('合并...', 'Merge...'),
                                       files.length != 1 || busy || !_mergeable(files.single)
                                           ? null
                                           : () => _guarded(() => widget.merge(context, files.single)),
@@ -133,11 +134,11 @@ class _ConflictsDialogState extends State<ConflictsDialog> {
                         TextButton(
                           onPressed: busy ? null : () => _guarded(() async => await widget.abort(context)),
                           style: TextButton.styleFrom(foregroundColor: const Color(0xFFE5534B)),
-                          child: Text('Abort ${op.noun}'),
+                          child: Text(tr('中止${op.noun}', 'Abort ${op.noun}')),
                         )
                       else
                         const SizedBox.shrink(),
-                      OutlinedButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
+                      OutlinedButton(onPressed: () => Navigator.pop(context), child: Text(tr('关闭', 'Close'))),
                     ],
                   ),
                 ],
@@ -150,6 +151,14 @@ class _ConflictsDialogState extends State<ConflictsDialog> {
   }
 
   static String _sideLabel(String side, String? name) => name == null ? side : '$side ($name)';
+
+  /// 一侧对文件做了什么(后端给的是 Modified / Added / Deleted),显示用。
+  static String _change(String c) => switch (c) {
+        'Modified' => tr('已修改', 'Modified'),
+        'Added' => tr('已添加', 'Added'),
+        'Deleted' => tr('已删除', 'Deleted'),
+        _ => c,
+      };
 
   static bool _mergeable(ConflictFile f) => const {'Modified', 'Added'}.contains(f.yours) && const {'Modified', 'Added'}.contains(f.theirs);
 
@@ -172,7 +181,7 @@ class _ConflictsDialogState extends State<ConflictsDialog> {
             padding: const EdgeInsets.symmetric(horizontal: 10),
             decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: IntelliJTheme.borderSubtle))),
             child: Row(children: [
-              const Expanded(child: Text('Name', style: _head)),
+              Expanded(child: Text(tr('名称', 'Name'), style: _head)),
               SizedBox(width: 130, child: Text(yoursLabel, style: _head, overflow: TextOverflow.ellipsis)),
               SizedBox(width: 130, child: Text(theirsLabel, style: _head, overflow: TextOverflow.ellipsis)),
             ]),
@@ -222,8 +231,8 @@ class _ConflictsDialogState extends State<ConflictsDialog> {
               ],
             ]),
           ),
-          SizedBox(width: 130, child: Text(f.yours, style: _text)),
-          SizedBox(width: 130, child: Text(f.theirs, style: _text)),
+          SizedBox(width: 130, child: Text(_change(f.yours), style: _text)),
+          SizedBox(width: 130, child: Text(_change(f.theirs), style: _text)),
         ]),
       ),
     );
@@ -249,10 +258,14 @@ class _ConflictsDialogState extends State<ConflictsDialog> {
         children: [
           const Icon(Icons.check_circle_outline, size: 36, color: Color(0xFF5FB865)),
           const SizedBox(height: 10),
-          Text(op.canAbort ? '所有冲突都已解决。' : '没有冲突了。', style: _text),
+          Text(op.canAbort ? tr('所有冲突都已解决。', 'All conflicts have been resolved.') : tr('没有冲突了。', 'No conflicts left.'), style: _text),
           if (op.canAbort) ...[
             const SizedBox(height: 4),
-            Text(op.kind == 'merge' ? '提交合并结果就完成了。' : '继续${op.noun}即可完成。', style: _muted),
+            Text(
+                op.kind == 'merge'
+                    ? tr('提交合并结果就完成了。', 'Commit the merge result to finish.')
+                    : tr('继续${op.noun}即可完成。', 'Continue the ${op.noun.toLowerCase()} to finish.'),
+                style: _muted),
             const SizedBox(height: 14),
             FilledButton(
               onPressed: busy
@@ -261,7 +274,7 @@ class _ConflictsDialogState extends State<ConflictsDialog> {
                         final ok = await widget.finish(context);
                         if (ok && mounted && Navigator.canPop(context)) Navigator.pop(context);
                       }),
-              child: Text(op.kind == 'merge' ? 'Commit Merge' : 'Continue ${op.noun}'),
+              child: Text(op.kind == 'merge' ? tr('提交合并', 'Commit Merge') : tr('继续${op.noun}', 'Continue ${op.noun}')),
             ),
           ],
         ],

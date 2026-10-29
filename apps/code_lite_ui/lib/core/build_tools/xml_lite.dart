@@ -4,6 +4,8 @@
 // 写坏的文件尽量容错(不配对的结束标签忽略,没闭合的元素在文件末尾自动闭合),
 // 实在读不下去才抛 [FormatException]。
 
+import '../l10n/l10n.dart';
+
 class XmlElement {
   XmlElement(this.name);
 
@@ -42,9 +44,9 @@ XmlElement parseXml(String source) {
   var i = 0;
   final n = source.length;
 
-  int find(String token, int from, String what) {
+  int find(String token, int from, String what, String whatEn) {
     final at = source.indexOf(token, from);
-    if (at < 0) throw FormatException('XML 未结束的$what', source, from);
+    if (at < 0) throw FormatException(tr('XML 未结束的$what', 'Unterminated XML $whatEn'), source, from);
     return at;
   }
 
@@ -54,17 +56,17 @@ XmlElement parseXml(String source) {
     if (textEnd > i) stack.last._text.write(_decode(source.substring(i, textEnd)));
     if (lt < 0) break;
     if (source.startsWith('<!--', lt)) {
-      i = find('-->', lt + 4, '注释') + 3;
+      i = find('-->', lt + 4, '注释', 'comment') + 3;
     } else if (source.startsWith('<![CDATA[', lt)) {
-      final end = find(']]>', lt + 9, 'CDATA');
+      final end = find(']]>', lt + 9, 'CDATA', 'CDATA');
       stack.last._text.write(source.substring(lt + 9, end));
       i = end + 3;
     } else if (source.startsWith('<?', lt)) {
-      i = find('?>', lt + 2, '处理指令') + 2;
+      i = find('?>', lt + 2, '处理指令', 'processing instruction') + 2;
     } else if (source.startsWith('<!', lt)) {
-      i = find('>', lt + 2, '声明') + 1; // <!DOCTYPE ...>(不支持内部子集)
+      i = find('>', lt + 2, '声明', 'declaration') + 1; // <!DOCTYPE ...>(不支持内部子集)
     } else if (source.startsWith('</', lt)) {
-      final end = find('>', lt + 2, '结束标签');
+      final end = find('>', lt + 2, '结束标签', 'end tag');
       final name = source.substring(lt + 2, end).trim();
       // 往回找同名元素闭合;找不到(多余的结束标签)就忽略
       final at = stack.lastIndexWhere((e) => e.name == name);
@@ -72,12 +74,12 @@ XmlElement parseXml(String source) {
       i = end + 1;
     } else {
       final end = _tagEnd(source, lt + 1);
-      if (end < 0) throw FormatException('XML 未结束的标签', source, lt);
+      if (end < 0) throw FormatException(tr('XML 未结束的标签', 'Unterminated XML tag'), source, lt);
       var body = source.substring(lt + 1, end);
       final selfClosing = body.endsWith('/');
       if (selfClosing) body = body.substring(0, body.length - 1);
       final name = RegExp(r'^[^\s/>]+').stringMatch(body.trimLeft()) ?? '';
-      if (name.isEmpty) throw FormatException('XML 标签没有名字', source, lt);
+      if (name.isEmpty) throw FormatException(tr('XML 标签没有名字', 'XML tag has no name'), source, lt);
       final e = XmlElement(name);
       for (final m in _attr.allMatches(body.trimLeft().substring(name.length))) {
         e.attributes[m.group(1)!] = _decode(m.group(2) ?? m.group(3) ?? '');
@@ -88,7 +90,7 @@ XmlElement parseXml(String source) {
     }
   }
   final top = root.children.isEmpty ? null : root.children.first;
-  if (top == null) throw const FormatException('XML 里没有元素');
+  if (top == null) throw FormatException(tr('XML 里没有元素', 'No element in the XML'));
   return top;
 }
 

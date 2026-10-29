@@ -46,10 +46,10 @@ void main() {
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(body: Center(child: ResourceIndicator(sampler: sampler, interval: const Duration(seconds: 2)))),
     ));
-    expect(find.text('Mem 300 MB · CPU —'), findsOneWidget, reason: '第一次采样还没有 CPU 增量');
+    expect(find.text('内存 300 MB · CPU —'), findsOneWidget, reason: '第一次采样还没有 CPU 增量');
     await tester.pump(const Duration(seconds: 2));
     expect(sampler.calls, 2);
-    expect(find.text('Mem 300 MB · CPU 1.5%'), findsOneWidget, reason: '语言服务器不算进标签');
+    expect(find.text('内存 300 MB · CPU 1.5%'), findsOneWidget, reason: '语言服务器不算进标签');
     final tip = tester.widget<Tooltip>(find.byType(Tooltip)).message!;
     expect(tip, contains('CodeLiteX  300 MB · CPU 1.5%'));
     expect(tip, contains('java  1.1 GB · CPU 12%'));
@@ -66,13 +66,13 @@ void main() {
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(body: Center(child: ResourceIndicator(sampler: sampler, interval: const Duration(seconds: 2)))),
     ));
-    expect(find.text('Mem 290 MB · CPU 0.5%'), findsOneWidget);
+    expect(find.text('内存 290 MB · CPU 0.5%'), findsOneWidget);
     final shown = <String>[];
     for (var i = 0; i < 6; i++) {
       await tester.pump(const Duration(seconds: 2));
       shown.add(tester.widget<Text>(find.byKey(const ValueKey('resource-usage'))).data!);
     }
-    expect(shown.toSet(), {'Mem 370 MB · CPU 0.5%'}, reason: '显示近期峰值,不在两档之间跳');
+    expect(shown.toSet(), {'内存 370 MB · CPU 0.5%'}, reason: '显示近期峰值,不在两档之间跳');
     expect(tester.binding.hasScheduledFrame, isFalse, reason: '文字没变就不重建、不重画');
     // 悬停时提示刷新成最新采样
     final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);

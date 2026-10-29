@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/l10n/l10n.dart';
 import '../../core/platform/workspace_io.dart' as io;
 import '../../core/plugins/plugin_manager.dart';
 import '../../core/state/settings_store.dart';
@@ -23,7 +24,7 @@ Future<void> showSettingsDialog(BuildContext context, SettingsStore settings, {P
       builder: (_) => SettingsDialog(settings: settings, plugins: plugins, openPlugins: openPlugins, openBuildTools: openBuildTools),
     );
 
-enum _Page { general, appearance, keymap, buildTools, plugins }
+enum _Page { general, appearance, language, keymap, buildTools, plugins }
 
 class SettingsDialog extends StatefulWidget {
   const SettingsDialog({super.key, required this.settings, this.plugins, this.openPlugins = false, this.openBuildTools = false});
@@ -67,11 +68,11 @@ class _SettingsDialogState extends State<SettingsDialog> {
                 decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: IntelliJTheme.borderSubtle))),
                 child: Row(
                   children: [
-                    const Expanded(
-                      child: Text('Settings', style: TextStyle(color: IntelliJTheme.textHigh, fontSize: 15, fontWeight: FontWeight.w600)),
+                    Expanded(
+                      child: Text(tr('设置', 'Settings'), style: const TextStyle(color: IntelliJTheme.textHigh, fontSize: 15, fontWeight: FontWeight.w600)),
                     ),
                     IconButton(
-                      tooltip: '关闭',
+                      tooltip: tr('关闭', 'Close'),
                       icon: const Icon(Icons.close, size: 18, color: IntelliJTheme.textSecondary),
                       onPressed: () => Navigator.pop(context),
                     ),
@@ -89,21 +90,29 @@ class _SettingsDialogState extends State<SettingsDialog> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          const Padding(
-                            padding: EdgeInsets.fromLTRB(14, 4, 8, 6),
-                            child: Text('Editor', style: _hint),
+                          // 同 IntelliJ:「外观与行为 ▸ 语言和地区」放在最上面
+                          _NavItem(
+                            key: const ValueKey('settings-nav-language'),
+                            label: tr('语言和地区', 'Language and Region'),
+                            selected: _page == _Page.language,
+                            onTap: () => setState(() => _page = _Page.language),
                           ),
-                          _NavItem(label: 'General', selected: _page == _Page.general, onTap: () => setState(() => _page = _Page.general)),
-                          _NavItem(label: 'Appearance', selected: _page == _Page.appearance, onTap: () => setState(() => _page = _Page.appearance)),
+                          const SizedBox(height: 10),
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(14, 4, 8, 6),
+                            child: Text(tr('编辑器', 'Editor'), style: _hint),
+                          ),
+                          _NavItem(label: tr('常规', 'General'), selected: _page == _Page.general, onTap: () => setState(() => _page = _Page.general)),
+                          _NavItem(label: tr('外观', 'Appearance'), selected: _page == _Page.appearance, onTap: () => setState(() => _page = _Page.appearance)),
                           if (widget.settings.keymap != null) ...[
                             const SizedBox(height: 10),
-                            _NavItem(label: 'Keymap', selected: _page == _Page.keymap, onTap: () => setState(() => _page = _Page.keymap)),
+                            _NavItem(label: tr('按键映射', 'Keymap'), selected: _page == _Page.keymap, onTap: () => setState(() => _page = _Page.keymap)),
                           ],
                           const SizedBox(height: 10),
-                          _NavItem(label: 'Build Tools', selected: _page == _Page.buildTools, onTap: () => setState(() => _page = _Page.buildTools)),
+                          _NavItem(label: tr('构建工具', 'Build Tools'), selected: _page == _Page.buildTools, onTap: () => setState(() => _page = _Page.buildTools)),
                           if (widget.plugins != null) ...[
                             const SizedBox(height: 10),
-                            _NavItem(label: 'Plugins', selected: _page == _Page.plugins, onTap: () => setState(() => _page = _Page.plugins)),
+                            _NavItem(label: tr('插件', 'Plugins'), selected: _page == _Page.plugins, onTap: () => setState(() => _page = _Page.plugins)),
                           ],
                         ],
                       ),
@@ -115,6 +124,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
                         children: switch (_page) {
                           _Page.general => _general(),
                           _Page.appearance => _appearance(),
+                          _Page.language => _languagePage(),
                           _Page.keymap => [KeymapPage(keymap: widget.settings.keymap!)],
                           _Page.buildTools => [MakeSettings(settings: widget.settings)],
                           _Page.plugins => [PluginsPage(plugins: widget.plugins!)],
@@ -131,14 +141,40 @@ class _SettingsDialogState extends State<SettingsDialog> {
     );
   }
 
+  /// 语言和地区:界面语言(中文 / English),换了立刻生效。
+  List<Widget> _languagePage() {
+    final s = widget.settings;
+    return [
+      Text(tr('界面语言', 'Language'), style: _section),
+      const SizedBox(height: 10),
+      Row(
+        children: [
+          for (final lang in AppLanguage.values)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: _Chip(
+                key: ValueKey('language-${lang.name}'),
+                label: lang.label,
+                selected: s.language == lang,
+                onTap: () => s.setLanguage(lang),
+              ),
+            ),
+        ],
+      ),
+      const SizedBox(height: 8),
+      Text(tr('菜单、工具窗、对话框和提示都按这个语言显示,切换后立即生效。', 'Menus, tool windows, dialogs and notifications use this language. Takes effect immediately.'), style: _hint),
+    ];
+  }
+
   List<Widget> _general() {
     final s = widget.settings;
     return [
-      const Text('Autosave', style: _section),
+      Text(tr('自动保存', 'Autosave'), style: _section),
       const SizedBox(height: 10),
       _Toggle(
-        label: '自动保存文件',
-        hint: '停止输入后自动写回磁盘;切换标签、关闭标签或应用失去焦点时也会立即保存。关闭后需按 ⌘S 保存。',
+        label: tr('自动保存文件', 'Save files automatically'),
+        hint: tr('停止输入后自动写回磁盘;切换标签、关闭标签或应用失去焦点时也会立即保存。关闭后需按 ⌘S 保存。',
+            'Writes changes to disk when you stop typing, and right away when you switch or close a tab or leave the app. When off, press ⌘S to save.'),
         value: s.autosave,
         onChanged: s.setAutosave,
       ),
@@ -147,7 +183,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
         padding: const EdgeInsets.only(left: 44),
         child: Row(
           children: [
-            Text('停止输入后', style: s.autosave ? _text : _hint),
+            Text(tr('停止输入后', 'Save'), style: s.autosave ? _text : _hint),
             const SizedBox(width: 10),
             DropdownButton<Duration>(
               value: SettingsStore.autosaveDelays.contains(s.autosaveDelay) ? s.autosaveDelay : null,
@@ -163,7 +199,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
               ],
             ),
             const SizedBox(width: 10),
-            Text('保存', style: s.autosave ? _text : _hint),
+            Text(tr('保存', 'after typing stops'), style: s.autosave ? _text : _hint),
           ],
         ),
       ),
@@ -171,20 +207,20 @@ class _SettingsDialogState extends State<SettingsDialog> {
   }
 
   static String _label(Duration d) =>
-      d.inMilliseconds < 1000 ? '${(d.inMilliseconds / 1000).toStringAsFixed(1)} 秒' : '${d.inSeconds} 秒';
+      d.inMilliseconds < 1000 ? '${(d.inMilliseconds / 1000).toStringAsFixed(1)} ${tr('秒', 's')}' : '${d.inSeconds} ${tr('秒', 's')}';
 
   List<Widget> _appearance() {
     final a = widget.settings.appearance;
     return [
-      const Text('Font', style: _section),
+      Text(tr('字体', 'Font'), style: _section),
       const SizedBox(height: 10),
       Row(
         children: [
-          const Text('编辑器字号', style: _text),
+          Text(tr('编辑器字号', 'Editor font size'), style: _text),
           const SizedBox(width: 14),
           _StepButton(
             icon: Icons.remove,
-            tooltip: '减小',
+            tooltip: tr('减小', 'Smaller'),
             onTap: a.fontSize > EditorAppearance.minFontSize ? () => a.setFontSize(a.fontSize - 1) : null,
           ),
           Container(
@@ -194,7 +230,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
           ),
           _StepButton(
             icon: Icons.add,
-            tooltip: '增大',
+            tooltip: tr('增大', 'Larger'),
             onTap: a.fontSize < EditorAppearance.maxFontSize ? () => a.setFontSize(a.fontSize + 1) : null,
           ),
           const SizedBox(width: 12),
@@ -205,13 +241,13 @@ class _SettingsDialogState extends State<SettingsDialog> {
             ),
           const Spacer(),
           if (a.fontSize != EditorAppearance.defaultFontSize)
-            TextButton(onPressed: () => a.setFontSize(EditorAppearance.defaultFontSize), child: const Text('恢复默认')),
+            TextButton(onPressed: () => a.setFontSize(EditorAppearance.defaultFontSize), child: Text(tr('恢复默认', 'Reset'))),
         ],
       ),
       const SizedBox(height: 22),
-      const Text('Color Scheme', style: _section),
+      Text(tr('配色方案', 'Color Scheme'), style: _section),
       const SizedBox(height: 4),
-      const Text('只改变代码区的配色;IDE 外框保持 Darcula。', style: _hint),
+      Text(tr('只改变代码区的配色;IDE 外框保持 Darcula。', 'Only changes the code area; the IDE frame stays Darcula.'), style: _hint),
       const SizedBox(height: 10),
       Wrap(
         spacing: 10,
@@ -227,20 +263,20 @@ class _SettingsDialogState extends State<SettingsDialog> {
         ],
       ),
       const SizedBox(height: 22),
-      const Text('Editor Appearance', style: _section),
+      Text(tr('编辑器外观', 'Editor Appearance'), style: _section),
       const SizedBox(height: 10),
-      _Toggle(label: '显示行号', value: a.showLineNumbers, onChanged: a.setShowLineNumbers),
-      _Toggle(label: '显示缩进参考线', value: a.showIndentGuides, onChanged: a.setShowIndentGuides),
-      _Toggle(label: '显示面包屑', value: a.showBreadcrumbs, onChanged: a.setShowBreadcrumbs),
+      _Toggle(label: tr('显示行号', 'Show line numbers'), value: a.showLineNumbers, onChanged: a.setShowLineNumbers),
+      _Toggle(label: tr('显示缩进参考线', 'Show indent guides'), value: a.showIndentGuides, onChanged: a.setShowIndentGuides),
+      _Toggle(label: tr('显示面包屑', 'Show breadcrumbs'), value: a.showBreadcrumbs, onChanged: a.setShowBreadcrumbs),
       const SizedBox(height: 12),
-      const Text('这些开关也可以在行号栏右键 ▸ Appearance 里切换。', style: _hint),
+      Text(tr('这些开关也可以在行号栏右键 ▸ 外观 里切换。', 'You can also switch these from the gutter: right-click ▸ Appearance.'), style: _hint),
     ];
   }
 
 }
 
 class _NavItem extends StatelessWidget {
-  const _NavItem({required this.label, required this.selected, required this.onTap});
+  const _NavItem({super.key, required this.label, required this.selected, required this.onTap});
 
   final String label;
   final bool selected;
@@ -326,7 +362,7 @@ class _StepButton extends StatelessWidget {
 }
 
 class _Chip extends StatelessWidget {
-  const _Chip({required this.label, required this.selected, required this.onTap});
+  const _Chip({super.key, required this.label, required this.selected, required this.onTap});
 
   final String label;
   final bool selected;
@@ -357,8 +393,8 @@ class _SchemeCard extends StatelessWidget {
   final bool selected;
   final VoidCallback onTap;
 
-  static const _sample = [
-    '/** 计算总奖池 */',
+  static List<String> get _sample => [
+    tr('/** 计算总奖池 */', '/** Total prize pool */'),
     '@Override',
     'public int total(List<Item> items) {',
     '    return items.size() * 42;',
@@ -452,7 +488,7 @@ class _MakeSettingsState extends State<MakeSettings> {
   Future<void> _browse() async {
     final current = _path.text.trim();
     final dir = current.contains('/') ? current.substring(0, current.lastIndexOf('/')) : '/usr/bin';
-    final picked = await io.pickFile(message: '选择 make 可执行文件', directory: dir);
+    final picked = await io.pickFile(message: tr('选择 make 可执行文件', 'Choose the make executable'), directory: dir);
     if (picked == null || !mounted) return;
     _path.text = picked;
     widget.settings.setMakePath(picked);
@@ -480,11 +516,11 @@ class _MakeSettingsState extends State<MakeSettings> {
       children: [
         const Text('Make', style: _section),
         const SizedBox(height: 4),
-        const Text('make 工具窗和 Makefile 行号栏的 ▶ 都用它运行目标;留空用 PATH 里的 make。', style: _hint),
+        Text(tr('make 工具窗和 Makefile 行号栏的 ▶ 都用它运行目标;留空用 PATH 里的 make。', 'The make tool window and the ▶ in a Makefile gutter run targets with it. Leave empty to use make from PATH.'), style: _hint),
         const SizedBox(height: 12),
         Row(
           children: [
-            const Text('make 可执行文件', style: _text),
+            Text(tr('make 可执行文件', 'Path to make executable'), style: _text),
             const SizedBox(width: 12),
             Expanded(
               child: TextField(
@@ -503,14 +539,14 @@ class _MakeSettingsState extends State<MakeSettings> {
               ),
             ),
             const SizedBox(width: 8),
-            OutlinedButton(onPressed: _browse, child: const Text('浏览…')),
+            OutlinedButton(onPressed: _browse, child: Text(tr('浏览…', 'Browse…'))),
             const SizedBox(width: 8),
-            OutlinedButton(key: const ValueKey('make-detect'), onPressed: _checking ? null : _check, child: const Text('检测')),
+            OutlinedButton(key: const ValueKey('make-detect'), onPressed: _checking ? null : _check, child: Text(tr('检测', 'Test'))),
           ],
         ),
         const SizedBox(height: 8),
         if (_checking)
-          const Text('正在检测…', style: _hint)
+          Text(tr('正在检测…', 'Testing…'), style: _hint)
         else if (_version != null)
           Row(children: [
             const Icon(Icons.check_circle_outline, size: 14, color: IntelliJTheme.gitGreen),

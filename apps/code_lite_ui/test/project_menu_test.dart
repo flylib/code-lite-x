@@ -56,20 +56,20 @@ void main() {
 
     await tester.tap(find.text('bcpoker_data_archiving'));
     await tester.pumpAndSettle();
-    expect(find.text('New Project…'), findsOneWidget);
-    expect(find.text('Open…'), findsOneWidget);
-    expect(find.text('Clone Repository…'), findsOneWidget);
-    expect(find.text('Open Projects'), findsOneWidget);
-    expect(find.text('Recent Projects'), findsOneWidget);
+    expect(find.text('新建项目…'), findsOneWidget);
+    expect(find.text('打开…'), findsOneWidget);
+    expect(find.text('克隆存储库…'), findsOneWidget);
+    expect(find.text('打开的项目'), findsOneWidget);
+    expect(find.text('最近项目'), findsOneWidget);
     expect(find.text('bcpoker_data_archiving'), findsNWidgets(2), reason: '标题栏一个 + 弹窗里的已打开项目一个');
     expect(find.text('~/Worker/java/bcpoker_proto'), findsOneWidget);
 
     await tester.tap(find.text('bcpoker_proto'));
     await tester.pumpAndSettle();
     expect(calls, ['switch /Users/dev/Worker/java/bcpoker_proto']);
-    expect(find.text('Recent Projects'), findsNothing, reason: '选完就关闭');
+    expect(find.text('最近项目'), findsNothing, reason: '选完就关闭');
 
-    for (final (label, expected) in [('New Project…', 'new'), ('Open…', 'open'), ('Clone Repository…', 'clone')]) {
+    for (final (label, expected) in [('新建项目…', 'new'), ('打开…', 'open'), ('克隆存储库…', 'clone')]) {
       await tester.tap(find.text('bcpoker_data_archiving'));
       await tester.pumpAndSettle();
       await tester.tap(find.text(label));
@@ -87,11 +87,11 @@ void main() {
       onOpen: () {},
       onClone: () {},
     )));
-    expect(find.text('No Project'), findsOneWidget);
-    await tester.tap(find.text('No Project'));
+    expect(find.text('无项目'), findsOneWidget);
+    await tester.tap(find.text('无项目'));
     await tester.pumpAndSettle();
-    expect(find.text('Open Projects'), findsNothing);
-    expect(find.text('Recent Projects'), findsOneWidget);
+    expect(find.text('打开的项目'), findsNothing);
+    expect(find.text('最近项目'), findsOneWidget);
     expect(find.text('one'), findsOneWidget);
   });
 
@@ -106,16 +106,16 @@ void main() {
     )));
     await tester.tap(find.text('app'));
     await tester.pumpAndSettle();
-    expect(find.text('Open…'), findsOneWidget);
+    expect(find.text('打开…'), findsOneWidget);
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pumpAndSettle();
-    expect(find.text('Open…'), findsNothing);
+    expect(find.text('打开…'), findsNothing);
 
     await tester.tap(find.text('app'));
     await tester.pumpAndSettle();
     await tester.tapAt(const Offset(700, 500));
     await tester.pumpAndSettle();
-    expect(find.text('Open…'), findsNothing);
+    expect(find.text('打开…'), findsNothing);
   });
 
   testWidgets('the popup lists every open project (the current one marked), and the recent list leaves the open ones out', (tester) async {
@@ -132,8 +132,8 @@ void main() {
     )));
     await tester.tap(find.text('beta'));
     await tester.pumpAndSettle();
-    expect(find.text('Open Projects'), findsOneWidget);
-    expect(find.text('Recent Projects'), findsOneWidget);
+    expect(find.text('打开的项目'), findsOneWidget);
+    expect(find.text('最近项目'), findsOneWidget);
     expect(find.text('alpha'), findsOneWidget);
     expect(find.text('gamma'), findsOneWidget);
     expect(find.text('delta'), findsOneWidget, reason: '只在最近列表里的');
@@ -182,7 +182,7 @@ void main() {
         onOpen: () => calls.add('open'),
         onClone: () => calls.add('clone'),
       )));
-      await tester.tap(find.text(current == null ? 'No Project' : projectNameOf(current)));
+      await tester.tap(find.text(current == null ? '无项目' : projectNameOf(current)));
       await tester.pumpAndSettle();
     }
 
@@ -191,7 +191,7 @@ void main() {
       await openPopup(tester, calls);
       expect(find.byType(TextField), findsOneWidget);
       expect(tester.widget<TextField>(find.byType(TextField)).focusNode?.hasFocus ?? true, isTrue);
-      expect(find.text('New Project…'), findsOneWidget);
+      expect(find.text('新建项目…'), findsOneWidget);
       expect(find.text('rail-ticket-hunter'), findsOneWidget);
 
       // 不用先点输入框,直接敲
@@ -200,9 +200,9 @@ void main() {
       expect(find.text('rail-ticket-hunter'), findsOneWidget, reason: 'a 能按顺序在名字里找到');
       await tester.enterText(find.byType(TextField), 'ad');
       await tester.pumpAndSettle();
-      expect(find.text('New Project…'), findsNothing, reason: '没有操作匹配 ad');
-      expect(find.text('Open Projects'), findsOneWidget);
-      expect(find.text('Recent Projects'), findsOneWidget);
+      expect(find.text('新建项目…'), findsNothing, reason: '没有操作匹配 ad');
+      expect(find.text('打开的项目'), findsOneWidget);
+      expect(find.text('最近项目'), findsOneWidget);
       expect(find.text('bcpoker_data_archiving'), findsOneWidget);
       expect(find.text('~/Worker/java/bcpoker_data_archiving'), findsOneWidget);
       expect(find.text('bcpoker_proto'), findsNothing);
@@ -210,11 +210,11 @@ void main() {
       expect(find.text('bcpoker_admin'), findsNWidgets(2), reason: '标题栏一个 + 弹窗里已打开的一个');
 
       // 操作也按名字过滤
-      await tester.enterText(find.byType(TextField), 'clo');
+      await tester.enterText(find.byType(TextField), '克隆');
       await tester.pumpAndSettle();
-      expect(find.text('Clone Repository…'), findsOneWidget);
-      expect(find.text('Open…'), findsNothing);
-      expect(find.text('Open Projects'), findsNothing);
+      expect(find.text('克隆存储库…'), findsOneWidget);
+      expect(find.text('打开…'), findsNothing);
+      expect(find.text('打开的项目'), findsNothing);
 
       await tester.enterText(find.byType(TextField), 'qqq');
       await tester.pumpAndSettle();
@@ -223,7 +223,7 @@ void main() {
       // × 清空,回到完整列表
       await tester.tap(find.byTooltip('清除'));
       await tester.pumpAndSettle();
-      expect(find.text('New Project…'), findsOneWidget);
+      expect(find.text('新建项目…'), findsOneWidget);
       expect(find.text('rail-ticket-hunter'), findsOneWidget);
       expect(find.byTooltip('清除'), findsNothing);
     });

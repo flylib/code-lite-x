@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import '../platform/workspace_io.dart' as io;
 import '../plugins/plugin_manager.dart';
 import '../client/api_client.dart';
+import '../l10n/l10n.dart';
 import '../lsp/lsp.dart' show LspService;
 import 'layout_store.dart';
 import 'project_context.dart';
@@ -295,7 +296,7 @@ class ProjectManager extends ChangeNotifier {
     final ok = await ctx.open(entry.path);
     entry.loading = false;
     if (!ok) {
-      entry.error = '无法打开 ${entry.path}';
+      entry.error = tr('无法打开 ${entry.path}', 'Cannot open ${entry.path}');
       _notify();
       await ctx.dispose();
       return false;

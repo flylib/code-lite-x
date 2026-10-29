@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
 
+import '../l10n/l10n.dart';
 import 'rust_search.dart';
 
 /// 工作区文件树与全局搜索/替换的纯 Dart 实现(原 Rust `code-lite-fs` 的 tree / search)。
@@ -40,17 +41,20 @@ Future<Map<String, dynamic>> searchWorkspace(String root, String query, [Map<Str
 }
 
 /// Dart 实现的全局搜索:没有 Rust 库、或正则 Rust 不支持时用;测试里拿它和 Rust 的结果对照。
-Future<Map<String, dynamic>> searchWorkspaceInDart(String root, String query, [Map<String, dynamic>? options]) =>
-    Isolate.run(() {
-      try {
-        final matches = _search(root, query, _SearchOptions.fromJson(options));
-        return {'status': 'ok', 'query': query, 'total': matches.length, 'matches': matches};
-      } on FormatException catch (e) {
-        return {'status': 'error', 'error': 'Search failed: ${e.message}'};
-      } on FileSystemException catch (e) {
-        return {'status': 'error', 'error': 'Search failed: ${e.message}'};
-      }
-    });
+Future<Map<String, dynamic>> searchWorkspaceInDart(String root, String query, [Map<String, dynamic>? options]) {
+  // 界面语言只在主 isolate 里有,先取好错误前缀再进后台 isolate
+  final failed = tr('搜索失败', 'Search failed');
+  return Isolate.run(() {
+    try {
+      final matches = _search(root, query, _SearchOptions.fromJson(options));
+      return {'status': 'ok', 'query': query, 'total': matches.length, 'matches': matches};
+    } on FormatException catch (e) {
+      return {'status': 'error', 'error': '$failed: ${e.message}'};
+    } on FileSystemException catch (e) {
+      return {'status': 'error', 'error': '$failed: ${e.message}'};
+    }
+  });
+}
 
 /// 全局替换。返回 `{"status":"ok","replaced_count":n}`。
 /// [replacement] 支持 `$1` / `${1}` / `${name}` 捕获组引用和 `$$` 转义(与原 Rust regex 一致)。
@@ -68,16 +72,19 @@ Future<Map<String, dynamic>> replaceWorkspace(
 }
 
 /// Dart 实现的全局替换(同上)。
-Future<Map<String, dynamic>> replaceWorkspaceInDart(String root, String query, String replacement, [Map<String, dynamic>? options]) =>
-    Isolate.run(() {
-      try {
-        return {'status': 'ok', 'replaced_count': _replaceAll(root, query, replacement, _SearchOptions.fromJson(options))};
-      } on FormatException catch (e) {
-        return {'status': 'error', 'error': 'Replace failed: ${e.message}'};
-      } on FileSystemException catch (e) {
-        return {'status': 'error', 'error': 'Replace failed: ${e.message}'};
-      }
-    });
+Future<Map<String, dynamic>> replaceWorkspaceInDart(String root, String query, String replacement, [Map<String, dynamic>? options]) {
+  // 同上:错误前缀在主 isolate 里按界面语言取好
+  final failed = tr('替换失败', 'Replace failed');
+  return Isolate.run(() {
+    try {
+      return {'status': 'ok', 'replaced_count': _replaceAll(root, query, replacement, _SearchOptions.fromJson(options))};
+    } on FormatException catch (e) {
+      return {'status': 'error', 'error': '$failed: ${e.message}'};
+    } on FileSystemException catch (e) {
+      return {'status': 'error', 'error': '$failed: ${e.message}'};
+    }
+  });
+}
 
 // ---------------------------------------------------------------------------
 // 打开 / 保存(原 Rust codelite_file_open / file_save)
@@ -91,11 +98,11 @@ Future<Map<String, dynamic>> readTextFile(String root, String relPath) async {
   try {
     bytes = await file.readAsBytes();
   } on FileSystemException catch (e) {
-    return {'status': 'error', 'error': 'Open failed: ${e.osError?.message ?? e.message}'};
+    return {'status': 'error', 'error': tr('打开失败: ${e.osError?.message ?? e.message}', 'Open failed: ${e.osError?.message ?? e.message}')};
   }
   final head = bytes.length < 8000 ? bytes.length : 8000;
   for (var i = 0; i < head; i++) {
-    if (bytes[i] == 0) return {'status': 'error', 'error': '二进制文件,无法以文本打开', 'binary': true};
+    if (bytes[i] == 0) return {'status': 'error', 'error': tr('二进制文件,无法以文本打开', 'Binary file; cannot open as text'), 'binary': true};
   }
   final content = utf8.decode(bytes, allowMalformed: true);
   return {
@@ -124,7 +131,7 @@ Future<Map<String, dynamic>> writeTextFile(String root, String relPath, String c
     try {
       if (await tmp.exists()) await tmp.delete();
     } catch (_) {}
-    return {'status': 'error', 'error': 'Save failed: ${e.osError?.message ?? e.message}'};
+    return {'status': 'error', 'error': tr('保存失败: ${e.osError?.message ?? e.message}', 'Save failed: ${e.osError?.message ?? e.message}')};
   }
 }
 

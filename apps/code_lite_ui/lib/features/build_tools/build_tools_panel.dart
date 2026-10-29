@@ -7,6 +7,7 @@ import '../../core/theme/intellij_theme.dart';
 import '../editor/context_menu_region.dart';
 import 'build_tools_store.dart';
 import '../tool_window/tool_window_actions.dart';
+import '../../core/l10n/l10n.dart';
 
 const TextStyle _label = TextStyle(color: IntelliJTheme.textPrimary, fontSize: 13);
 const TextStyle _muted = TextStyle(color: IntelliJTheme.textMuted, fontSize: 12);
@@ -50,7 +51,7 @@ class BuildToolsPanel extends StatelessWidget {
                     ? Center(
                         child: Padding(
                           padding: const EdgeInsets.all(16),
-                          child: Text(store.loading ? '正在读取项目…' : '没有检测到构建文件', style: _muted, textAlign: TextAlign.center),
+                          child: Text(store.loading ? tr('正在读取项目…', 'Reading projects…') : tr('没有检测到构建文件', 'No build files detected'), style: _muted, textAlign: TextAlign.center),
                         ),
                       )
                     : ListView(padding: const EdgeInsets.symmetric(vertical: 4), children: rows),
@@ -73,7 +74,7 @@ class BuildToolsPanel extends StatelessWidget {
       selected: store.isModuleSelected(key),
       icon: _ModuleIcon(error: m.error != null),
       label: m.name,
-      trailing: m.error ?? (isRoot ? '(root)' : null),
+      trailing: m.error ?? (isRoot ? tr('(根)', '(root)') : null),
       trailingStyle: m.error != null ? _error : _muted,
       tooltip: m.error ?? m.buildFile,
       onTap: (_) => store.selectModule(key),
@@ -82,9 +83,9 @@ class BuildToolsPanel extends StatelessWidget {
       menu: () => [
         MenuItemButton(
           onPressed: onOpenFile == null ? null : () => onOpenFile!(m.buildFile),
-          child: Text('打开 ${m.buildFile.split('/').last}'),
+          child: Text(tr('打开 ${m.buildFile.split('/').last}', 'Open ${m.buildFile.split('/').last}')),
         ),
-        MenuItemButton(onPressed: store.reload, child: Text('重新加载 ${p.tool.name} 项目')),
+        MenuItemButton(onPressed: store.reload, child: Text(tr('重新加载 ${p.tool.name} 项目', 'Reload ${p.tool.name} Project'))),
       ],
     ));
     if (!open) return;
@@ -129,7 +130,7 @@ class BuildToolsPanel extends StatelessWidget {
               : () => [
                     MenuItemButton(
                       onPressed: () => Clipboard.setData(ClipboardData(text: g.kind == 'dependencies' ? item.label : item.detail!)),
-                      child: Text(g.kind == 'repositories' ? '复制 URL' : '复制坐标'),
+                      child: Text(g.kind == 'repositories' ? tr('复制 URL', 'Copy URL') : tr('复制坐标', 'Copy Coordinates')),
                     ),
                   ],
         ));
@@ -150,7 +151,7 @@ class BuildToolsPanel extends StatelessWidget {
       expanded: open,
       selected: store.selectedNode == gk,
       icon: _FolderIcon(kind: kind),
-      label: name,
+      label: _groupLabel(name),
       onTap: (_) => store.selectNode(moduleKey, gk),
       onDoubleTap: () => store.toggleExpanded(gk),
       onToggle: () => store.toggleExpanded(gk),
@@ -175,17 +176,26 @@ class BuildToolsPanel extends StatelessWidget {
         MenuItemButton(
           leadingIcon: const Icon(Icons.play_arrow, size: 16, color: Color(0xFF5FB865)),
           onPressed: () => store.run(p, m, [task]),
-          child: Text("运行 '$task'"),
+          child: Text(tr("运行 '$task'", "Run '$task'")),
         ),
         if (store.selectedModule == key && store.selectedTasks.length > 1)
-          MenuItemButton(onPressed: store.runSelected, child: Text('运行选中的 ${store.selectedTasks.length} 个任务')),
+          MenuItemButton(onPressed: store.runSelected, child: Text(tr('运行选中的 ${store.selectedTasks.length} 个任务', 'Run ${store.selectedTasks.length} Selected Tasks'))),
         MenuItemButton(
           onPressed: () => Clipboard.setData(ClipboardData(text: command)),
-          child: const Text('复制命令行'),
+          child: Text(tr('复制命令行', 'Copy Command Line')),
         ),
       ],
     ));
   }
+
+  /// 节点组的显示名:组名(清单 / 读取器给的英文名)同时用作展开状态的键,只在显示时翻译。
+  static String _groupLabel(String name) => switch (name) {
+        'Lifecycle' => tr('生命周期', 'Lifecycle'),
+        'Plugins' => tr('插件', 'Plugins'),
+        'Repositories' => tr('存储库', 'Repositories'),
+        'Dependencies' => tr('依赖项', 'Dependencies'),
+        _ => name,
+      };
 
   static Widget _itemIcon(String kind) => switch (kind) {
         'plugins' => const Icon(Icons.extension_outlined, size: 14, color: IntelliJTheme.textSecondary),
@@ -242,17 +252,17 @@ class _Toolbar extends StatelessWidget {
         scrollDirection: Axis.horizontal,
         child: Row(
           children: [
-            ToolbarIconButton(icon: Icons.sync, tooltip: '重新加载所有 ${store.title} 项目', onTap: store.loading ? null : store.reload),
+            ToolbarIconButton(icon: Icons.sync, tooltip: tr('重新加载所有 ${store.title} 项目', 'Reload All ${store.title} Projects'), onTap: store.loading ? null : store.reload),
             const ToolbarSeparator(),
             ToolbarIconButton(
               icon: Icons.play_arrow,
               color: const Color(0xFF5FB865),
-              tooltip: '运行选中的任务',
+              tooltip: tr('运行选中的任务', 'Run Selected Tasks'),
               onTap: store.canRunSelected ? store.runSelected : null,
             ),
             ToolbarIconButton(
               icon: Icons.smart_display_outlined,
-              tooltip: '执行 ${store.title} 目标',
+              tooltip: tr('执行 ${store.title} 目标', 'Execute ${store.title} Goal'),
               onTap: hasProjects ? () => _executeGoal(context) : null,
             ),
             if (project != null && project.tool.options.isNotEmpty) ...[
@@ -266,8 +276,8 @@ class _Toolbar extends StatelessWidget {
                 ),
             ],
             const ToolbarSeparator(),
-            ToolbarIconButton(icon: Icons.unfold_more, tooltip: '全部展开', onTap: hasProjects ? store.expandAll : null),
-            ToolbarIconButton(icon: Icons.unfold_less, tooltip: '全部折叠', onTap: hasProjects ? store.collapseAll : null),
+            ToolbarIconButton(icon: Icons.unfold_more, tooltip: tr('全部展开', 'Expand All'), onTap: hasProjects ? store.expandAll : null),
+            ToolbarIconButton(icon: Icons.unfold_less, tooltip: tr('全部折叠', 'Collapse All'), onTap: hasProjects ? store.collapseAll : null),
           ],
         ),
       ),
@@ -281,7 +291,7 @@ class _Toolbar extends StatelessWidget {
     final args = await showDialog<String>(
       context: context,
       builder: (_) => _GoalDialog(
-        title: '执行 ${project.tool.name} 目标',
+        title: tr('执行 ${project.tool.name} 目标', 'Execute ${project.tool.name} Goal'),
         module: module.name,
         prefix: store.commandFor(project, module, const []),
       ),
@@ -336,7 +346,7 @@ class _GoalDialogState extends State<_GoalDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('在 ${widget.module} 上运行', style: _muted),
+            Text(tr('在 ${widget.module} 上运行', 'Run on ${widget.module}'), style: _muted),
             const SizedBox(height: 10),
             TextField(
               controller: _text,
@@ -357,8 +367,8 @@ class _GoalDialogState extends State<_GoalDialog> {
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('取消')),
-        FilledButton(onPressed: _submit, child: const Text('执行')),
+        TextButton(onPressed: () => Navigator.pop(context), child: Text(tr('取消', 'Cancel'))),
+        FilledButton(onPressed: _submit, child: Text(tr('执行', 'Execute'))),
       ],
     );
   }
@@ -387,7 +397,7 @@ class ToolbarIconButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final enabled = onTap != null;
     return Tooltip(
-      message: active ? '$tooltip(已开启)' : tooltip,
+      message: active ? tr('$tooltip(已开启)', '$tooltip (on)') : tooltip,
       waitDuration: const Duration(milliseconds: 400),
       child: InkWell(
         onTap: onTap,

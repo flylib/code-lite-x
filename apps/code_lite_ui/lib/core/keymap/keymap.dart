@@ -1,16 +1,35 @@
 import 'package:flutter/foundation.dart';
 
 import '../build_tools/xml_lite.dart';
+import '../l10n/l10n.dart';
 import 'keystroke.dart';
 
 export 'keystroke.dart';
+
+/// 快捷键操作的分类(设置 ▸ Keymap 里按它分组)。
+enum KeymapGroup {
+  toolWindows('工具窗', 'Tool Windows'),
+  navigation('导航', 'Navigation'),
+  folding('代码折叠', 'Folding'),
+  editing('编辑', 'Editing'),
+  refactoring('重构', 'Refactoring');
+
+  const KeymapGroup(this.zh, this.en);
+
+  final String zh;
+  final String en;
+
+  /// 按当前界面语言显示的名字。
+  String get label => tr(zh, en);
+}
 
 /// 一个可以绑快捷键的操作。[id] 用 IntelliJ 的 action id,这样能直接从 IntelliJ 的快捷键配置导入。
 class KeymapAction {
   const KeymapAction({
     required this.id,
-    required this.title,
-    required this.group,
+    required this.titleZh,
+    required this.titleEn,
+    required this.keymapGroup,
     this.mac = const [],
     this.other = const [],
     this.intellijIds = const [],
@@ -18,8 +37,15 @@ class KeymapAction {
   });
 
   final String id;
-  final String title;
-  final String group;
+  final String titleZh;
+  final String titleEn;
+  final KeymapGroup keymapGroup;
+
+  /// 按当前界面语言显示的名字。
+  String get title => tr(titleZh, titleEn);
+
+  /// 按当前界面语言显示的分类名(同一分类的操作在同一种语言下总是同一个字符串)。
+  String get group => keymapGroup.label;
 
   /// 默认快捷键(IntelliJ「Mac OS X 10.5+」/ 其它平台「Default」键位里的),IntelliJ 的文字格式。
   final List<String> mac;
@@ -61,27 +87,27 @@ abstract final class KeymapIds {
 
 /// 目前支持配置的操作:打开 / 收起各个工具窗、Go to File、代码折叠、编辑(复制行、查找)。默认键位取自 IntelliJ。
 const List<KeymapAction> keymapActions = [
-  KeymapAction(id: KeymapIds.project, title: '项目', group: '工具窗', mac: ['meta 1'], other: ['alt 1']),
-  KeymapAction(id: KeymapIds.commit, title: 'Commit', group: '工具窗', mac: ['meta 0'], other: ['alt 0']),
-  KeymapAction(id: KeymapIds.pullRequests, title: 'Pull Requests', group: '工具窗', intellijIds: ['ActivatePull RequestsToolWindow']),
-  KeymapAction(id: KeymapIds.structure, title: '结构', group: '工具窗', mac: ['meta 7'], other: ['alt 7']),
-  KeymapAction(id: KeymapIds.openProjects, title: 'Opening Projects', group: '工具窗', inIntelliJ: false),
-  KeymapAction(id: KeymapIds.build, title: '构建工具(Maven)', group: '工具窗', intellijIds: ['ActivateGradleToolWindow']),
-  KeymapAction(id: KeymapIds.terminal, title: '终端', group: '工具窗', mac: ['alt F12'], other: ['alt F12']),
-  KeymapAction(id: KeymapIds.git, title: 'Git 提交与日志', group: '工具窗', mac: ['meta 9'], other: ['alt 9']),
-  KeymapAction(id: KeymapIds.problems, title: 'Problems(错误日志)', group: '工具窗', mac: ['meta 6'], other: ['alt 6']),
-  KeymapAction(id: KeymapIds.hideAll, title: '隐藏 / 恢复所有工具窗', group: '工具窗', mac: ['shift meta F12'], other: ['ctrl shift F12']),
-  KeymapAction(id: KeymapIds.make, title: 'make', group: '工具窗', intellijIds: ['ActivatemakeToolWindow']),
-  KeymapAction(id: KeymapIds.gotoFile, title: '按文件名打开(Go to File)', group: '导航', mac: ['shift meta O'], other: ['ctrl shift N']),
-  KeymapAction(id: KeymapIds.collapseRegion, title: '折叠', group: '代码折叠', mac: ['meta MINUS'], other: ['ctrl MINUS']),
-  KeymapAction(id: KeymapIds.expandRegion, title: '展开', group: '代码折叠', mac: ['meta EQUALS'], other: ['ctrl EQUALS']),
-  KeymapAction(id: KeymapIds.collapseAll, title: '全部折叠', group: '代码折叠', mac: ['shift meta MINUS'], other: ['ctrl shift MINUS']),
-  KeymapAction(id: KeymapIds.expandAll, title: '全部展开', group: '代码折叠', mac: ['shift meta EQUALS'], other: ['ctrl shift EQUALS']),
-  KeymapAction(id: KeymapIds.duplicate, title: '复制行 / 选中内容(Duplicate Line or Selection)', group: '编辑', mac: ['meta D'], other: ['ctrl D']),
-  KeymapAction(id: KeymapIds.find, title: '在当前文件中查找(Find)', group: '编辑', mac: ['meta F'], other: ['ctrl F']),
-  KeymapAction(id: KeymapIds.findNext, title: '查找下一个(Find Next)', group: '编辑', mac: ['meta G'], other: ['F3']),
-  KeymapAction(id: KeymapIds.findPrevious, title: '查找上一个(Find Previous)', group: '编辑', mac: ['shift meta G'], other: ['shift F3']),
-  KeymapAction(id: KeymapIds.rename, title: '改名(Rename)', group: '重构', mac: ['shift F6'], other: ['shift F6']),
+  KeymapAction(id: KeymapIds.project, titleZh: '项目', titleEn: 'Project', keymapGroup: KeymapGroup.toolWindows, mac: ['meta 1'], other: ['alt 1']),
+  KeymapAction(id: KeymapIds.commit, titleZh: '提交', titleEn: 'Commit', keymapGroup: KeymapGroup.toolWindows, mac: ['meta 0'], other: ['alt 0']),
+  KeymapAction(id: KeymapIds.pullRequests, titleZh: '拉取请求', titleEn: 'Pull Requests', keymapGroup: KeymapGroup.toolWindows, intellijIds: ['ActivatePull RequestsToolWindow']),
+  KeymapAction(id: KeymapIds.structure, titleZh: '结构', titleEn: 'Structure', keymapGroup: KeymapGroup.toolWindows, mac: ['meta 7'], other: ['alt 7']),
+  KeymapAction(id: KeymapIds.openProjects, titleZh: '打开的项目', titleEn: 'Opening Projects', keymapGroup: KeymapGroup.toolWindows, inIntelliJ: false),
+  KeymapAction(id: KeymapIds.build, titleZh: '构建工具(Maven)', titleEn: 'Build Tools (Maven)', keymapGroup: KeymapGroup.toolWindows, intellijIds: ['ActivateGradleToolWindow']),
+  KeymapAction(id: KeymapIds.terminal, titleZh: '终端', titleEn: 'Terminal', keymapGroup: KeymapGroup.toolWindows, mac: ['alt F12'], other: ['alt F12']),
+  KeymapAction(id: KeymapIds.git, titleZh: 'Git 提交与日志', titleEn: 'Git (Commits and Log)', keymapGroup: KeymapGroup.toolWindows, mac: ['meta 9'], other: ['alt 9']),
+  KeymapAction(id: KeymapIds.problems, titleZh: '问题', titleEn: 'Problems', keymapGroup: KeymapGroup.toolWindows, mac: ['meta 6'], other: ['alt 6']),
+  KeymapAction(id: KeymapIds.hideAll, titleZh: '隐藏 / 恢复所有工具窗', titleEn: 'Hide / Restore All Tool Windows', keymapGroup: KeymapGroup.toolWindows, mac: ['shift meta F12'], other: ['ctrl shift F12']),
+  KeymapAction(id: KeymapIds.make, titleZh: 'make', titleEn: 'make', keymapGroup: KeymapGroup.toolWindows, intellijIds: ['ActivatemakeToolWindow']),
+  KeymapAction(id: KeymapIds.gotoFile, titleZh: '转到文件', titleEn: 'Go to File', keymapGroup: KeymapGroup.navigation, mac: ['shift meta O'], other: ['ctrl shift N']),
+  KeymapAction(id: KeymapIds.collapseRegion, titleZh: '折叠', titleEn: 'Collapse', keymapGroup: KeymapGroup.folding, mac: ['meta MINUS'], other: ['ctrl MINUS']),
+  KeymapAction(id: KeymapIds.expandRegion, titleZh: '展开', titleEn: 'Expand', keymapGroup: KeymapGroup.folding, mac: ['meta EQUALS'], other: ['ctrl EQUALS']),
+  KeymapAction(id: KeymapIds.collapseAll, titleZh: '全部折叠', titleEn: 'Collapse All', keymapGroup: KeymapGroup.folding, mac: ['shift meta MINUS'], other: ['ctrl shift MINUS']),
+  KeymapAction(id: KeymapIds.expandAll, titleZh: '全部展开', titleEn: 'Expand All', keymapGroup: KeymapGroup.folding, mac: ['shift meta EQUALS'], other: ['ctrl shift EQUALS']),
+  KeymapAction(id: KeymapIds.duplicate, titleZh: '复制行或所选内容', titleEn: 'Duplicate Line or Selection', keymapGroup: KeymapGroup.editing, mac: ['meta D'], other: ['ctrl D']),
+  KeymapAction(id: KeymapIds.find, titleZh: '在当前文件中查找', titleEn: 'Find', keymapGroup: KeymapGroup.editing, mac: ['meta F'], other: ['ctrl F']),
+  KeymapAction(id: KeymapIds.findNext, titleZh: '查找下一个', titleEn: 'Find Next', keymapGroup: KeymapGroup.editing, mac: ['meta G'], other: ['F3']),
+  KeymapAction(id: KeymapIds.findPrevious, titleZh: '查找上一个', titleEn: 'Find Previous', keymapGroup: KeymapGroup.editing, mac: ['shift meta G'], other: ['shift F3']),
+  KeymapAction(id: KeymapIds.rename, titleZh: '重命名', titleEn: 'Rename', keymapGroup: KeymapGroup.refactoring, mac: ['shift F6'], other: ['shift F6']),
 ];
 
 KeymapAction? keymapActionById(String id) => keymapActions.where((a) => a.id == id).firstOrNull;

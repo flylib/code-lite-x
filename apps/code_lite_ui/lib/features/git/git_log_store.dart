@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../../core/client/api_client.dart';
+import '../../core/l10n/l10n.dart';
 import 'commit_graph.dart';
 import '../../core/state/dispose_safe.dart';
 
@@ -130,14 +131,18 @@ class GitRemoteBranch {
 
 /// 日期筛选,对应 IntelliJ Date 下拉。
 enum DateFilter {
-  all('All'),
-  day('Last 24 Hours'),
-  week('Last 7 Days'),
-  month('Last 30 Days'),
-  year('Last Year');
+  all('全部', 'All'),
+  day('过去 24 小时', 'Last 24 Hours'),
+  week('过去 7 天', 'Last 7 Days'),
+  month('过去 30 天', 'Last 30 Days'),
+  year('过去一年', 'Last Year');
 
-  const DateFilter(this.label);
-  final String label;
+  const DateFilter(this._zh, this._en);
+  final String _zh;
+  final String _en;
+
+  /// 下拉里显示的名字(跟着界面语言)。
+  String get label => tr(_zh, _en);
 
   int get sinceUnix {
     final now = DateTime.now();
@@ -272,7 +277,7 @@ class GitLogStore extends ChangeNotifier with DisposeSafeNotifier {
     loading = false;
     warning = res['warning'] as String?;
     if (res['status'] != 'ok') {
-      error = res['error'] as String? ?? '加载失败';
+      error = res['error'] as String? ?? tr('加载失败', 'Failed to load');
       if (reset) _setCommits(const []);
       notifyListeners();
       return;
@@ -432,13 +437,13 @@ class GitLogStore extends ChangeNotifier with DisposeSafeNotifier {
   /// 执行一个会改动仓库的操作:后台跑、显示进度、完成后刷新分支和日志。
   /// 成功返回 null,失败返回错误信息。
   Future<String?> run(String label, String method, [Map<String, dynamic> params = const {}]) async {
-    if (busy != null) return '有操作正在进行: $busy';
+    if (busy != null) return tr('有操作正在进行: $busy', 'Another operation is in progress: $busy');
     busy = label;
     notifyListeners();
     final res = await _client.gitCall(method, params);
     busy = null;
     await refresh();
-    return res['status'] == 'ok' ? null : (res['error'] as String? ?? '$label 失败');
+    return res['status'] == 'ok' ? null : (res['error'] as String? ?? tr('$label失败', '$label failed'));
   }
 
   @override

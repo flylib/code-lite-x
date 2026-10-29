@@ -54,7 +54,7 @@ void main() {
     await tester.pump(); // _AutoOpen 在帧后开会话
     await tester.pump();
     expect(store.sessions, hasLength(1));
-    expect(find.text('Local'), findsOneWidget);
+    expect(find.text('本地'), findsOneWidget);
     expect(find.byType(TextField), findsNothing);
 
     // 文本经输入法通道上屏,回车走按键通道 —— 和 macOS 上真实打字一样。

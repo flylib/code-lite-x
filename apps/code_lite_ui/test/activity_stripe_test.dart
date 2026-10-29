@@ -32,10 +32,10 @@ void main() {
     expect(tester.takeException(), isNull, reason: '矮窗口下按钮也放得下');
 
     double top(String tooltip) => tester.getTopLeft(find.byTooltip(tooltip)).dy;
-    expect(find.byTooltip('Debug (Shift+F9)'), findsOneWidget);
+    expect(find.byTooltip('调试 (Shift+F9)'), findsOneWidget);
     expect(find.byTooltip('通知'), findsNothing, reason: '通知在右活动条(IntelliJ 的位置)');
-    expect(top('Git 提交与日志 (Alt+9)'), lessThan(top('Debug (Shift+F9)')));
-    expect(tester.getBottomLeft(find.byTooltip('Debug (Shift+F9)')).dy, greaterThan(560 - 60));
+    expect(top('Git 提交与日志 (Alt+9)'), lessThan(top('调试 (Shift+F9)')));
+    expect(tester.getBottomLeft(find.byTooltip('调试 (Shift+F9)')).dy, greaterThan(560 - 60));
   });
 
   testWidgets('right stripe: bell on top, then right-docked tools, a divider, then the bottom-slot ones', (tester) async {
@@ -85,14 +85,14 @@ void main() {
     ));
     final project = tester.getTopLeft(find.text('PROJECT-CHIP')).dx;
     final branch = tester.getTopLeft(find.text('BRANCH-CHIP')).dx;
-    final run = tester.getTopLeft(find.text('Current File')).dx;
+    final run = tester.getTopLeft(find.text('当前文件')).dx;
     expect(project, lessThan(branch));
     expect(branch, lessThan(run));
     expect(run, greaterThan(600), reason: '运行配置在右半边');
     expect(find.text('Search...'), findsNothing, reason: '没有搜索框,右边是搜索图标');
     expect(find.byTooltip('运行 (⇧F10)'), findsOneWidget);
-    expect(find.byTooltip('Debug (⇧F9)'), findsOneWidget);
-    expect(tester.getTopLeft(find.byTooltip('搜索 (⇧⌘F)')).dx, greaterThan(tester.getTopLeft(find.byTooltip('Debug (⇧F9)')).dx));
+    expect(find.byTooltip('调试 (⇧F9)'), findsOneWidget);
+    expect(tester.getTopLeft(find.byTooltip('搜索 (⇧⌘F)')).dx, greaterThan(tester.getTopLeft(find.byTooltip('调试 (⇧F9)')).dx));
 
     await tester.tap(find.byTooltip('搜索 (⇧⌘F)'));
     await tester.tap(find.byTooltip('设置 (⌘,)'));

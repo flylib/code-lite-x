@@ -7,6 +7,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import '../l10n/l10n.dart';
 import '../lsp/lsp_service.dart' show LspService;
 import 'plugin_manifest.dart';
 
@@ -172,17 +173,17 @@ class PluginHost {
       if (v.startsWith('javaHome:')) {
         final min = int.tryParse(v.substring(9)) ?? 21;
         final home = LspService.findJavaHome(minVersion: min);
-        if (home == null) throw PluginInstallException('没有找到 JDK $min 或更新版本');
+        if (home == null) throw PluginInstallException(tr('没有找到 JDK $min 或更新版本', 'No JDK $min or later found'));
         return home;
       }
       if (v.startsWith('tool:')) {
         final exe = LspService.findExecutable(v.substring(5));
-        if (exe == null) throw PluginInstallException('没有找到命令 ${v.substring(5)}');
+        if (exe == null) throw PluginInstallException(tr('没有找到命令 ${v.substring(5)}', 'Command not found: ${v.substring(5)}'));
         return exe;
       }
       if (v.startsWith('glob:')) {
         final hit = _glob(dir, resolve(v.substring(5), pluginId: pluginId, projectRoot: projectRoot));
-        if (hit == null) throw PluginInstallException('插件文件缺失:${v.substring(5)}');
+        if (hit == null) throw PluginInstallException(tr('插件文件缺失:${v.substring(5)}', 'Plugin file missing: ${v.substring(5)}'));
         return hit;
       }
       return m.group(0)!;
@@ -240,22 +241,22 @@ class PluginHost {
       final steps = m.install.where((s) => s.guide == null).toList();
       for (var i = 0; i < steps.length; i++) {
         final step = steps[i];
-        if (_cancelled.contains(id)) throw PluginInstallException('已取消');
+        if (_cancelled.contains(id)) throw PluginInstallException(tr('已取消', 'Cancelled'));
         if (step.isDownload) {
           final url = step.downloads![platformKey()] ?? step.downloads!['*'];
-          if (url == null) throw PluginInstallException('这个插件没有提供 ${platformKey()} 平台的版本');
+          if (url == null) throw PluginInstallException(tr('这个插件没有提供 ${platformKey()} 平台的版本', 'This plugin has no build for ${platformKey()}'));
           final tmp = File('${dir.path}/.download-$i');
           await _download(id, url, tmp, (got, total) {
             final mb = (got / 1048576).toStringAsFixed(1);
             final of = total > 0 ? ' / ${(total / 1048576).toStringAsFixed(1)} MB' : ' MB';
-            progress('正在下载 $mb$of', total > 0 ? got / total : null);
+            progress(tr('正在下载 $mb$of', 'Downloading $mb$of'), total > 0 ? got / total : null);
           });
-          progress('正在解压…');
+          progress(tr('正在解压…', 'Extracting…'));
           await _extract(tmp, step, id, dir.path);
           if (tmp.existsSync()) tmp.deleteSync();
         } else if (step.run != null) {
           final argv = [for (final a in step.run!) resolve(a, pluginId: id)];
-          progress('正在运行 ${argv.first.split(Platform.pathSeparator).last} ${argv.skip(1).take(2).join(' ')}…');
+          progress(tr('正在运行 ${argv.first.split(Platform.pathSeparator).last} ${argv.skip(1).take(2).join(' ')}…', 'Running ${argv.first.split(Platform.pathSeparator).last} ${argv.skip(1).take(2).join(' ')}…'));
           final env = <String, String>{
             'PATH': LspService.searchDirs().join(Platform.isWindows ? ';' : ':'),
             for (final e in step.env.entries) e.key: resolve(e.value, pluginId: id),
@@ -275,8 +276,8 @@ class PluginHost {
           await out.cancel();
           await err.cancel();
           _running.remove(id);
-          if (_cancelled.contains(id)) throw PluginInstallException('已取消');
-          if (code != 0) throw PluginInstallException('安装命令失败(退出码 $code)', log: logTail.join('\n'));
+          if (_cancelled.contains(id)) throw PluginInstallException(tr('已取消', 'Cancelled'));
+          if (code != 0) throw PluginInstallException(tr('安装命令失败(退出码 $code)', 'Install command failed (exit code $code)'), log: logTail.join('\n'));
         }
       }
       File('${dir.path}/plugin.json').writeAsStringSync(const JsonEncoder.withIndent('  ').convert(m.raw));
@@ -354,13 +355,13 @@ class PluginHost {
       final req = await client.getUrl(Uri.parse(url));
       req.headers.set(HttpHeaders.userAgentHeader, 'CodeLiteX');
       final res = await req.close();
-      if (res.statusCode != 200) throw PluginInstallException('下载失败:HTTP ${res.statusCode}($url)');
+      if (res.statusCode != 200) throw PluginInstallException(tr('下载失败:HTTP ${res.statusCode}($url)', 'Download failed: HTTP ${res.statusCode} ($url)'));
       final sink = to.openWrite();
       var got = 0;
       var lastReport = 0;
       try {
         await for (final chunk in res) {
-          if (_cancelled.contains(id)) throw PluginInstallException('已取消');
+          if (_cancelled.contains(id)) throw PluginInstallException(tr('已取消', 'Cancelled'));
           sink.add(chunk);
           got += chunk.length;
           if (got - lastReport > 256 * 1024 || got == res.contentLength) {
@@ -373,9 +374,9 @@ class PluginHost {
       }
       onProgress(got, res.contentLength);
     } on SocketException catch (e) {
-      throw PluginInstallException('网络错误:${e.message}');
+      throw PluginInstallException(tr('网络错误:${e.message}', 'Network error: ${e.message}'));
     } on HandshakeException catch (e) {
-      throw PluginInstallException('网络错误:${e.message}');
+      throw PluginInstallException(tr('网络错误:${e.message}', 'Network error: ${e.message}'));
     } finally {
       client.close(force: true);
     }
@@ -385,7 +386,7 @@ class PluginHost {
     final target = step.to == null || step.to!.isEmpty ? pluginDir : '$pluginDir/${resolve(step.to!, pluginId: id)}';
     Future<void> run(String exe, List<String> args) async {
       final r = await Process.run(exe, args);
-      if (r.exitCode != 0) throw PluginInstallException('解压失败', log: '${r.stdout}\n${r.stderr}');
+      if (r.exitCode != 0) throw PluginInstallException(tr('解压失败', 'Extraction failed'), log: '${r.stdout}\n${r.stderr}');
     }
 
     switch (step.extract) {

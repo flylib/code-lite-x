@@ -214,33 +214,33 @@ void main() {
       ));
       await tester.pumpAndSettle();
       expect(find.text('fix(mtt): 取消赛导表的实际总奖池'), findsOneWidget);
-      expect(find.text('#1392 · created 2026/9/30, by Mystical2261'), findsOneWidget);
-      expect(find.text('DRAFT'), findsOneWidget);
+      expect(find.text('#1392 · Mystical2261 创建于 2026/9/30'), findsOneWidget);
+      expect(find.text('草稿'), findsOneWidget);
       expect(find.byIcon(Icons.cancel), findsOneWidget, reason: '检查失败的红叉');
 
       // Author 筛选:选 Me → gh pr list --author @me
-      await tester.tap(find.text('Author'));
+      await tester.tap(find.text('作者'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Me (me)'));
+      await tester.tap(find.text('我 (me)'));
       await tester.pumpAndSettle();
       expect(fake.calls.last.$1, containsAllInOrder(['--author', '@me']));
 
       await tester.tap(find.text('fix(mtt): 取消赛导表的实际总奖池'));
       await tester.pumpAndSettle();
       expect(find.text('#1392'), findsOneWidget, reason: '标题栏多了一个 PR 标签');
-      expect(find.text('View Timeline'), findsOneWidget);
+      expect(find.text('查看时间线'), findsOneWidget);
       expect(find.text('feat/cancel-subsidy-report → main'), findsOneWidget);
       expect(find.text('admin-service'), findsOneWidget);
       expect(find.text('src'), findsOneWidget);
       expect(find.text('main/resources/mapper/mtt'), findsOneWidget, reason: '单子目录链压成一行');
-      expect(find.text('Missing reviewer'), findsOneWidget);
-      expect(find.text('Set Myself as Reviewer'), findsOneWidget);
+      expect(find.text('缺少审查者'), findsOneWidget);
+      expect(find.text('将自己设为审查者'), findsOneWidget);
 
       await tester.tap(find.text('MttV2CompensationMapper.xml'));
       await tester.pumpAndSettle();
       expect(opened.single, (1392, FakeGh.xml));
 
-      await tester.tap(find.text('Set Myself as Reviewer'));
+      await tester.tap(find.text('将自己设为审查者'));
       await tester.pumpAndSettle();
       expect(fake.calls.any((c) => c.$1.any((a) => a.endsWith('/requested_reviewers'))), isTrue);
     });
@@ -253,23 +253,23 @@ void main() {
       ));
       await tester.pumpAndSettle();
 
-      expect(find.text('2 differences'), findsOneWidget);
+      expect(find.text('2 处差异'), findsOneWidget);
       expect(find.text('why C?'), findsOneWidget);
       expect(find.text('upper case is intended'), findsOneWidget, reason: '回复在同一会话里');
-      expect(find.text('Viewed'), findsOneWidget);
+      expect(find.text('已查看'), findsOneWidget);
 
       // 选中右侧第 6 行(新增的 f)并右键
       final f = find.byWidgetPredicate((w) => w is RichText && w.text.toPlainText() == 'f');
       await tester.tap(f, buttons: kSecondaryButton);
       await tester.pumpAndSettle();
-      for (final item in ['Compare with Clipboard', 'Annotate with Git Blame', 'Add Review Comment', 'Mark File as Viewed']) {
+      for (final item in ['与剪贴板比较', '使用 Git Blame 注解', '添加审查评论', '将文件标记为已查看']) {
         expect(find.text(item), findsOneWidget, reason: item);
       }
-      await tester.tap(find.text('Add Review Comment'));
+      await tester.tap(find.text('添加审查评论'));
       await tester.pumpAndSettle();
       expect(find.text('评论 新版本 第 6 行'), findsOneWidget);
       await tester.enterText(find.byType(TextField), 'f 是新加的?');
-      await tester.tap(find.text('Add Comment'));
+      await tester.tap(find.text('添加评论'));
       await tester.pumpAndSettle();
       final sent = jsonDecode(fake.stdinOf((a) => a.contains('POST') && a.any((x) => x.endsWith('/comments')))!) as Map;
       expect(sent['line'], 6);
@@ -297,10 +297,10 @@ void main() {
       addTearDown(() => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, null));
       await tester.tap(f, buttons: kSecondaryButton);
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Compare with Clipboard'));
+      await tester.tap(find.text('与剪贴板比较'));
       await tester.pumpAndSettle();
-      expect(find.text('Selection ↔ Clipboard'), findsOneWidget);
-      expect(find.text('1 differences'), findsOneWidget);
+      expect(find.text('选区 ↔ 剪贴板'), findsOneWidget);
+      expect(find.text('1 处差异'), findsOneWidget);
     });
 
     testWidgets('diff tab: blame column and switching files', (tester) async {
@@ -310,7 +310,7 @@ void main() {
         home: Scaffold(body: PrDiffTab(session: session, onOpenLocal: (_, __) {})),
       ));
       await tester.pumpAndSettle();
-      await tester.tap(find.byTooltip('Annotate with Git Blame'));
+      await tester.tap(find.byTooltip('使用 Git Blame 注解'));
       await tester.pumpAndSettle();
       expect(find.text('2026/9/1  zed'), findsWidgets);
 
@@ -331,14 +331,14 @@ void main() {
 
       await tester.tap(right('line 12'), buttons: kSecondaryButton);
       await tester.pumpAndSettle();
-      final item = tester.widget<MenuItemButton>(find.widgetWithText(MenuItemButton, 'Add Review Comment'));
+      final item = tester.widget<MenuItemButton>(find.widgetWithText(MenuItemButton, '添加审查评论'));
       expect(item.onPressed, isNull, reason: '第 12 行离改动(第 2 行)超过 3 行,GitHub 不接受');
       await tester.tapAt(const Offset(5, 5));
       await tester.pumpAndSettle();
 
       await tester.tap(right('line 5'), buttons: kSecondaryButton);
       await tester.pumpAndSettle();
-      final ok = tester.widget<MenuItemButton>(find.widgetWithText(MenuItemButton, 'Add Review Comment'));
+      final ok = tester.widget<MenuItemButton>(find.widgetWithText(MenuItemButton, '添加审查评论'));
       expect(ok.onPressed, isNotNull);
     });
 
@@ -348,12 +348,12 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('修复补贴'), findsOneWidget);
       expect(find.text('LGTM 但请补测试'), findsOneWidget);
-      expect(find.text('dave approved'), findsOneWidget);
+      expect(find.text('dave 批准了'), findsOneWidget);
       expect(find.text('Mystical2261 添加了 1 个提交'), findsOneWidget);
       expect(find.text('bot 添加了标签 bug'), findsOneWidget);
 
       await tester.enterText(find.byType(TextField), '已补测试');
-      await tester.tap(find.text('Comment'));
+      await tester.tap(find.text('评论'));
       await tester.pumpAndSettle();
       expect(jsonDecode(fake.stdinOf((a) => a.any((x) => x.endsWith('issues/1392/comments')))!), {'body': '已补测试'});
     });

@@ -43,20 +43,20 @@ void main() {
     ));
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
-    expect(find.text('New Project'), findsOneWidget);
+    expect(find.text('新建项目'), findsOneWidget);
     expect(find.widgetWithText(TextField, '~/Worker'), findsOneWidget, reason: '位置缩写成 ~');
 
-    await tester.tap(find.widgetWithText(FilledButton, 'Create'));
+    await tester.tap(find.widgetWithText(FilledButton, '创建'));
     await tester.pump();
-    expect(find.text('请填写 Name'), findsOneWidget);
+    expect(find.text('请填写名称'), findsOneWidget);
     expect(calls, isEmpty);
 
     await tester.enterText(find.widgetWithText(TextField, '').first, ' my-app ');
-    await tester.tap(find.widgetWithText(FilledButton, 'Create'));
+    await tester.tap(find.widgetWithText(FilledButton, '创建'));
     await tester.pumpAndSettle();
     expect(calls, [('/Users/dev/Worker', 'my-app')], reason: '~ 展开后传给创建函数,名字去掉空白');
     expect(result, '/Users/dev/Worker/my-app');
-    expect(find.text('New Project'), findsNothing);
+    expect(find.text('新建项目'), findsNothing);
   });
 
   testWidgets('a failure stays in the dialog with the reason, and the form can be fixed and retried', (tester) async {
@@ -72,12 +72,12 @@ void main() {
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).first, 'x');
-    await tester.tap(find.widgetWithText(FilledButton, 'Create'));
+    await tester.tap(find.widgetWithText(FilledButton, '创建'));
     await tester.pumpAndSettle();
     expect(find.textContaining('目录已存在且不为空: /p/x'), findsOneWidget);
     expect(result, 'unset');
 
-    await tester.tap(find.widgetWithText(FilledButton, 'Create'));
+    await tester.tap(find.widgetWithText(FilledButton, '创建'));
     await tester.pumpAndSettle();
     expect(result, '/p/x');
   });
@@ -92,11 +92,11 @@ void main() {
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).first, 'git@host:o/repo.git');
-    await tester.tap(find.widgetWithText(FilledButton, 'Clone'));
+    await tester.tap(find.widgetWithText(FilledButton, '克隆'));
     await tester.pump();
     expect(find.text('正在克隆…'), findsOneWidget);
-    expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Clone')).onPressed, isNull);
-    expect(tester.widget<TextButton>(find.widgetWithText(TextButton, 'Cancel')).onPressed, isNull);
+    expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, '克隆')).onPressed, isNull);
+    expect(tester.widget<TextButton>(find.widgetWithText(TextButton, '取消')).onPressed, isNull);
 
     gate.complete(('/p/repo', null));
     await tester.pumpAndSettle();
@@ -118,7 +118,7 @@ void main() {
     await tester.pump();
     expect(find.text('code-lite-x'), findsOneWidget, reason: '名字框里提示默认目录名');
 
-    await tester.tap(find.widgetWithText(FilledButton, 'Clone'));
+    await tester.tap(find.widgetWithText(FilledButton, '克隆'));
     await tester.pumpAndSettle();
     expect(calls, [('git@github.com:flylib/code-lite-x.git', '/p', null)]);
   });
@@ -131,10 +131,10 @@ void main() {
     ));
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Choose…'));
+    await tester.tap(find.text('选择…'));
     await tester.pumpAndSettle();
     expect(find.widgetWithText(TextField, '~/elsewhere'), findsOneWidget);
-    await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
+    await tester.tap(find.widgetWithText(TextButton, '取消'));
     await tester.pumpAndSettle();
     expect(result, isNull);
   });

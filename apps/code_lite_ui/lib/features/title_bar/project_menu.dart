@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../core/l10n/l10n.dart';
 import '../../core/theme/intellij_theme.dart';
 import 'anchored_popup.dart';
 
@@ -143,10 +144,10 @@ class ProjectChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final path = projectPath;
-    final name = path == null ? 'No Project' : projectNameOf(path);
+    final name = path == null ? tr('无项目', 'No Project') : projectNameOf(path);
     return Builder(
       builder: (context) => Tooltip(
-        message: path == null ? '打开或新建一个项目' : abbreviatePath(path, home),
+        message: path == null ? tr('打开或新建一个项目', 'Open or create a project') : abbreviatePath(path, home),
         waitDuration: const Duration(milliseconds: 600),
         child: InkWell(
           borderRadius: BorderRadius.circular(6),
@@ -195,15 +196,18 @@ class ProjectChip extends StatelessWidget {
 
 /// 弹窗里一行可以选中的东西:顶部的 New / Open / Clone,或者一个项目。
 class _Entry {
-  const _Entry.action(this.icon, this.label, this.run)
+  const _Entry.action(this.icon, this.zh, this.en, this.run)
       : path = null,
         isCurrent = false;
   const _Entry.project(String this.path, {required this.isCurrent, required this.run})
       : icon = null,
-        label = '';
+        zh = '',
+        en = '';
 
   final IconData? icon;
-  final String label;
+  final String zh;
+  final String en;
+  String get label => tr(zh, en);
   final String? path;
   final bool isCurrent;
   final VoidCallback run;
@@ -268,11 +272,11 @@ class _ProjectPopupState extends State<_ProjectPopup> {
     final q = _query.toLowerCase();
     return [
       for (final a in [
-        _Entry.action(Icons.add, 'New Project…', widget.onNewProject),
-        _Entry.action(Icons.folder_open_outlined, 'Open…', widget.onOpen),
-        _Entry.action(Icons.fork_right, 'Clone Repository…', widget.onClone),
+        _Entry.action(Icons.add, '新建项目…', 'New Project…', widget.onNewProject),
+        _Entry.action(Icons.folder_open_outlined, '打开…', 'Open…', widget.onOpen),
+        _Entry.action(Icons.fork_right, '克隆存储库…', 'Clone Repository…', widget.onClone),
       ])
-        if (q.isEmpty || a.label.toLowerCase().contains(q)) a,
+        if (matchesEitherLanguage(q, a.zh, a.en)) a,
     ];
   }
 
@@ -384,11 +388,11 @@ class _ProjectPopupState extends State<_ProjectPopup> {
                   style: popupText,
                   cursorColor: IntelliJTheme.caret,
                   onSubmitted: (_) => _activate(all),
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     isDense: true,
                     border: InputBorder.none,
-                    hintText: 'Search projects',
-                    hintStyle: TextStyle(color: IntelliJTheme.textMuted, fontSize: 13),
+                    hintText: tr('搜索项目', 'Search projects'),
+                    hintStyle: const TextStyle(color: IntelliJTheme.textMuted, fontSize: 13),
                   ),
                 ),
               ),
@@ -396,9 +400,9 @@ class _ProjectPopupState extends State<_ProjectPopup> {
                 InkWell(
                   onTap: _search.clear,
                   borderRadius: BorderRadius.circular(4),
-                  child: const Tooltip(
-                    message: '清除',
-                    child: Padding(padding: EdgeInsets.all(4), child: Icon(Icons.close, size: 15, color: IntelliJTheme.textMuted)),
+                  child: Tooltip(
+                    message: tr('清除', 'Clear'),
+                    child: const Padding(padding: EdgeInsets.all(4), child: Icon(Icons.close, size: 15, color: IntelliJTheme.textMuted)),
                   ),
                 ),
             ]),
@@ -412,15 +416,15 @@ class _ProjectPopupState extends State<_ProjectPopup> {
                 for (final e in actions) row(e),
                 if (open.isNotEmpty) ...[
                   if (actions.isNotEmpty) divider,
-                  _header('Open Projects'),
+                  _header(tr('打开的项目', 'Open Projects')),
                   for (final e in open) row(e),
                 ],
                 if (recent.isNotEmpty) ...[
                   if (actions.isNotEmpty || open.isNotEmpty) divider,
-                  _header('Recent Projects'),
+                  _header(tr('最近项目', 'Recent Projects')),
                   for (final e in recent) row(e),
                 ],
-                if (all.isEmpty) const Padding(padding: EdgeInsets.all(16), child: Text('没有匹配的项目', style: popupMuted)),
+                if (all.isEmpty) Padding(padding: const EdgeInsets.all(16), child: Text(tr('没有匹配的项目', 'No matching projects'), style: popupMuted)),
               ],
             ),
           ),

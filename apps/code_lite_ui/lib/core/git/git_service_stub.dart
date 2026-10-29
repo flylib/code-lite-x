@@ -1,6 +1,8 @@
 // web 预览用的桩:与 git_service.dart 同名同签名,所有操作都返回"不可用"。
 
-const Map<String, dynamic> _unavailable = {'status': 'error', 'error': 'web 预览不支持 Git'};
+import '../l10n/l10n.dart';
+
+Map<String, dynamic> get _unavailable => {'status': 'error', 'error': tr('web 预览不支持 Git', 'Git is not supported in the web preview')};
 
 class GitService {
   GitService(this.root);

@@ -109,7 +109,7 @@ void main() {
       write('a.txt', 'x');
       final res = await searchWorkspace(root.path, '(unclosed', {'is_regex': true});
       expect(res['status'], 'error');
-      expect(res['error'], startsWith('Search failed:'));
+      expect(res['error'], startsWith('搜索失败:'));
     });
 
     test('replacement expands capture groups like Rust regex', () async {

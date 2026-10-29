@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/github/github_service.dart';
+import '../../core/l10n/l10n.dart';
 import '../../core/theme/intellij_theme.dart';
 import 'pr_store.dart';
 import 'pr_widgets.dart';
@@ -65,7 +66,7 @@ class _PrTimelineTabState extends State<PrTimelineTab> {
   Widget build(BuildContext context) {
     final d = _s.detail;
     if (d == null) {
-      return Center(child: Text(_s.error ?? '加载中…', style: prMuted));
+      return Center(child: Text(_s.error ?? tr('正在加载…', 'Loading…'), style: prMuted));
     }
     final items = _s.timeline;
     return Container(
@@ -84,13 +85,13 @@ class _PrTimelineTabState extends State<PrTimelineTab> {
                   _card(PrCommentView(
                     author: d.author,
                     date: d.createdAt,
-                    body: d.body.trim().isEmpty ? '(没有描述)' : d.body,
+                    body: d.body.trim().isEmpty ? tr('(没有描述)', '(No description)') : d.body,
                   )),
                   const SizedBox(height: 8),
                   if (_error != null)
                     Padding(padding: const EdgeInsets.all(12), child: Text(_error!, style: prMuted))
                   else if (items == null)
-                    const Padding(padding: EdgeInsets.all(12), child: Text('加载 Timeline…', style: prMuted))
+                    Padding(padding: const EdgeInsets.all(12), child: Text(tr('正在加载时间线…', 'Loading timeline…'), style: prMuted))
                   else
                     ..._timeline(items),
                   const SizedBox(height: 18),
@@ -98,7 +99,7 @@ class _PrTimelineTabState extends State<PrTimelineTab> {
                     padding: const EdgeInsets.all(12),
                     child: PrCommentComposer(
                       autofocus: false,
-                      hint: '发表评论(⌘↩ 提交)',
+                      hint: tr('发表评论(⌘↩ 提交)', 'Leave a comment (⌘↩ to submit)'),
                       onSubmit: _s.addComment,
                     ),
                   )),
@@ -112,7 +113,9 @@ class _PrTimelineTabState extends State<PrTimelineTab> {
   }
 
   Widget _header(PullRequestDetail d) {
-    final stateLabel = d.isDraft ? 'Draft' : switch (d.state) { 'MERGED' => 'Merged', 'CLOSED' => 'Closed', _ => 'Open' };
+    final stateLabel = d.isDraft
+        ? tr('草稿', 'Draft')
+        : switch (d.state) { 'MERGED' => tr('已合并', 'Merged'), 'CLOSED' => tr('已关闭', 'Closed'), _ => tr('打开', 'Open') };
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -128,12 +131,12 @@ class _PrTimelineTabState extends State<PrTimelineTab> {
               ),
             ),
             IconButton(
-              tooltip: '刷新',
+              tooltip: tr('刷新', 'Refresh'),
               icon: const Icon(Icons.refresh, size: 18, color: IntelliJTheme.textSecondary),
               onPressed: _refresh,
             ),
             IconButton(
-              tooltip: '在 GitHub 打开',
+              tooltip: tr('在 GitHub 上打开', 'Open on GitHub'),
               icon: const Icon(Icons.open_in_new, size: 18, color: IntelliJTheme.textSecondary),
               onPressed: () => GitHubService.openInBrowser(d.url),
             ),
@@ -150,7 +153,8 @@ class _PrTimelineTabState extends State<PrTimelineTab> {
             const SizedBox(width: 10),
             Flexible(
               child: Text(
-                '${d.author} 想把 ${d.commits.length} 个提交从 ${d.headRef} 合入 ${d.baseRef}',
+                tr('${d.author} 想把 ${d.commits.length} 个提交从 ${d.headRef} 合入 ${d.baseRef}',
+                    '${d.author} wants to merge ${d.commits.length} ${d.commits.length == 1 ? 'commit' : 'commits'} into ${d.baseRef} from ${d.headRef}'),
                 overflow: TextOverflow.ellipsis,
                 style: prMuted,
               ),
@@ -183,7 +187,8 @@ class _PrTimelineTabState extends State<PrTimelineTab> {
         }
         out.add(_event(
           Icons.commit,
-          '${group.first.actor} 添加了 ${group.length} 个提交',
+          tr('${group.first.actor} 添加了 ${group.length} 个提交',
+              '${group.first.actor} added ${group.length} ${group.length == 1 ? 'commit' : 'commits'}'),
           group.first.date,
           children: [
             for (final c in group)
@@ -207,10 +212,10 @@ class _PrTimelineTabState extends State<PrTimelineTab> {
           out.add(Padding(padding: const EdgeInsets.only(top: 10), child: _card(PrCommentView(author: t.actor, date: t.date, body: t.body))));
         case 'reviewed':
           final (label, color) = switch (t.state) {
-            'approved' => ('approved', const Color(0xFF5FB865)),
-            'changes_requested' => ('requested changes', const Color(0xFFE5534B)),
-            'dismissed' => ('review dismissed', IntelliJTheme.textMuted),
-            _ => ('reviewed', IntelliJTheme.textSecondary),
+            'approved' => (tr('批准了', 'approved'), const Color(0xFF5FB865)),
+            'changes_requested' => (tr('请求了更改', 'requested changes'), const Color(0xFFE5534B)),
+            'dismissed' => (tr('审查已被驳回', 'review dismissed'), IntelliJTheme.textMuted),
+            _ => (tr('已审查', 'reviewed'), IntelliJTheme.textSecondary),
           };
           final badge = Text(label, style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w600));
           if (t.body.trim().isEmpty) {
@@ -222,27 +227,33 @@ class _PrTimelineTabState extends State<PrTimelineTab> {
             ));
           }
         case 'labeled' || 'unlabeled':
-          out.add(_event(Icons.label_outline, '${t.actor} ${t.kind == 'labeled' ? '添加了标签' : '移除了标签'} ${t.extra ?? ''}', t.date));
+          out.add(_event(Icons.label_outline, t.kind == 'labeled'
+              ? tr('${t.actor} 添加了标签 ${t.extra ?? ''}', '${t.actor} added the label ${t.extra ?? ''}')
+              : tr('${t.actor} 移除了标签 ${t.extra ?? ''}', '${t.actor} removed the label ${t.extra ?? ''}'), t.date));
         case 'review_requested' || 'review_request_removed':
-          out.add(_event(Icons.person_add_alt, '${t.actor} ${t.kind == 'review_requested' ? '请求' : '取消请求'} ${t.extra ?? ''} 评审', t.date));
+          out.add(_event(Icons.person_add_alt, t.kind == 'review_requested'
+              ? tr('${t.actor} 请求 ${t.extra ?? ''} 审查', '${t.actor} requested a review from ${t.extra ?? ''}')
+              : tr('${t.actor} 取消请求 ${t.extra ?? ''} 审查', '${t.actor} removed the review request for ${t.extra ?? ''}'), t.date));
         case 'assigned' || 'unassigned':
-          out.add(_event(Icons.person_outline, '${t.actor} ${t.kind == 'assigned' ? '指派给' : '取消指派'} ${t.extra ?? ''}', t.date));
+          out.add(_event(Icons.person_outline, t.kind == 'assigned'
+              ? tr('${t.actor} 指派给 ${t.extra ?? ''}', '${t.actor} assigned ${t.extra ?? ''}')
+              : tr('${t.actor} 取消指派 ${t.extra ?? ''}', '${t.actor} unassigned ${t.extra ?? ''}'), t.date));
         case 'merged':
-          out.add(_event(Icons.merge, '${t.actor} 合并了这个 PR', t.date, color: const Color(0xFFA371F7)));
+          out.add(_event(Icons.merge, tr('${t.actor} 合并了这个 PR', '${t.actor} merged this pull request'), t.date, color: const Color(0xFFA371F7)));
         case 'closed':
-          out.add(_event(Icons.block, '${t.actor} 关闭了这个 PR', t.date, color: const Color(0xFFE5534B)));
+          out.add(_event(Icons.block, tr('${t.actor} 关闭了这个 PR', '${t.actor} closed this pull request'), t.date, color: const Color(0xFFE5534B)));
         case 'reopened':
-          out.add(_event(Icons.replay, '${t.actor} 重新打开了这个 PR', t.date));
+          out.add(_event(Icons.replay, tr('${t.actor} 重新打开了这个 PR', '${t.actor} reopened this pull request'), t.date));
         case 'head_ref_force_pushed':
-          out.add(_event(Icons.upload, '${t.actor} 强制推送了分支', t.date));
+          out.add(_event(Icons.upload, tr('${t.actor} 强制推送了分支', '${t.actor} force-pushed the branch'), t.date));
         case 'renamed':
-          out.add(_event(Icons.edit_outlined, '${t.actor} 把标题改为 ${t.extra ?? ''}', t.date));
+          out.add(_event(Icons.edit_outlined, tr('${t.actor} 把标题改为 ${t.extra ?? ''}', '${t.actor} changed the title to ${t.extra ?? ''}'), t.date));
         case 'ready_for_review':
-          out.add(_event(Icons.visibility_outlined, '${t.actor} 标记为可评审', t.date));
+          out.add(_event(Icons.visibility_outlined, tr('${t.actor} 标记为可审查', '${t.actor} marked this pull request as ready for review'), t.date));
         case 'convert_to_draft':
-          out.add(_event(Icons.edit_note, '${t.actor} 转为草稿', t.date));
+          out.add(_event(Icons.edit_note, tr('${t.actor} 转为草稿', '${t.actor} converted this pull request to draft'), t.date));
         case 'cross-referenced':
-          out.add(_event(Icons.link, '${t.actor} 在别处引用了这个 PR', t.date));
+          out.add(_event(Icons.link, tr('${t.actor} 在别处引用了这个 PR', '${t.actor} referenced this pull request elsewhere'), t.date));
         default:
           break; // 订阅、提及等噪音事件不显示
       }

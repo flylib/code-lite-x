@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/intellij_theme.dart';
+import '../../core/l10n/l10n.dart';
 
 /// Diagnostics display models for the editor.
 class EditorDiagnostic {
@@ -54,7 +55,7 @@ class EditorDiagnostic {
       colStart: colStart,
       colEnd: colEnd,
       severity: (json['severity'] as num?)?.toInt() ?? 1,
-      message: json['message'] as String? ?? 'Diagnostic error',
+      message: json['message'] as String? ?? tr('诊断错误', 'Diagnostic error'),
       code: json['code']?.toString(),
       source: json['source'] as String?,
       tags: [for (final t in (json['tags'] as List? ?? const [])) if (t is num) t.toInt()],
@@ -220,18 +221,18 @@ class LspHoverTooltip extends StatelessWidget {
               if (onGotoDefinition != null)
                 InkWell(
                   onTap: onGotoDefinition,
-                  child: const Text(
-                    'Go to Definition (F12)',
-                    style: TextStyle(color: IntelliJTheme.accentBlue, fontSize: 10),
+                  child: Text(
+                    tr('转到定义 (F12)', 'Go to Definition (F12)'),
+                    style: const TextStyle(color: IntelliJTheme.accentBlue, fontSize: 10),
                   ),
                 ),
               const Spacer(),
               if (onFindReferences != null)
                 InkWell(
                   onTap: onFindReferences,
-                  child: const Text(
-                    'Find Usages (Alt+F7)',
-                    style: TextStyle(color: Color(0xFF9876AA), fontSize: 10),
+                  child: Text(
+                    tr('查找用法 (Alt+F7)', 'Find Usages (Alt+F7)'),
+                    style: const TextStyle(color: Color(0xFF9876AA), fontSize: 10),
                   ),
                 ),
             ],
@@ -411,9 +412,9 @@ class _LspRenameDialogState extends State<LspRenameDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Rename Refactoring (LSP Workspace Edit)',
-              style: TextStyle(
+            Text(
+              tr('重命名重构 (LSP 工作区编辑)', 'Rename Refactoring (LSP Workspace Edit)'),
+              style: const TextStyle(
                 color: IntelliJTheme.textHigh,
                 fontSize: 13,
                 fontWeight: FontWeight.bold,
@@ -428,13 +429,13 @@ class _LspRenameDialogState extends State<LspRenameDialog> {
                 fontSize: 12,
                 fontFamily: 'monospace',
               ),
-              decoration: const InputDecoration(
-                labelText: 'New Name',
-                labelStyle: TextStyle(color: IntelliJTheme.textMuted, fontSize: 11),
-                enabledBorder: UnderlineInputBorder(
+              decoration: InputDecoration(
+                labelText: tr('新名称', 'New Name'),
+                labelStyle: const TextStyle(color: IntelliJTheme.textMuted, fontSize: 11),
+                enabledBorder: const UnderlineInputBorder(
                   borderSide: BorderSide(color: Color(0xFF43454A)),
                 ),
-                focusedBorder: UnderlineInputBorder(
+                focusedBorder: const UnderlineInputBorder(
                   borderSide: BorderSide(color: IntelliJTheme.accentBlue),
                 ),
               ),
@@ -445,7 +446,7 @@ class _LspRenameDialogState extends State<LspRenameDialog> {
               children: [
                 TextButton(
                   onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('Cancel', style: TextStyle(color: IntelliJTheme.textMuted)),
+                  child: Text(tr('取消', 'Cancel'), style: const TextStyle(color: IntelliJTheme.textMuted)),
                 ),
                 const SizedBox(width: 8),
                 ElevatedButton(
@@ -460,7 +461,7 @@ class _LspRenameDialogState extends State<LspRenameDialog> {
                       Navigator.of(context).pop();
                     }
                   },
-                  child: const Text('Refactor'),
+                  child: Text(tr('重构', 'Refactor')),
                 ),
               ],
             ),

@@ -3,6 +3,7 @@ import 'dart:ffi';
 import 'dart:io';
 import 'dart:typed_data';
 
+import '../l10n/l10n.dart';
 import 'pty_frame.dart';
 
 // Native function typedefs
@@ -234,7 +235,7 @@ class CodeLiteBindings {
   // ---------------------------------------------------------------------------
 
   Map<String, dynamic> terminalExec(String cmd, List<String> args) {
-    if (!isAvailable) return {'status': 'error', 'error': 'Bindings unavailable'};
+    if (!isAvailable) return {'status': 'error', 'error': tr('原生库不可用', 'Bindings unavailable')};
     final cmdPtr = _toCString(cmd);
     final argsPtr = _toCString(jsonEncode(args));
     final ptr = _terminalExec(_ctx!, cmdPtr.pointer, argsPtr.pointer);
@@ -246,12 +247,12 @@ class CodeLiteBindings {
   // --- 交互式终端(PTY)。屏幕由 Rust 侧 vt100 排好版,这里只搬 JSON。
 
   Map<String, dynamic> ptyOpen(int rows, int cols) {
-    if (!isAvailable) return {'status': 'error', 'error': 'FFI not available'};
+    if (!isAvailable) return {'status': 'error', 'error': tr('FFI 不可用', 'FFI not available')};
     return _parseJsonMap(_fromCString(_ptyOpen(_ctx!, rows, cols)));
   }
 
   Map<String, dynamic> ptyWrite(String id, String data) {
-    if (!isAvailable) return {'status': 'error', 'error': 'FFI not available'};
+    if (!isAvailable) return {'status': 'error', 'error': tr('FFI 不可用', 'FFI not available')};
     final idPtr = _toCString(id);
     final dataPtr = _toCString(data);
     final ptr = _ptyWrite(_ctx!, idPtr.pointer, dataPtr.pointer);
@@ -261,7 +262,7 @@ class CodeLiteBindings {
   }
 
   Map<String, dynamic> ptyResize(String id, int rows, int cols) {
-    if (!isAvailable) return {'status': 'error', 'error': 'FFI not available'};
+    if (!isAvailable) return {'status': 'error', 'error': tr('FFI 不可用', 'FFI not available')};
     final idPtr = _toCString(id);
     final ptr = _ptyResize(_ctx!, idPtr.pointer, rows, cols);
     _freeAllocatedString(idPtr);
@@ -330,7 +331,7 @@ class CodeLiteBindings {
   Pointer<Size> _allocSize() => _stringAlloc(sizeOf<Size>()).cast<Size>();
 
   Map<String, dynamic> ptySnapshot(String id, {int sinceSeq = -1, int scrollback = 0}) {
-    if (!isAvailable) return {'status': 'error', 'error': 'FFI not available'};
+    if (!isAvailable) return {'status': 'error', 'error': tr('FFI 不可用', 'FFI not available')};
     final idPtr = _toCString(id);
     final ptr = _ptySnapshot(_ctx!, idPtr.pointer, sinceSeq, scrollback);
     _freeAllocatedString(idPtr);
@@ -338,7 +339,7 @@ class CodeLiteBindings {
   }
 
   Map<String, dynamic> ptyClose(String id) {
-    if (!isAvailable) return {'status': 'error', 'error': 'FFI not available'};
+    if (!isAvailable) return {'status': 'error', 'error': tr('FFI 不可用', 'FFI not available')};
     final idPtr = _toCString(id);
     final ptr = _ptyClose(_ctx!, idPtr.pointer);
     _freeAllocatedString(idPtr);

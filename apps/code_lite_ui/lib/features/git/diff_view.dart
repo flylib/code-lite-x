@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/l10n/l10n.dart';
 import '../../core/theme/intellij_theme.dart';
 
 /// 统一 diff 文本的只读视图:增删行着色,hunk 头淡显。
@@ -12,7 +13,7 @@ class DiffView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final lines = diff.isEmpty ? const ['(没有差异)'] : diff.split('\n');
+    final lines = diff.isEmpty ? [tr('(没有差异)', '(No differences)')] : diff.split('\n');
     return Container(
       color: IntelliJTheme.editorBg,
       child: SelectionArea(

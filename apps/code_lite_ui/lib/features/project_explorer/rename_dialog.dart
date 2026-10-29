@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../../core/platform/paths.dart';
 import '../../core/theme/intellij_theme.dart';
+import '../../core/l10n/l10n.dart';
 
 /// 文件树 ▸ Rename(⇧F6)的对话框,照 IntelliJ:`Rename file 'Foo.java' to:` + 输入框,
 /// 打开时选中扩展名前面的部分(目录选中整个名字)。回车确定、Esc 取消。
@@ -84,7 +85,7 @@ class _RenameDialogState extends State<RenameDialog> {
     final error = _error;
     return AlertDialog(
       backgroundColor: IntelliJTheme.panelBg,
-      title: const Text('Rename', style: TextStyle(color: IntelliJTheme.textHigh, fontSize: 15)),
+      title: Text(tr('重命名', 'Rename'), style: const TextStyle(color: IntelliJTheme.textHigh, fontSize: 15)),
       content: SizedBox(
         width: 420,
         child: Column(
@@ -92,7 +93,9 @@ class _RenameDialogState extends State<RenameDialog> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              "Rename ${widget.isDir ? 'directory' : 'file'} '${widget.name}' to:",
+              widget.isDir
+                  ? tr("将目录 '${widget.name}' 重命名为:", "Rename directory '${widget.name}' to:")
+                  : tr("将文件 '${widget.name}' 重命名为:", "Rename file '${widget.name}' to:"),
               overflow: TextOverflow.ellipsis,
               maxLines: 2,
               style: const TextStyle(color: IntelliJTheme.textPrimary, fontSize: 12),
@@ -136,11 +139,11 @@ class _RenameDialogState extends State<RenameDialog> {
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('取消')),
+        TextButton(onPressed: () => Navigator.pop(context), child: Text(tr('取消', 'Cancel'))),
         FilledButton(
           key: const ValueKey('rename-confirm'),
           onPressed: _busy ? null : _submit,
-          child: const Text('Rename'),
+          child: Text(tr('重命名', 'Rename')),
         ),
       ],
     );

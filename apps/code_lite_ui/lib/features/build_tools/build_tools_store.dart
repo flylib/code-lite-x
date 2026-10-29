@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import '../../core/build_tools/build_model.dart';
 import '../../core/plugins/plugin_manager.dart';
 import '../../core/state/dispose_safe.dart';
+import '../../core/l10n/l10n.dart';
 
 /// 项目里检测到的一种构建工具(比如根目录有 pom.xml → Maven)及其模块树。
 class BuildProject {
@@ -70,7 +71,7 @@ class BuildToolsStore extends ChangeNotifier with DisposeSafeNotifier {
   bool get hasProjects => _projects.isNotEmpty;
 
   /// 活动条按钮的提示文字。
-  String get title => _projects.isEmpty ? '构建' : _projects.map((p) => p.tool.name).toSet().join(' / ');
+  String get title => _projects.isEmpty ? tr('构建', 'Build') : _projects.map((p) => p.tool.name).toSet().join(' / ');
 
   // ---------------------------------------------------------------------------
   // 加载

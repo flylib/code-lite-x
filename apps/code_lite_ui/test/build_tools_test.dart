@@ -341,10 +341,10 @@ void main() {
 
       expect(find.text('Maven'), findsOneWidget);
       expect(find.text('Shop & Co'), findsOneWidget);
-      expect(find.text('(root)'), findsOneWidget);
-      expect(find.text('Lifecycle'), findsOneWidget, reason: '只展开了根模块的 Lifecycle');
-      expect(find.text('Plugins'), findsOneWidget);
-      expect(find.text('Repositories'), findsOneWidget);
+      expect(find.text('(根)'), findsOneWidget);
+      expect(find.text('生命周期'), findsOneWidget, reason: '只展开了根模块的 Lifecycle');
+      expect(find.text('插件'), findsOneWidget);
+      expect(find.text('存储库'), findsOneWidget);
       expect(find.text('shop-core-api'), findsOneWidget, reason: '所有模块平铺在顶层');
       expect(find.text('shop-core'), findsOneWidget);
       expect(find.text('missing'), findsOneWidget);
@@ -364,10 +364,10 @@ void main() {
       await tester.pump(const Duration(milliseconds: 50));
       await tester.tap(find.text('Web Front'));
       await tester.pump();
-      expect(find.text('Lifecycle'), findsNWidgets(2));
-      await tester.tap(find.text('Lifecycle').last);
+      expect(find.text('生命周期'), findsNWidgets(2));
+      await tester.tap(find.text('生命周期').last);
       await tester.pump(const Duration(milliseconds: 50));
-      await tester.tap(find.text('Lifecycle').last);
+      await tester.tap(find.text('生命周期').last);
       await tester.pump();
       await tester.tap(find.text('verify').last);
       await tester.pump(const Duration(milliseconds: 50));
@@ -405,7 +405,7 @@ void main() {
       // 全部折叠:模块还在(平铺),组都收起
       await tester.tap(find.byTooltip('全部折叠'));
       await tester.pump();
-      expect(find.text('Lifecycle'), findsNothing);
+      expect(find.text('生命周期'), findsNothing);
       expect(find.text('shop-core'), findsOneWidget);
       await tester.pumpWidget(const SizedBox());
       store.dispose();

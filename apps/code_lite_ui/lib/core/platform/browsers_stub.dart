@@ -1,5 +1,7 @@
 import 'dart:typed_data';
 
+import '../l10n/l10n.dart';
+
 /// 本机安装的浏览器。web 预览里没有本机,什么都不提供。
 class BrowserApp {
   const BrowserApp({required this.id, required this.name, required this.path});
@@ -14,9 +16,9 @@ class BrowserApp {
 
 Future<List<BrowserApp>> detectBrowsers() async => const [];
 
-Future<String?> openInBrowser(BrowserApp browser, String file) async => '当前平台不支持';
+Future<String?> openInBrowser(BrowserApp browser, String file) async => tr('当前平台不支持', 'Not supported on this platform');
 
 Future<Uint8List?> browserIcon(BrowserApp browser) async => null;
 
 /// 用系统默认浏览器打开网址。成功返回 null,失败返回原因。
-Future<String?> openExternalUrl(String url) async => '当前平台不支持';
+Future<String?> openExternalUrl(String url) async => tr('当前平台不支持', 'Not supported on this platform');

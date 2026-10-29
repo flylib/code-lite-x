@@ -10,6 +10,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import '../l10n/l10n.dart';
 import 'git_parsing.dart';
 
 /// Git 操作失败。[message] 即面向用户的错误文本(与旧 Rust `GitError` 的 Display 一致)。
@@ -17,7 +18,7 @@ class GitException implements Exception {
   GitException(this.message);
 
   /// 对应 Rust `GitError::CommandFailed` 的展示格式。
-  GitException.commandFailed(int code, String detail) : message = 'Git command failed (exit code $code): $detail';
+  GitException.commandFailed(int code, String detail) : message = tr('Git 命令失败(退出码 $code): $detail', 'Git command failed (exit code $code): $detail');
 
   final String message;
 
@@ -160,16 +161,16 @@ class GitService {
   /// 按 [method](如 "git.log"、"git.cherry_pick")分派。永不抛异常,错误编码进返回的 Map。
   Future<Map<String, dynamic>> call(String method, [Map<String, dynamic> params = const {}]) async {
     final m = method.trim();
-    if (m.isEmpty) return _error('method is required');
+    if (m.isEmpty) return _error(tr('缺少 method', 'method is required'));
     try {
       final result = await _dispatch(m, _Params(params));
       return {...result, 'status': 'ok'};
     } on _ParamError catch (e) {
-      return _error('参数无效: ${e.message}');
+      return _error(tr('参数无效: ${e.message}', 'Invalid parameters: ${e.message}'));
     } on GitException catch (e) {
       return _error(e.message);
     } catch (e) {
-      return _error('git call panicked: $e');
+      return _error(tr('Git 调用出错: $e', 'git call panicked: $e'));
     }
   }
 
@@ -248,7 +249,7 @@ class GitService {
           'soft' => '--soft',
           'mixed' => '--mixed',
           'hard' => '--hard',
-          _ => throw GitException('不支持的 reset 模式: $mode'),
+          _ => throw GitException(tr('不支持的 reset 模式: $mode', 'Unsupported reset mode: $mode')),
         };
         await _resetTo(hash, flag);
         return {};
@@ -333,7 +334,7 @@ class GitService {
         await _resolveWith(p.str('path'), p.str('content'));
         return {};
       default:
-        throw GitException('未知的 git 方法: $method');
+        throw GitException(tr('未知的 git 方法: $method', 'Unknown git method: $method'));
     }
   }
 
@@ -401,7 +402,7 @@ class GitService {
     final text = q.text ?? '';
     final author = q.author ?? '';
 
-    if (branch.startsWith('-')) throw GitException('无效的分支: $branch');
+    if (branch.startsWith('-')) throw GitException(tr('无效的分支: $branch', 'Invalid branch: $branch'));
     // 空仓库:HEAD 指向尚未诞生的分支,`git log HEAD` 会报错,这里直接返回空列表
     if (branch.isNotEmpty && head.isEmpty && await _tryResolveCommit(branch) == null) {
       return {'commits': <Map<String, dynamic>>[], 'head': head, 'has_more': false};
@@ -466,7 +467,7 @@ class GitService {
     if (!out.success) {
       if (commits.isEmpty) throw out.failure;
       // 损坏的对象之后的历史读不到,也就没有"下一页"
-      warning = '${onlyHead ? '(其他分支无法读取,仅显示 HEAD)' : ''}${out.detail}';
+      warning = '${onlyHead ? tr('(其他分支无法读取,仅显示 HEAD)', '(Other branches could not be read; showing HEAD only) ') : ''}${out.detail}';
     }
     final hasMore = warning == null && commits.length > limit;
     if (commits.length > limit) commits = commits.sublist(0, limit);
@@ -518,7 +519,7 @@ class GitService {
       full,
     ]);
     final f = splitN(raw, '\x1f', 9);
-    if (f.length < 9) throw GitException('无法解析提交信息: $full');
+    if (f.length < 9) throw GitException(tr('无法解析提交信息: $full', 'Cannot parse commit details: $full'));
     final parents = splitWhitespace(f[1]);
     final files = await _commitFiles(full, parents.isEmpty ? null : parents.first);
     final pushed = await _isPushed(full);
@@ -579,7 +580,7 @@ class GitService {
     final full = await _resolveCommit(rev);
     _requirePath(path);
     final out = await _raw(['cat-file', 'blob', '$full:${trimLeadingSlashes(path)}']);
-    if (!out.success) throw GitException('文件在该提交中不存在: $path');
+    if (!out.success) throw GitException(tr('文件在该提交中不存在: $path', 'File does not exist in this commit: $path'));
     final bytes = out.stdoutBytes;
     final headLen = bytes.length < 8000 ? bytes.length : 8000;
     for (var i = 0; i < headLen; i++) {
@@ -645,7 +646,7 @@ class GitService {
     final out = await _raw(['cherry-pick', if (merge) ...['-m', '1'], full]);
     if (!out.success) {
       await _raw(['cherry-pick', '--abort']);
-      throw GitException('Cherry-pick 冲突,已中止: ${out.detail}');
+      throw GitException(tr('Cherry-pick 冲突,已中止: ${out.detail}', 'Cherry-pick conflict, aborted: ${out.detail}'));
     }
   }
 
@@ -661,7 +662,7 @@ class GitService {
     final out = await _raw(['revert', '--no-edit', if (merge) ...['-m', '1'], full]);
     if (!out.success) {
       await _raw(['revert', '--abort']);
-      throw GitException('Revert 冲突,已中止: ${out.detail}');
+      throw GitException(tr('Revert 冲突,已中止: ${out.detail}', 'Revert conflict, aborted: ${out.detail}'));
     }
   }
 
@@ -672,8 +673,8 @@ class GitService {
 
   /// 撤销最近一次提交,改动保留在暂存区。
   Future<void> _undoCommit() async {
-    if ((await _headHash()).isEmpty) throw GitException('仓库还没有任何提交');
-    if (await _tryResolveCommit('HEAD^') == null) throw GitException('HEAD 没有父提交,无法撤销');
+    if ((await _headHash()).isEmpty) throw GitException(tr('仓库还没有任何提交', 'The repository has no commits yet'));
+    if (await _tryResolveCommit('HEAD^') == null) throw GitException(tr('HEAD 没有父提交,无法撤销', 'HEAD has no parent commit; cannot undo'));
     await _run(['reset', '--soft', 'HEAD~1']);
   }
 
@@ -681,7 +682,7 @@ class GitService {
   /// 新建一个跟踪它的本地分支。返回实际所在的本地分支名。
   Future<String> _checkoutBranch(String rawName) async {
     final name = rawName.trim();
-    if (name.isEmpty || name.startsWith('-')) throw GitException('无效的分支名: $name');
+    if (name.isEmpty || name.startsWith('-')) throw GitException(tr('无效的分支名: $name', 'Invalid branch name: $name'));
     await _ensureIdle();
     Future<bool> exists(String ref) async => (await _raw(['show-ref', '--verify', '--quiet', ref])).success;
     if (await exists('refs/heads/$name')) {
@@ -697,7 +698,7 @@ class GitService {
       }
       return short;
     }
-    throw GitException('找不到分支: $name');
+    throw GitException(tr('找不到分支: $name', 'Branch not found: $name'));
   }
 
   static const _noPrompt = {'GIT_TERMINAL_PROMPT': '0', 'GIT_MERGE_AUTOEDIT': 'no'};
@@ -709,9 +710,9 @@ class GitService {
   Future<Map<String, dynamic>> _update({bool stash = false}) async {
     await _ensureIdle();
     final current = await _currentBranchName();
-    if (current == null) throw GitException('当前处于游离 HEAD,无法更新');
+    if (current == null) throw GitException(tr('当前处于游离 HEAD,无法更新', 'HEAD is detached; cannot update'));
     if (await _configGet('branch.$current.merge') == null) {
-      throw GitException('分支 $current 没有上游分支,先推送它(会设置上游)');
+      throw GitException(tr('分支 $current 没有上游分支,先推送它(会设置上游)', 'Branch $current has no upstream branch; push it first (this sets the upstream)'));
     }
     var stashed = false;
     if (stash) {
@@ -740,7 +741,7 @@ class GitService {
   /// `{"branch","remote","target_branch","set_upstream","commits":[{"hash","short","author","time","subject"}]}`。
   Future<Map<String, dynamic>> _outgoing() async {
     final current = await _currentBranchName();
-    if (current == null) throw GitException('当前处于游离 HEAD,无法推送');
+    if (current == null) throw GitException(tr('当前处于游离 HEAD,无法推送', 'HEAD is detached; cannot push'));
     final remote = await _configGet('branch.$current.remote');
     final merge = await _configGet('branch.$current.merge');
     String targetRemote;
@@ -756,7 +757,7 @@ class GitService {
       range = (await _raw(['rev-parse', '--verify', '--quiet', up])).success ? ['$up..HEAD'] : ['HEAD', '--not', '--remotes'];
     } else {
       final remotes = rustLines(await _run(['remote'])).map((r) => r.trim()).where((r) => r.isNotEmpty).toList();
-      if (remotes.isEmpty) throw GitException('没有配置远程仓库');
+      if (remotes.isEmpty) throw GitException(tr('没有配置远程仓库', 'No remotes configured'));
       targetRemote = remotes.contains('origin') ? 'origin' : remotes.first;
       targetBranch = current;
       setUpstream = true;
@@ -783,14 +784,14 @@ class GitService {
   /// Push:把当前分支推到上游;没有上游时推到 origin(或唯一的远程)并设置上游。
   Future<Map<String, dynamic>> _push() async {
     final current = await _currentBranchName();
-    if (current == null) throw GitException('当前处于游离 HEAD,无法推送');
+    if (current == null) throw GitException(tr('当前处于游离 HEAD,无法推送', 'HEAD is detached; cannot push'));
     final remote = await _configGet('branch.$current.remote');
     if (remote != null && remote != '.') {
       await _run(['push'], env: _noPrompt);
       return {'remote': remote, 'branch': current, 'set_upstream': false};
     }
     final remotes = rustLines(await _run(['remote'])).map((r) => r.trim()).where((r) => r.isNotEmpty).toList();
-    if (remotes.isEmpty) throw GitException('没有配置远程仓库');
+    if (remotes.isEmpty) throw GitException(tr('没有配置远程仓库', 'No remotes configured'));
     final target = remotes.contains('origin') ? 'origin' : remotes.first;
     await _run(['push', '-u', target, current], env: _noPrompt);
     return {'remote': target, 'branch': current, 'set_upstream': true};
@@ -818,7 +819,7 @@ class GitService {
   /// 把当前分支变基到 [name] 上。有冲突时停在变基中,需要手动解决。
   Future<void> _rebaseOnto(String name) async {
     await _ensureIdle();
-    if (await _currentBranchName() == null) throw GitException('当前处于游离 HEAD,无法变基');
+    if (await _currentBranchName() == null) throw GitException(tr('当前处于游离 HEAD,无法变基', 'HEAD is detached; cannot rebase'));
     final full = await _resolveCommit(name);
     await _run(['rebase', full], env: _noPrompt);
   }
@@ -828,13 +829,13 @@ class GitService {
     final ok = newName.isNotEmpty &&
         !newName.startsWith('-') &&
         (await _raw(['check-ref-format', '--branch', newName])).success;
-    if (!ok) throw GitException('无效的分支名: $newName');
+    if (!ok) throw GitException(tr('无效的分支名: $newName', 'Invalid branch name: $newName'));
     await _run(['branch', '-m', name, newName]);
   }
 
   Future<void> _deleteBranch(String name, bool force) async {
-    if (name.trim().isEmpty || name.startsWith('-')) throw GitException('无效的分支名: $name');
-    if (name == await _currentBranchName()) throw GitException('不能删除当前所在的分支');
+    if (name.trim().isEmpty || name.startsWith('-')) throw GitException(tr('无效的分支名: $name', 'Invalid branch name: $name'));
+    if (name == await _currentBranchName()) throw GitException(tr('不能删除当前所在的分支', 'Cannot delete the current branch'));
     await _run(['branch', force ? '-D' : '-d', name]);
   }
 
@@ -849,7 +850,7 @@ class GitService {
     final ok = name.isNotEmpty &&
         !name.startsWith('-') &&
         (await _raw(['check-ref-format', '--branch', name])).success;
-    if (!ok) throw GitException('无效的分支名: $name');
+    if (!ok) throw GitException(tr('无效的分支名: $name', 'Invalid branch name: $name'));
     final full = await _resolveCommit(rev);
     await _run(checkout ? ['switch', '-c', name, full] : ['branch', name, full]);
   }
@@ -859,7 +860,7 @@ class GitService {
     final ok = name.isNotEmpty &&
         !name.startsWith('-') &&
         (await _raw(['check-ref-format', 'refs/tags/$name'])).success;
-    if (!ok) throw GitException('无效的标签名: $name');
+    if (!ok) throw GitException(tr('无效的标签名: $name', 'Invalid tag name: $name'));
     final full = await _resolveCommit(rev);
     if (message != null && message.trim().isNotEmpty) {
       await _run(['tag', '-a', name, '-m', message, full]);
@@ -900,18 +901,18 @@ class GitService {
   /// 按 UI 编辑好的计划执行交互式 rebase。条目必须恰好覆盖 base..HEAD,防止旧计划误删提交。
   Future<void> _rebaseInteractive(String? base, List<_RebaseEntry> entries) async {
     await _ensureIdle();
-    if (entries.isEmpty) throw GitException('rebase 计划为空');
+    if (entries.isEmpty) throw GitException(tr('rebase 计划为空', 'The rebase plan is empty'));
     for (final e in entries) {
       if (e.action == 'drop') continue;
-      if (e.action == 'squash' || e.action == 'fixup') throw GitException('第一个提交不能是 squash / fixup');
+      if (e.action == 'squash' || e.action == 'fixup') throw GitException(tr('第一个提交不能是 squash / fixup', 'The first commit cannot be squash / fixup'));
       break;
     }
     final head = await _headHash();
-    if (head.isEmpty) throw GitException('仓库还没有任何提交');
+    if (head.isEmpty) throw GitException(tr('仓库还没有任何提交', 'The repository has no commits yet'));
     String? baseFull;
     if (base != null && base.trim().isNotEmpty) {
       baseFull = await _resolveCommit(base);
-      if (!await _isAncestor(baseFull, head)) throw GitException('rebase 基点不在当前分支的历史中');
+      if (!await _isAncestor(baseFull, head)) throw GitException(tr('rebase 基点不在当前分支的历史中', 'The rebase base is not in the history of the current branch'));
     }
     final range = rangeSpec(baseFull);
     await _ensureNoMerges(range);
@@ -921,11 +922,11 @@ class GitService {
     final resolved = <String>[];
     for (final e in entries) {
       final full = await _resolveCommit(e.hash);
-      if (!seen.add(full)) throw GitException('rebase 计划中提交重复: ${e.hash}');
+      if (!seen.add(full)) throw GitException(tr('rebase 计划中提交重复: ${e.hash}', 'Duplicate commit in the rebase plan: ${e.hash}'));
       resolved.add(full);
     }
     if (seen.length != expected.length || !seen.containsAll(expected)) {
-      throw GitException('rebase 计划与当前分支历史不一致,请刷新后重试');
+      throw GitException(tr('rebase 计划与当前分支历史不一致,请刷新后重试', 'The rebase plan does not match the current branch history; refresh and try again'));
     }
 
     // 消息临时文件需要活到 rebase 结束:同一个 scratch 目录,结束后整体删除
@@ -953,9 +954,9 @@ class GitService {
   /// 把 `hash` 到 HEAD 的提交推送到上游分支(只推到该提交为止)。返回 `{"remote","branch"}`。
   Future<Map<String, dynamic>> _pushUpTo(String rev) async {
     final current = await _currentBranchName();
-    if (current == null) throw GitException('当前处于游离 HEAD,无法推送');
+    if (current == null) throw GitException(tr('当前处于游离 HEAD,无法推送', 'HEAD is detached; cannot push'));
     final full = await _resolveCommit(rev);
-    if (!await _isAncestor(full, await _headHash())) throw GitException('该提交不在当前分支的历史中');
+    if (!await _isAncestor(full, await _headHash())) throw GitException(tr('该提交不在当前分支的历史中', 'This commit is not in the history of the current branch'));
     final remote = await _configGet('branch.$current.remote');
     final merge = await _configGet('branch.$current.merge');
     var targetRemote = 'origin';
@@ -974,7 +975,7 @@ class GitService {
   Future<void> _foldStagedInto(String rev, String? message) async {
     await _ensureIdle();
     final full = await _resolveCommit(rev);
-    if (!await _hasStagedChanges()) throw GitException('没有已暂存的修改');
+    if (!await _hasStagedChanges()) throw GitException(tr('没有已暂存的修改', 'No staged changes'));
     // 先校验范围再提交,避免校验失败时留下一个孤立的 fixup 提交
     final (base, commits) = await _linearRange(full);
     await _withScratch((scratch) async {
@@ -1012,7 +1013,7 @@ class GitService {
     );
     if (!out.success || await _rebaseInProgress()) {
       await _raw(['rebase', '--abort']);
-      throw GitException('Rebase 失败,已中止: ${out.detail}');
+      throw GitException(tr('Rebase 失败,已中止: ${out.detail}', 'Rebase failed, aborted: ${out.detail}'));
     }
   }
 
@@ -1182,7 +1183,7 @@ class GitService {
       await Future.wait([outDone, errDone]);
       return _GitOutput(code, stdout, utf8.decode(stderr, allowMalformed: true));
     } on ProcessException catch (e) {
-      throw GitException('IO error: ${e.message} (os error ${e.errorCode})');
+      throw GitException(tr('IO 错误: ${e.message}(系统错误 ${e.errorCode})', 'IO error: ${e.message} (os error ${e.errorCode})'));
     }
   }
 
@@ -1205,7 +1206,7 @@ class GitService {
         utf8.decode(r.stderr as List<int>, allowMalformed: true),
       );
     } on ProcessException catch (e) {
-      throw GitException('IO error: ${e.message} (os error ${e.errorCode})');
+      throw GitException(tr('IO 错误: ${e.message}(系统错误 ${e.errorCode})', 'IO error: ${e.message} (os error ${e.errorCode})'));
     }
   }
 
@@ -1246,8 +1247,8 @@ class GitService {
   }
 
   Future<String> _resolveCommit(String rev) async {
-    if (rev.trim().isEmpty) throw GitException('缺少提交哈希');
-    return await _tryResolveCommit(rev) ?? (throw GitException('找不到提交: ${rev.trim()}'));
+    if (rev.trim().isEmpty) throw GitException(tr('缺少提交哈希', 'Missing commit hash'));
+    return await _tryResolveCommit(rev) ?? (throw GitException(tr('找不到提交: ${rev.trim()}', 'Commit not found: ${rev.trim()}')));
   }
 
   Future<List<String>> _parentsOf(String full) async =>
@@ -1265,13 +1266,13 @@ class GitService {
 
   Future<void> _ensureNoMerges(String range) async {
     final merges = await _run(['rev-list', '--merges', range]);
-    if (merges.trim().isNotEmpty) throw GitException('范围内包含合并提交,不支持交互式 rebase');
+    if (merges.trim().isNotEmpty) throw GitException(tr('范围内包含合并提交,不支持交互式 rebase', 'The range contains merge commits; interactive rebase is not supported'));
   }
 
   /// 目标提交到 HEAD 的线性区间:返回 (rebase 基点, 区间内提交 最老在前)。基点 null 表示从根开始。
   Future<(String?, List<String>)> _linearRange(String full) async {
     final head = await _headHash();
-    if (!await _isAncestor(full, head)) throw GitException('该提交不在当前分支的历史中');
+    if (!await _isAncestor(full, head)) throw GitException(tr('该提交不在当前分支的历史中', 'This commit is not in the history of the current branch'));
     final parents = await _parentsOf(full);
     final base = parents.isEmpty ? null : parents.first;
     final range = rangeSpec(base);
@@ -1366,7 +1367,7 @@ class GitService {
   /// 解决一个冲突文件:整个采用「Yours」(自己的)或「Theirs」(对方的)那一侧,并标记为已解决(git add)。
   /// 那一侧把文件删了(或根本没有)时,采用它就是删除这个文件。
   Future<void> _acceptSide(String path, String side) async {
-    if (side != 'yours' && side != 'theirs') throw GitException('无效的选择: $side');
+    if (side != 'yours' && side != 'theirs') throw GitException(tr('无效的选择: $side', 'Invalid choice: $side'));
     final state = await _conflictEntry(path);
     final entry = (state['conflicts'] as List).cast<Map<String, dynamic>>().firstWhere((c) => c['path'] == path);
     final label = entry[side] as String;
@@ -1385,10 +1386,10 @@ class GitService {
   static String _topPath(String path) => ':(top,literal)$path';
 
   Future<Map<String, dynamic>> _conflictEntry(String path) async {
-    if (path.trim().isEmpty || path.startsWith('-')) throw GitException('无效的路径: $path');
+    if (path.trim().isEmpty || path.startsWith('-')) throw GitException(tr('无效的路径: $path', 'Invalid path: $path'));
     final state = await _operationState();
     final entry = (state['conflicts'] as List).cast<Map<String, dynamic>>().where((c) => c['path'] == path).firstOrNull;
-    if (entry == null) throw GitException('$path 没有冲突');
+    if (entry == null) throw GitException(tr('$path 没有冲突', '$path has no conflicts'));
     return state;
   }
 
@@ -1409,7 +1410,7 @@ class GitService {
   /// 三方合并窗口里一侧的逐行修改记录(右键行号 ▸ Annotate):对那一侧来自的提交做 blame,
   /// 行号和窗口里那一栏一一对应。[side] 是 'yours' / 'theirs';变基时两侧对调(同 [_mergeVersions])。
   Future<Map<String, dynamic>> _mergeBlame(String path, String side) async {
-    if (side != 'yours' && side != 'theirs') throw GitException('无效的一侧: $side');
+    if (side != 'yours' && side != 'theirs') throw GitException(tr('无效的一侧: $side', 'Invalid side: $side'));
     final state = await _conflictEntry(path);
     final kind = state['operation'] as String?;
     final incoming = switch (kind) {
@@ -1421,7 +1422,7 @@ class GitService {
     };
     final head = (side == 'yours') != (kind == 'rebase');
     final rev = head ? 'HEAD' : incoming;
-    if (rev == null) throw GitException('不知道这一侧来自哪个提交');
+    if (rev == null) throw GitException(tr('不知道这一侧来自哪个提交', 'Cannot tell which commit this side comes from'));
     // 冲突路径相对仓库根;项目可能是仓库的子目录,所以在仓库根上跑
     final top = (await _run(['rev-parse', '--show-toplevel'])).trim();
     return {...await GitService(top)._blame(path, rev: rev), 'rev': rev};
@@ -1440,7 +1441,7 @@ class GitService {
   /// 放弃进行中的合并 / 变基 / cherry-pick / revert,回到操作之前的状态。
   Future<void> _abortOperation() async {
     final kind = await _operationKind();
-    if (kind == null) throw GitException('没有进行中的合并 / 变基');
+    if (kind == null) throw GitException(tr('没有进行中的合并 / 变基', 'No merge / rebase in progress'));
     await _run([kind, '--abort']);
   }
 
@@ -1448,9 +1449,9 @@ class GitService {
   Future<void> _continueOperation() async {
     final state = await _operationState();
     final kind = state['operation'] as String?;
-    if (kind == null) throw GitException('没有进行中的合并 / 变基');
+    if (kind == null) throw GitException(tr('没有进行中的合并 / 变基', 'No merge / rebase in progress'));
     final left = (state['conflicts'] as List).length;
-    if (left > 0) throw GitException('还有 $left 个文件有冲突');
+    if (left > 0) throw GitException(tr('还有 $left 个文件有冲突', '$left file(s) still have conflicts'));
     const env = {'GIT_EDITOR': 'true', 'GIT_TERMINAL_PROMPT': '0', 'GIT_MERGE_AUTOEDIT': 'no'};
     await _run(kind == 'merge' ? ['commit', '--no-edit'] : [kind, '--continue'], env: env);
   }
@@ -1462,7 +1463,7 @@ class GitService {
       if (busy) break;
       busy = await _gitPathExists(n);
     }
-    if (busy) throw GitException('仓库中有进行中的 rebase / merge / cherry-pick / revert,请先完成或中止');
+    if (busy) throw GitException(tr('仓库中有进行中的 rebase / merge / cherry-pick / revert,请先完成或中止', 'A rebase / merge / cherry-pick / revert is in progress; finish or abort it first'));
   }
 
   Future<String?> _configGet(String key) async {
@@ -1501,11 +1502,11 @@ class GitService {
       'exec git commit --amend --only --allow-empty -F ${shQuote(msgFile)}\n';
 
   static void _requirePath(String path) {
-    if (path.trim().isEmpty) throw GitException('缺少文件路径');
+    if (path.trim().isEmpty) throw GitException(tr('缺少文件路径', 'Missing file path'));
   }
 
   static void _requireMessage(String message) {
-    if (message.trim().isEmpty) throw GitException('提交信息不能为空');
+    if (message.trim().isEmpty) throw GitException(tr('提交信息不能为空', 'Commit message cannot be empty'));
   }
 }
 

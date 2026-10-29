@@ -4,6 +4,7 @@ import 'package:flutter/gestures.dart' show kPrimaryButton;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../core/l10n/l10n.dart';
 import '../../core/theme/intellij_theme.dart';
 import 'commit_graph.dart';
 import 'branch_store.dart';
@@ -88,7 +89,7 @@ class _GitLogWindowState extends State<GitLogWindow> {
               _Header(onHide: widget.onHide, onRefresh: store.refresh),
               Expanded(
                 child: !store.isAvailable
-                    ? const Center(child: Text('Git 在 web 预览中不可用', style: _kMuted))
+                    ? Center(child: Text(tr('Git 在 web 预览中不可用', 'Git is not available in the web preview'), style: _kMuted))
                     : LayoutBuilder(builder: (context, constraints) {
                         // 窗口太窄时先让出详情栏、再让出分支栏,提交列表至少留 460px。
                         // 只影响这次布局,不改用户的开关状态。
@@ -143,11 +144,11 @@ class _Header extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 10),
             decoration: BoxDecoration(color: IntelliJTheme.chipBg, borderRadius: BorderRadius.circular(6)),
             alignment: Alignment.center,
-            child: const Text('Log', style: TextStyle(color: IntelliJTheme.textHigh, fontSize: 13)),
+            child: Text(tr('日志', 'Log'), style: const TextStyle(color: IntelliJTheme.textHigh, fontSize: 13)),
           ),
           const Spacer(),
-          GitIconButton(icon: Icons.more_vert, tooltip: '刷新', onTap: onRefresh),
-          GitIconButton(icon: Icons.remove, tooltip: '隐藏', onTap: onHide),
+          GitIconButton(icon: Icons.more_vert, tooltip: tr('刷新', 'Refresh'), onTap: onRefresh),
+          GitIconButton(icon: Icons.remove, tooltip: tr('隐藏', 'Hide'), onTap: onHide),
         ],
       ),
     );
@@ -212,13 +213,13 @@ class _SideToolbar extends StatelessWidget {
         children: [
           GitIconButton(
             icon: store.showBranches ? Icons.chevron_left : Icons.chevron_right,
-            tooltip: store.showBranches ? '隐藏分支' : '显示分支',
+            tooltip: store.showBranches ? tr('隐藏分支', 'Hide Branches') : tr('显示分支', 'Show Branches'),
             onTap: store.toggleBranches,
           ),
           const SizedBox(height: 6),
-          GitIconButton(icon: Icons.search, tooltip: '搜索提交 (Text or hash)', onTap: onSearch),
+          GitIconButton(icon: Icons.search, tooltip: tr('搜索提交(文本或哈希)', 'Search Commits (text or hash)'), onTap: onSearch),
           const SizedBox(height: 6),
-          GitIconButton(icon: Icons.refresh, tooltip: '刷新', onTap: store.refresh),
+          GitIconButton(icon: Icons.refresh, tooltip: tr('刷新', 'Refresh'), onTap: store.refresh),
         ],
       ),
     );
@@ -273,7 +274,7 @@ class _BranchesPaneState extends State<_BranchesPane> {
     final q = _query.toLowerCase();
     bool keep(String name) => q.isEmpty || name.toLowerCase().contains(q);
 
-    final local = _BranchNode('Local');
+    final local = _BranchNode(tr('本地', 'Local'));
     final sortedLocal = [...store.localBranches]..sort((a, b) {
         if (a.current != b.current) return a.current ? -1 : 1;
         return a.name.compareTo(b.name);
@@ -293,7 +294,7 @@ class _BranchesPaneState extends State<_BranchesPane> {
       );
     }
 
-    final remote = _BranchNode('Remote');
+    final remote = _BranchNode(tr('远程', 'Remote'));
     final byRemote = <String, _BranchNode>{};
     for (final b in store.remoteBranches.where((b) => keep(b.name))) {
       final group = byRemote.putIfAbsent(b.remote, () {
@@ -315,7 +316,7 @@ class _BranchesPaneState extends State<_BranchesPane> {
     }
 
     return [
-      _BranchNode('HEAD (Current Branch)', revision: 'HEAD'),
+      _BranchNode(tr('HEAD(当前分支)', 'HEAD (Current Branch)'), revision: 'HEAD'),
       if (local.children.isNotEmpty || q.isEmpty) local,
       if (remote.children.isNotEmpty) remote,
     ];
@@ -570,7 +571,7 @@ class _LogPaneState extends State<_LogPane> {
             child: store.error != null
                 ? Center(child: Text(store.error!, style: _kMuted, textAlign: TextAlign.center))
                 : store.commits.isEmpty
-                    ? Center(child: Text(store.loading ? '加载中…' : '没有匹配的提交', style: _kMuted))
+                    ? Center(child: Text(store.loading ? tr('加载中…', 'Loading…') : tr('没有匹配的提交', 'No matching commits'), style: _kMuted))
                     : Focus(
                         focusNode: _listFocus,
                         onKeyEvent: _onKey,
@@ -623,7 +624,8 @@ class _WarningBanner extends StatelessWidget {
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                '仓库历史有损坏,只显示损坏点之前的提交(可运行 git fsck 检查)。$message',
+                tr('仓库历史有损坏,只显示损坏点之前的提交(可运行 git fsck 检查)。$message',
+                    'The repository history is corrupted; only commits before the damaged point are shown (run git fsck to check). $message'),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(color: IntelliJTheme.textPrimary, fontSize: 12),
@@ -656,23 +658,23 @@ class _FilterBar extends StatelessWidget {
       child: Row(
         children: [
           Expanded(child: _filters(context)),
-          GitIconButton(icon: Icons.sync, tooltip: '刷新', onTap: store.refresh),
+          GitIconButton(icon: Icons.sync, tooltip: tr('刷新', 'Refresh'), onTap: store.refresh),
           GitIconButton(
             icon: Icons.local_florist_outlined,
-            tooltip: 'Cherry-Pick',
+            tooltip: tr('拣选', 'Cherry-Pick'),
             onTap: store.selected == null || store.busy != null
                 ? null
                 : () => GitCommitActions(context, store).cherryPick(store.selected!),
           ),
           GitIconButton(
             icon: Icons.visibility_outlined,
-            tooltip: '显示详情',
+            tooltip: tr('显示详情', 'Show Details'),
             active: store.showDetails,
             onTap: store.toggleDetails,
           ),
           GitIconButton(
             icon: Icons.manage_search,
-            tooltip: '跳转到哈希 / 分支 / 标签',
+            tooltip: tr('转到哈希/分支/标签', 'Go to Hash/Branch/Tag'),
             onTap: () => GitCommitActions(context, store).goToRevision(),
           ),
           // 正在 Pull / Push(标题栏分支菜单发起的也算)时那个按钮转圈,两个都点不了
@@ -689,8 +691,10 @@ class _FilterBar extends StatelessWidget {
                         key: const ValueKey('git-pull'),
                         up: false,
                         color: const Color(0xFF4A86F7),
-                        tooltip: busy == 'Update' ? 'Pull 进行中…' : 'Pull:更新当前分支(拉取并合并上游)',
-                        running: busy == 'Update',
+                        tooltip: busy == BranchStore.updateLabel
+                            ? tr('正在拉取…', 'Pulling…')
+                            : tr('拉取:更新当前分支(拉取并合并上游)', 'Pull: update the current branch (fetch and merge the upstream)'),
+                        running: busy == BranchStore.updateLabel,
                         onTap: busy != null ? null : () => onPull!(context),
                       ),
                     if (onPush != null)
@@ -698,8 +702,10 @@ class _FilterBar extends StatelessWidget {
                         key: const ValueKey('git-push'),
                         up: true,
                         color: const Color(0xFF3DD68C),
-                        tooltip: busy == 'Push' ? 'Push 进行中…' : 'Push:推送当前分支(先确认要推的提交)',
-                        running: busy == 'Push',
+                        tooltip: busy == BranchStore.pushLabel
+                            ? tr('正在推送…', 'Pushing…')
+                            : tr('推送:推送当前分支(先确认要推的提交)', 'Push: push the current branch (confirm the commits to push first)'),
+                        running: busy == BranchStore.pushLabel,
                         onTap: busy != null ? null : () => onPush!(context),
                       ),
                   ],
@@ -735,18 +741,18 @@ class _FilterBar extends StatelessWidget {
                       controller: controller,
                       focusNode: focus,
                       style: _kText,
-                      decoration: const InputDecoration(
+                      decoration: InputDecoration(
                         isDense: true,
                         border: InputBorder.none,
-                        hintText: 'Text or hash',
+                        hintText: tr('文本或哈希', 'Text or hash'),
                         hintStyle: _kMuted,
-                        contentPadding: EdgeInsets.symmetric(vertical: 6),
+                        contentPadding: const EdgeInsets.symmetric(vertical: 6),
                       ),
                       onChanged: store.setText,
                     ),
                   ),
-                  GitIconButton(icon: null, label: '.*', tooltip: '正则表达式', active: store.regex, onTap: store.toggleRegex),
-                  GitIconButton(icon: null, label: 'Cc', tooltip: '区分大小写', active: store.matchCase, onTap: store.toggleMatchCase),
+                  GitIconButton(icon: null, label: '.*', tooltip: tr('正则表达式', 'Regex'), active: store.regex, onTap: store.toggleRegex),
+                  GitIconButton(icon: null, label: 'Cc', tooltip: tr('区分大小写', 'Match Case'), active: store.matchCase, onTap: store.toggleMatchCase),
                 ],
               ),
             ),
@@ -759,7 +765,7 @@ class _FilterBar extends StatelessWidget {
               child: Row(
                 children: [
                   _FilterDropdown(
-                    label: 'Branch',
+                    label: tr('分支', 'Branch'),
                     value: store.branch,
                     options: () => [
                       'HEAD',
@@ -769,7 +775,7 @@ class _FilterBar extends StatelessWidget {
                     onSelected: store.setBranch,
                   ),
                   _FilterDropdown(
-                    label: 'User',
+                    label: tr('用户', 'User'),
                     value: store.author,
                     options: () async {
                       if (store.authors.isEmpty) await store.loadAuthors();
@@ -778,7 +784,7 @@ class _FilterBar extends StatelessWidget {
                     onSelected: store.setAuthor,
                   ),
                   _FilterDropdown(
-                    label: 'Date',
+                    label: tr('日期', 'Date'),
                     value: store.date == DateFilter.all ? null : store.date.label,
                     options: () => [for (final d in DateFilter.values.skip(1)) d.label],
                     onSelected: (v) => store.setDate(
@@ -927,7 +933,7 @@ class _FilterDropdown extends StatelessWidget {
             color: IntelliJTheme.panelBg,
             constraints: const BoxConstraints(maxHeight: 360, minWidth: 180),
             items: [
-              if (active) const PopupMenuItem(value: '\u0000', height: 26, child: Text('All', style: _kText)),
+              if (active) PopupMenuItem(value: '\u0000', height: 26, child: Text(tr('全部', 'All'), style: _kText)),
               for (final o in items)
                 PopupMenuItem(
                   value: o,
@@ -979,8 +985,9 @@ class _PathsFilter extends StatelessWidget {
       borderRadius: BorderRadius.circular(4),
       onTap: () async {
         final value = await GitCommitActions(context, store).promptText(
-          title: 'Paths',
-          label: '只看涉及这些路径的提交(相对项目根目录,多个用逗号分隔)',
+          title: tr('路径', 'Paths'),
+          label: tr('只看涉及这些路径的提交(相对项目根目录,多个用逗号分隔)',
+              'Show only commits that touch these paths (relative to the project root, separated by commas)'),
           initial: store.paths.join(', '),
         );
         if (value == null) return;
@@ -995,7 +1002,7 @@ class _PathsFilter extends StatelessWidget {
         child: Row(
           children: [
             Text(
-              active ? 'Paths: ${store.paths.join(', ')}' : 'Paths',
+              active ? '${tr('路径', 'Paths')}: ${store.paths.join(', ')}' : tr('路径', 'Paths'),
               style: TextStyle(color: active ? IntelliJTheme.textHigh : IntelliJTheme.textSecondary, fontSize: 12),
             ),
             const SizedBox(width: 2),
@@ -1160,7 +1167,7 @@ class _DetailsPaneState extends State<_DetailsPane> {
   }
 
   _FileNode _buildTree(List<GitFileChange> files) {
-    final root = _FileNode(widget.repoName.isEmpty ? 'repository' : widget.repoName);
+    final root = _FileNode(widget.repoName.isEmpty ? tr('仓库', 'repository') : widget.repoName);
     for (final f in files) {
       final parts = f.path.split('/');
       var node = root;
@@ -1176,7 +1183,7 @@ class _DetailsPaneState extends State<_DetailsPane> {
   Widget build(BuildContext context) {
     final d = widget.store.details;
     if (d == null) {
-      return const Center(child: Text('选择一个提交查看详情', style: _kMuted));
+      return Center(child: Text(tr('选择一个提交查看详情', 'Select a commit to view details'), style: _kMuted));
     }
     final tree = _buildTree(d.files);
     final rows = <Widget>[];
@@ -1190,7 +1197,7 @@ class _DetailsPaneState extends State<_DetailsPane> {
         expanded: !collapsed,
         icon: Icons.folder_outlined,
         label: node.name,
-        trailing: '${node.count} ${node.count == 1 ? 'file' : 'files'}',
+        trailing: tr('${node.count} 个文件', '${node.count} ${node.count == 1 ? 'file' : 'files'}'),
         onTap: () => setState(() => collapsed ? _collapsed.remove(key) : _collapsed.add(key)),
       ));
       if (collapsed) return;
@@ -1230,7 +1237,7 @@ class _DetailsPaneState extends State<_DetailsPane> {
             children: [
               GitIconButton(
                 icon: Icons.difference_outlined,
-                tooltip: '显示 Diff (双击文件)',
+                tooltip: tr('显示差异(双击文件)', 'Show Diff (double-click a file)'),
                 onTap: _selectedFile == null
                     ? null
                     : () => GitCommitActions(context, widget.store).showCommitFileDiff(
@@ -1239,10 +1246,10 @@ class _DetailsPaneState extends State<_DetailsPane> {
                         ),
               ),
               const Spacer(),
-              GitIconButton(icon: Icons.unfold_more, tooltip: '全部展开', onTap: () => setState(_collapsed.clear)),
+              GitIconButton(icon: Icons.unfold_more, tooltip: tr('全部展开', 'Expand All'), onTap: () => setState(_collapsed.clear)),
               GitIconButton(
                 icon: Icons.unfold_less,
-                tooltip: '全部折叠',
+                tooltip: tr('全部折叠', 'Collapse All'),
                 onTap: () => setState(() {
                   void collect(_FileNode n, String path) {
                     final key = '$path/${n.name}';
@@ -1264,7 +1271,7 @@ class _DetailsPaneState extends State<_DetailsPane> {
           child: Container(
             color: IntelliJTheme.accentYellow.withValues(alpha: 0.06),
             child: d.files.isEmpty
-                ? const Center(child: Text('没有文件变更', style: _kMuted))
+                ? Center(child: Text(tr('没有文件变更', 'No changed files'), style: _kMuted))
                 : ListView(padding: const EdgeInsets.symmetric(vertical: 4), children: rows),
           ),
         ),
@@ -1289,11 +1296,12 @@ class _DetailsPaneState extends State<_DetailsPane> {
                   ),
                   const SizedBox(height: 10),
                   Text(
-                    '${d.hash.substring(0, 8)} ${d.author} <${d.email}> on ${formatGitDate(d.authorTime)}',
+                    tr('${d.hash.substring(0, 8)} ${d.author} <${d.email}> 于 ${formatGitDate(d.authorTime)}',
+                        '${d.hash.substring(0, 8)} ${d.author} <${d.email}> on ${formatGitDate(d.authorTime)}'),
                     style: _kMuted,
                   ),
                   if (d.committer.isNotEmpty && d.committer != d.author)
-                    Text('committed by ${d.committer} on ${formatGitDate(d.commitTime)}', style: _kMuted),
+                    Text(tr('由 ${d.committer} 提交于 ${formatGitDate(d.commitTime)}', 'committed by ${d.committer} on ${formatGitDate(d.commitTime)}'), style: _kMuted),
                   if (d.refs.any((r) => r.kind != 'head')) ...[
                     const SizedBox(height: 6),
                     Text(

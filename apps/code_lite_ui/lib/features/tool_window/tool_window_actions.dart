@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/l10n/l10n.dart';
 import '../../core/state/layout_store.dart';
 import '../../core/theme/intellij_theme.dart';
 import '../editor/context_menu_region.dart' show darculaMenuTheme, MenuDivider;
@@ -37,7 +38,7 @@ class ToolWindowActions extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             _OptionsMenu(layout: layout, tool: tool),
-            _HeaderButton(icon: Icons.remove, tooltip: '隐藏', onTap: () => layout.hideTool(tool)),
+            _HeaderButton(icon: Icons.remove, tooltip: tr('隐藏', 'Hide'), onTap: () => layout.hideTool(tool)),
           ],
         );
       },
@@ -67,20 +68,20 @@ class _OptionsMenu extends StatelessWidget {
         menuChildren: [
           SubmenuButton(
             menuChildren: [
-              place('左侧上方', ToolSide.left, ToolSlot.top),
-              place('左侧下方', ToolSide.left, ToolSlot.bottom),
+              place(tr('左侧上方', 'Left Top'), ToolSide.left, ToolSlot.top),
+              place(tr('左侧下方', 'Left Bottom'), ToolSide.left, ToolSlot.bottom),
               const MenuDivider(),
-              place('右侧上方', ToolSide.right, ToolSlot.top),
-              place('右侧下方', ToolSide.right, ToolSlot.bottom),
+              place(tr('右侧上方', 'Right Top'), ToolSide.right, ToolSlot.top),
+              place(tr('右侧下方', 'Right Bottom'), ToolSide.right, ToolSlot.bottom),
             ],
-            child: const Text('移动到'),
+            child: Text(tr('移动到', 'Move To')),
           ),
           const MenuDivider(),
-          MenuItemButton(onPressed: () => layout.hideTool(tool), child: const Text('隐藏')),
+          MenuItemButton(onPressed: () => layout.hideTool(tool), child: Text(tr('隐藏', 'Hide'))),
         ],
         builder: (context, controller, _) => _HeaderButton(
           icon: Icons.more_vert,
-          tooltip: '选项',
+          tooltip: tr('选项', 'Options'),
           onTap: () => controller.isOpen ? controller.close() : controller.open(),
         ),
       ),

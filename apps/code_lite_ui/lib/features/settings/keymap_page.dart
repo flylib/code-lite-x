@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../../core/keymap/intellij_keymap_io.dart' as intellij;
 import '../../core/keymap/keymap.dart';
+import '../../core/l10n/l10n.dart';
 import '../../core/theme/intellij_theme.dart';
 
 const TextStyle _text = TextStyle(color: IntelliJTheme.textPrimary, fontSize: 13);
@@ -25,7 +26,8 @@ class KeymapPage extends StatefulWidget {
 }
 
 class _KeymapPageState extends State<KeymapPage> {
-  String? _message;
+  /// 导入结果;是函数,换界面语言后按新语言显示。
+  String Function()? _message;
   bool _importing = false;
 
   KeymapStore get _keymap => widget.keymap;
@@ -40,10 +42,10 @@ class _KeymapPageState extends State<KeymapPage> {
     setState(() {
       _importing = false;
       if (r == null) {
-        _message = '没有找到 IntelliJ IDEA 的配置。';
+        _message = () => tr('没有找到 IntelliJ IDEA 的配置。', 'No IntelliJ IDEA configuration found.');
       } else {
         _keymap.applyIntelliJ(r.name, r.shortcuts);
-        _message = '已从 ${r.source} 导入「${r.name}」。';
+        _message = () => tr('已从 ${r.source} 导入「${r.name}」。', 'Imported "${r.name}" from ${r.source}.');
       }
     });
   }
@@ -70,22 +72,24 @@ class _KeymapPageState extends State<KeymapPage> {
           children: [
             Row(
               children: [
-                const Expanded(child: Text('Keymap', style: _section)),
+                Expanded(child: Text(tr('按键映射', 'Keymap'), style: _section)),
                 TextButton.icon(
                   key: const ValueKey('keymap-import'),
                   onPressed: _importing ? null : _import,
                   icon: const Icon(Icons.download_outlined, size: 16),
-                  label: const Text('从 IntelliJ 导入'),
+                  label: Text(tr('从 IntelliJ 导入', 'Import from IntelliJ')),
                 ),
                 const SizedBox(width: 4),
-                TextButton(onPressed: _keymap.resetAll, child: const Text('全部恢复默认')),
+                TextButton(onPressed: _keymap.resetAll, child: Text(tr('全部恢复默认', 'Restore All Defaults'))),
               ],
             ),
             Text(
-              _message ??
+              _message?.call() ??
                   (_keymap.importedFrom != null
-                      ? '在用从 IntelliJ 导入的「${_keymap.importedFrom}」;默认键位同 IntelliJ。'
-                      : '默认键位同 IntelliJ(${_keymap.mac ? 'macOS' : 'Default'})。点 + 按下新的组合键即可添加。'),
+                      ? tr('在用从 IntelliJ 导入的「${_keymap.importedFrom}」;默认键位同 IntelliJ。',
+                          'Using "${_keymap.importedFrom}" imported from IntelliJ; the defaults match IntelliJ.')
+                      : tr('默认键位同 IntelliJ(${_keymap.mac ? 'macOS' : 'Default'})。点 + 按下新的组合键即可添加。',
+                          'Defaults match IntelliJ (${_keymap.mac ? 'macOS' : 'Default'}). Click + and press a new key combination to add one.')),
               style: _hint,
             ),
             const SizedBox(height: 14),
@@ -122,11 +126,11 @@ class _KeymapPageState extends State<KeymapPage> {
               padding: const EdgeInsets.only(left: 6),
               child: _ShortcutChip(label: k.label(mac: _keymap.mac), onRemove: () => _keymap.remove(a.id, k)),
             ),
-          if (shortcuts.isEmpty) const Text('无', style: _hint),
-          _IconAction(icon: Icons.add, tooltip: '添加快捷键', onTap: () => _record(a), key: ValueKey('keymap-add-${a.id}')),
+          if (shortcuts.isEmpty) Text(tr('无', 'None'), style: _hint),
+          _IconAction(icon: Icons.add, tooltip: tr('添加快捷键', 'Add Keyboard Shortcut'), onTap: () => _record(a), key: ValueKey('keymap-add-${a.id}')),
           SizedBox(
             width: 28,
-            child: _keymap.isCustomized(a.id) ? _IconAction(icon: Icons.restart_alt, tooltip: '恢复默认', onTap: () => _keymap.reset(a.id)) : null,
+            child: _keymap.isCustomized(a.id) ? _IconAction(icon: Icons.restart_alt, tooltip: tr('恢复默认', 'Restore Default'), onTap: () => _keymap.reset(a.id)) : null,
           ),
         ],
       ),
@@ -158,7 +162,7 @@ class _ShortcutChip extends StatelessWidget {
             onTap: onRemove,
             borderRadius: BorderRadius.circular(3),
             child: Tooltip(
-              message: '去掉 $label',
+              message: tr('去掉 $label', 'Remove $label'),
               child: const Padding(padding: EdgeInsets.all(3), child: Icon(Icons.close, size: 12, color: IntelliJTheme.textMuted)),
             ),
           ),
@@ -222,7 +226,7 @@ class _RecordDialogState extends State<_RecordDialog> {
     final usedTitle = usedBy == null ? null : keymapActionById(usedBy)?.title;
     return AlertDialog(
       backgroundColor: IntelliJTheme.popupBg,
-      title: Text('「${widget.action.title}」的快捷键', style: const TextStyle(color: IntelliJTheme.textHigh, fontSize: 15)),
+      title: Text(tr('「${widget.action.title}」的快捷键', 'Keyboard Shortcut for "${widget.action.title}"'), style: const TextStyle(color: IntelliJTheme.textHigh, fontSize: 15)),
       content: Focus(
         autofocus: true,
         onKeyEvent: _onKey,
@@ -242,13 +246,15 @@ class _RecordDialogState extends State<_RecordDialog> {
                   border: Border.all(color: IntelliJTheme.accentBlue),
                 ),
                 child: Text(
-                  k?.label(mac: widget.keymap.mac) ?? '按下组合键…',
+                  k?.label(mac: widget.keymap.mac) ?? tr('按下组合键…', 'Press a key combination…'),
                   style: TextStyle(color: k == null ? IntelliJTheme.textMuted : IntelliJTheme.textHigh, fontSize: 16),
                 ),
               ),
               const SizedBox(height: 10),
               Text(
-                usedTitle != null ? '这个组合已用于「$usedTitle」,确定后会从那里移走。' : '单按 Esc 取消。',
+                usedTitle != null
+                    ? tr('这个组合已用于「$usedTitle」,确定后会从那里移走。', 'This shortcut is already assigned to "$usedTitle"; it will be removed from there.')
+                    : tr('单按 Esc 取消。', 'Press Esc alone to cancel.'),
                 style: TextStyle(color: usedTitle != null ? IntelliJTheme.accentYellow : IntelliJTheme.textMuted, fontSize: 12),
               ),
             ],
@@ -256,8 +262,8 @@ class _RecordDialogState extends State<_RecordDialog> {
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('取消')),
-        TextButton(onPressed: k == null ? null : () => Navigator.pop(context, k), child: const Text('确定')),
+        TextButton(onPressed: () => Navigator.pop(context), child: Text(tr('取消', 'Cancel'))),
+        TextButton(onPressed: k == null ? null : () => Navigator.pop(context, k), child: Text(tr('确定', 'OK'))),
       ],
     );
   }

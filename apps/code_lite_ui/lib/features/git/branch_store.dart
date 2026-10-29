@@ -8,6 +8,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../../core/client/api_client.dart';
+import '../../core/l10n/l10n.dart';
 import 'git_log_store.dart' show GitLocalBranch, GitRemoteBranch;
 import 'repo_operation.dart';
 
@@ -38,6 +39,10 @@ class BranchStore extends ChangeNotifier {
 
   /// 正在执行的操作名(给界面显示进度),空闲时为 null。
   String? busy;
+
+  /// Update / Push 跑着时 [busy] 的值;日志窗的 Pull / Push 按钮据此转圈。
+  static String get updateLabel => tr('更新', 'Update');
+  static String get pushLabel => tr('推送', 'Push');
 
   /// 最近一次 [run] 的返回(比如 `git.update` 的输出)。
   Map<String, dynamic> lastResult = const {};
@@ -129,7 +134,7 @@ class BranchStore extends ChangeNotifier {
   /// 执行一个会改动仓库的操作:显示进度、完成后重新加载并通知 [onChanged]。
   /// 成功返回 null,失败返回错误信息。[worktree] 说明这个操作会不会动工作区文件。
   Future<String?> run(String label, String method, [Map<String, dynamic> params = const {}, bool worktree = true]) async {
-    if (busy != null) return '有操作正在进行: $busy';
+    if (busy != null) return tr('有操作正在进行: $busy', 'Another operation is in progress: $busy');
     busy = label;
     _notify();
     final res = await _client.gitCall(method, params);
@@ -137,7 +142,7 @@ class BranchStore extends ChangeNotifier {
     lastResult = res;
     await load();
     onChanged?.call(worktree);
-    return res['status'] == 'ok' ? null : (res['error'] as String? ?? '$label 失败');
+    return res['status'] == 'ok' ? null : (res['error'] as String? ?? tr('$label失败', '$label failed'));
   }
 
   /// 读类调用(不改仓库),比如 `git.log`;不显示进度。

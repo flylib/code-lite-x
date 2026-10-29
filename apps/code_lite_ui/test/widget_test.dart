@@ -32,7 +32,7 @@ void main() {
     expect(find.byTooltip('Git 提交与日志 (Alt+9)'), findsOneWidget);
     expect(find.byTooltip('操作记录与回滚'), findsNothing); // SQLite 回滚面板已移除
     expect(find.byTooltip('助手'), findsNothing); // AI 助手已移除
-    expect(find.byTooltip('Commit (Alt+0)'), findsOneWidget);
+    expect(find.byTooltip('提交 (Alt+0)'), findsOneWidget);
 
     // Cargo 工具窗已移除。
     expect(find.text('Cargo'), findsNothing);
@@ -45,16 +45,16 @@ void main() {
     await tester.pumpWidget(const CodeLiteApp());
     await tester.pump();
 
-    expect(find.byTooltip('Opening Projects'), findsOneWidget);
-    expect(find.text('Opening'), findsNothing, reason: '面板默认不显示');
-    await tester.tap(find.byTooltip('Opening Projects'));
+    expect(find.byTooltip('打开的项目'), findsOneWidget);
+    expect(find.text('打开的项目'), findsNothing, reason: '面板默认不显示');
+    await tester.tap(find.byTooltip('打开的项目'));
     await tester.pump();
-    expect(find.text('Opening'), findsOneWidget);
+    expect(find.text('打开的项目'), findsOneWidget);
     expect(find.text('没有打开的项目'), findsOneWidget);
     // 再点一次收起,和别的工具窗一样
-    await tester.tap(find.byTooltip('Opening Projects'));
+    await tester.tap(find.byTooltip('打开的项目'));
     await tester.pump();
-    expect(find.text('Opening'), findsNothing);
+    expect(find.text('打开的项目'), findsNothing);
   });
 
   testWidgets('right activity stripe has no Cargo tool window any more', (WidgetTester tester) async {
@@ -75,12 +75,12 @@ void main() {
     await tester.pumpWidget(const CodeLiteApp());
     await tester.pump();
 
-    expect(find.text('Project'), findsWidgets);
+    expect(find.text('项目'), findsWidgets);
 
     await tester.tap(find.byTooltip('项目 (Alt+1)'));
     await tester.pump();
 
-    expect(find.text('Project'), findsNothing);
+    expect(find.text('项目'), findsNothing);
   });
 
   testWidgets('dragging the side splitter resizes the left tool window, shared across tools', (WidgetTester tester) async {

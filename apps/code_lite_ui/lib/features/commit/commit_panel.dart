@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/client/api_client.dart';
+import '../../core/l10n/l10n.dart';
 import '../../core/theme/intellij_theme.dart';
 import 'stash_panel.dart';
 import '../tool_window/tool_window_actions.dart';
@@ -173,32 +174,35 @@ class _CommitPanelState extends State<CommitPanel> {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: IntelliJTheme.panelBg,
-        title: const Text('Rollback Changes',
-            style: TextStyle(color: IntelliJTheme.textHigh, fontSize: 15)),
+        title: Text(tr('回滚更改', 'Rollback Changes'),
+            style: const TextStyle(color: IntelliJTheme.textHigh, fontSize: 15)),
         content: SizedBox(
           width: 440,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('以下文件的本地修改将被丢弃,无法恢复。新增的文件会被删除。', style: _kText),
+              Text(
+                  tr('以下文件的本地修改将被丢弃,无法恢复。新增的文件会被删除。',
+                      'Local changes to the following files will be discarded and cannot be recovered. Added files will be deleted.'),
+                  style: _kText),
               const SizedBox(height: 8),
               for (final p in targets.take(12))
                 Text('  $p', overflow: TextOverflow.ellipsis, style: _kMuted),
               if (targets.length > 12)
-                Text('  … 共 ${targets.length} 个文件', style: _kMuted),
+                Text(tr('  … 共 ${targets.length} 个文件', '  … ${targets.length} files in total'), style: _kMuted),
             ],
           ),
         ),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel')),
+              child: Text(tr('取消', 'Cancel'))),
           FilledButton(
             style:
                 FilledButton.styleFrom(backgroundColor: IntelliJTheme.gitRed),
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Rollback'),
+            child: Text(tr('回滚', 'Rollback')),
           ),
         ],
       ),
@@ -206,7 +210,7 @@ class _CommitPanelState extends State<CommitPanel> {
     if (ok != true) return;
     final res = await widget.client.gitCall('git.rollback', {'paths': targets});
     if (!mounted) return;
-    if (res['status'] != 'ok') showNotice(context, 'Rollback 失败: ${res['error']}', error: true);
+    if (res['status'] != 'ok') showNotice(context, tr('回滚失败: ${res['error']}', 'Rollback failed: ${res['error']}'), error: true);
     widget.onFilesReverted?.call([for (final p in targets) _workspacePath(p)]);
     await _refresh();
     widget.onCommitted();
@@ -265,7 +269,12 @@ class _CommitPanelState extends State<CommitPanel> {
       _amend = false;
       widget.onCommitted();
     }
-    showNotice(context, ok ? '已提交 ${res['commit_hash'] ?? ''}' : '提交失败: ${res['error'] ?? res}', error: !ok);
+    showNotice(
+        context,
+        ok
+            ? tr('已提交 ${res['commit_hash'] ?? ''}', 'Committed ${res['commit_hash'] ?? ''}')
+            : tr('提交失败: ${res['error'] ?? res}', 'Commit failed: ${res['error'] ?? res}'),
+        error: !ok);
     await _refresh();
   }
 
@@ -289,12 +298,12 @@ class _CommitPanelState extends State<CommitPanel> {
                     child: Row(
                       children: [
                         _HeaderTab(
-                            label: 'Commit',
+                            label: tr('提交', 'Commit'),
                             active: _tab == 0,
                             onTap: () => setState(() => _tab = 0)),
                         const SizedBox(width: 4),
                         _HeaderTab(
-                            label: 'Stash',
+                            label: tr('储藏', 'Stash'),
                             active: _tab == 1,
                             onTap: () => setState(() => _tab = 1)),
                       ],
@@ -337,18 +346,18 @@ class _CommitPanelState extends State<CommitPanel> {
           padding: const EdgeInsets.symmetric(horizontal: 6),
           child: Row(
             children: [
-              _ToolBtn(icon: Icons.sync, tooltip: '刷新', onTap: _refresh),
+              _ToolBtn(icon: Icons.sync, tooltip: tr('刷新', 'Refresh'), onTap: _refresh),
               _ToolBtn(
                   icon: Icons.undo,
-                  tooltip: 'Rollback…',
+                  tooltip: tr('回滚…', 'Rollback…'),
                   onTap: _rollbackTargets.isEmpty ? null : _rollback),
               _ToolBtn(
                   icon: Icons.unfold_more,
-                  tooltip: '全部展开',
+                  tooltip: tr('全部展开', 'Expand All'),
                   onTap: () => setState(_collapsed.clear)),
               _ToolBtn(
                 icon: Icons.unfold_less,
-                tooltip: '全部折叠',
+                tooltip: tr('全部折叠', 'Collapse All'),
                 onTap: () => setState(
                     () => _collapsed.addAll(['Changes', 'Unversioned Files'])),
               ),
@@ -357,14 +366,16 @@ class _CommitPanelState extends State<CommitPanel> {
         ),
         Expanded(
           child: _changes.isEmpty
-              ? const Center(child: Text('没有本地修改', style: _kMuted))
+              ? Center(child: Text(tr('没有本地修改', 'No local changes'), style: _kMuted))
               : ListView(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   children: [
-                    if (tracked.isNotEmpty) ..._group('Changes', tracked),
+                    if (tracked.isNotEmpty)
+                      ..._group('Changes', tr('更改', 'Changes'), tracked),
                     if (untracked.isNotEmpty)
-                      ..._group('Unversioned Files', untracked),
+                      ..._group('Unversioned Files',
+                          tr('未进行版本管理的文件', 'Unversioned Files'), untracked),
                   ],
                 ),
         ),
@@ -378,12 +389,12 @@ class _CommitPanelState extends State<CommitPanel> {
               const SizedBox(width: 6),
               GestureDetector(
                   onTap: () => _toggleAmend(!_amend),
-                  child: const Text('Amend', style: _kText)),
+                  child: Text(tr('修改', 'Amend'), style: _kText)),
               const SizedBox(width: 10),
               Builder(
                 builder: (ctx) => _ToolBtn(
                   icon: Icons.history,
-                  tooltip: '最近的提交信息',
+                  tooltip: tr('最近的提交信息', 'Recent Commit Messages'),
                   onTap: () {
                     final box = ctx.findRenderObject() as RenderBox;
                     _pickRecentMessage(
@@ -416,8 +427,8 @@ class _CommitPanelState extends State<CommitPanel> {
                       color: IntelliJTheme.textHigh,
                       fontSize: 12.5,
                       fontFamily: 'Menlo'),
-                  decoration: const InputDecoration(
-                    hintText: 'Commit Message',
+                  decoration: InputDecoration(
+                    hintText: tr('提交信息', 'Commit Message'),
                     hintStyle: _kMuted,
                     border: InputBorder.none,
                     isDense: true,
@@ -443,13 +454,13 @@ class _CommitPanelState extends State<CommitPanel> {
                             width: 12,
                             height: 12,
                             child: CircularProgressIndicator(strokeWidth: 1.5))
-                        : Text(_amend ? 'Amend Commit' : 'Commit',
+                        : Text(_amend ? tr('修改提交', 'Amend Commit') : tr('提交', 'Commit'),
                             style: const TextStyle(fontSize: 12.5)),
                   ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      _hasStaged || _amend ? '' : '勾选要提交的文件',
+                      _hasStaged || _amend ? '' : tr('勾选要提交的文件', 'Select files to commit'),
                       overflow: TextOverflow.ellipsis,
                       style: _kMuted,
                     ),
@@ -463,14 +474,16 @@ class _CommitPanelState extends State<CommitPanel> {
     );
   }
 
-  List<Widget> _group(String title, List<Map<String, dynamic>> items) {
+  /// [key] 是折叠状态用的固定标识(不随界面语言变),[title] 是显示的名字。
+  List<Widget> _group(
+      String key, String title, List<Map<String, dynamic>> items) {
     final stagedCount = items.where((c) => c['is_staged'] == true).length;
     final allStaged = stagedCount == items.length;
-    final collapsed = _collapsed.contains(title);
+    final collapsed = _collapsed.contains(key);
     return [
       InkWell(
         onTap: () => setState(
-            () => collapsed ? _collapsed.remove(title) : _collapsed.add(title)),
+            () => collapsed ? _collapsed.remove(key) : _collapsed.add(key)),
         borderRadius: BorderRadius.circular(5),
         child: Container(
           height: 26,
@@ -496,8 +509,8 @@ class _CommitPanelState extends State<CommitPanel> {
                             color: IntelliJTheme.textHigh,
                             fontWeight: FontWeight.w600)),
                     TextSpan(
-                        text:
-                            '  ${items.length} ${items.length == 1 ? 'file' : 'files'}',
+                        text: tr('  ${items.length} 个文件',
+                            '  ${items.length} ${items.length == 1 ? 'file' : 'files'}'),
                         style: _kMuted),
                   ]),
                   overflow: TextOverflow.ellipsis,

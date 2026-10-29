@@ -313,7 +313,7 @@ void main() {
       expect(d, hasLength(1));
       expect(d.single['code'], 'mismatched_bracket');
       expect((d.single['range'] as Map)['start'], {'line': 1, 'character': 11});
-      expect(d.single['message'], contains("expected '}'"));
+      expect(d.single['message'], contains("应以 '}' 闭合"));
     });
 
     test('brackets inside strings, chars and comments are ignored', () {

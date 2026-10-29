@@ -6,6 +6,7 @@ import '../../features/editor/code_editor_controller.dart' show EditorPosition;
 import '../../features/editor/editor_session_manager.dart';
 import '../../features/editor/lsp_overlay.dart';
 import '../client/api_client.dart';
+import '../l10n/l10n.dart';
 import '../platform/paths.dart';
 import '../platform/workspace_io.dart' as io;
 import 'session_snapshot.dart';
@@ -254,10 +255,10 @@ class WorkspaceStore extends ChangeNotifier with DisposeSafeNotifier {
   /// File → New → File:在项目内创建空文件并打开。成功返回 null,失败返回原因。
   Future<String?> createFile(String relPath) async {
     final root = _rootPath;
-    if (root == null) return '请先打开一个项目';
+    if (root == null) return tr('请先打开一个项目', 'Open a project first');
     final clean = relPath.trim().replaceAll(RegExp(r'^/+'), '');
-    if (clean.isEmpty || clean.endsWith('/')) return '文件名不能为空';
-    if (clean.split('/').contains('..')) return '路径不能包含 ..';
+    if (clean.isEmpty || clean.endsWith('/')) return tr('文件名不能为空', 'The file name cannot be empty');
+    if (clean.split('/').contains('..')) return tr('路径不能包含 ..', 'The path cannot contain ..');
     final err = await io.createEmptyFile(root, clean);
     if (err != null) return err;
     await load();
@@ -270,12 +271,12 @@ class WorkspaceStore extends ChangeNotifier with DisposeSafeNotifier {
   /// 只改文件名,不改代码里对它的引用。
   Future<String?> renamePath(String path, String newName) async {
     final root = _rootPath;
-    if (root == null) return '请先打开一个项目';
+    if (root == null) return tr('请先打开一个项目', 'Open a project first');
     final err = renameNameError(newName);
     if (err != null) return err;
     final from = absoluteFilePath(root, path);
     final slash = from.lastIndexOf('/');
-    if (slash <= 0) return '不能改这个名字';
+    if (slash <= 0) return tr('不能改这个名字', 'This item cannot be renamed');
     final to = '${from.substring(0, slash)}/${newName.trim()}';
     if (to == from) return null;
     await _sessions.saveAll();

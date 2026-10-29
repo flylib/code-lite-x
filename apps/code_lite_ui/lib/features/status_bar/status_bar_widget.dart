@@ -10,6 +10,7 @@ import '../editor/code_editor_controller.dart';
 import '../editor/editor_view_widget.dart' show isSpecialTabId;
 import '../editor/lsp_overlay.dart';
 import '../editor/syntax/languages.dart';
+import '../../core/l10n/l10n.dart';
 
 /// 底部状态栏。左侧是当前文件在工作区里的位置,右侧是光标位置与文件属性。
 ///
@@ -61,7 +62,7 @@ class StatusBarWidget extends StatelessWidget {
             _StatusText(languages.detect(activeFile, firstLine: controller?.lineAt(0)).name),
           const _StatusText('LF'),
           const _StatusText('UTF-8'),
-          const _StatusText('4 spaces'),
+          _StatusText(tr('4 个空格', '4 spaces')),
           const SizedBox(width: 4),
           // 当前分支已在标题栏显示;这里改为 IDE 的内存 / CPU 占用
           const ResourceIndicator(),
@@ -77,9 +78,9 @@ class StatusBarWidget extends StatelessWidget {
 
   Widget _buildBreadcrumb() {
     if (activeFile.isEmpty) {
-      return const Text(
-        '打开一个文件开始编辑',
-        style: TextStyle(color: IntelliJTheme.textStatus, fontSize: 12.5),
+      return Text(
+        tr('打开一个文件开始编辑', 'Open a file to start editing'),
+        style: const TextStyle(color: IntelliJTheme.textStatus, fontSize: 12.5),
       );
     }
 
@@ -113,7 +114,7 @@ class StatusBarWidget extends StatelessWidget {
         ),
         if (isSaving) ...[
           const SizedBox(width: 8),
-          const Text('保存中…', style: TextStyle(color: IntelliJTheme.textStatus, fontSize: 12.5)),
+          Text(tr('保存中…', 'Saving…'), style: const TextStyle(color: IntelliJTheme.textStatus, fontSize: 12.5)),
         ],
       ],
     );
@@ -127,7 +128,7 @@ class StatusBarWidget extends StatelessWidget {
       return _StatusChip(
         icon: Icons.error_outline,
         color: IntelliJTheme.diagError,
-        label: '$errors 个错误',
+        label: tr('$errors 个错误', errors == 1 ? '1 error' : '$errors errors'),
         emphasize: true,
       );
     }
@@ -135,7 +136,7 @@ class StatusBarWidget extends StatelessWidget {
       return _StatusChip(
         icon: Icons.warning_amber_rounded,
         color: IntelliJTheme.diagWarning,
-        label: '$warnings 个警告',
+        label: tr('$warnings 个警告', warnings == 1 ? '1 warning' : '$warnings warnings'),
       );
     }
     // 没有错误 / 警告时显示当前文件所用的语言服务器(以前这里写死了 rust-analyzer)
@@ -285,7 +286,7 @@ class _ResourceIndicatorState extends State<ResourceIndicator> {
 
   String? _labelFor(ResourceSnapshot s) {
     if (s.processes.isEmpty) return null;
-    final mem = 'Mem ${formatBytes(_selfPeak)}';
+    final mem = tr('内存 ${formatBytes(_selfPeak)}', 'Mem ${formatBytes(_selfPeak)}');
     return _sampler.detailed ? '$mem · CPU ${formatCpu(s.processes.first.cpuPercent)}' : mem;
   }
 
@@ -302,14 +303,18 @@ class _ResourceIndicatorState extends State<ResourceIndicator> {
     final details = [
       for (final p in s.processes)
         '${p.pid == self.pid ? 'CodeLiteX' : p.name}  ${formatBytes(p.memoryBytes)}${hasCpu ? ' · CPU ${formatCpu(p.cpuPercent)}' : ''}',
-      if (s.processes.length > 1) '合计  ${formatBytes(s.totalMemoryBytes)}${hasCpu ? ' · CPU ${formatCpu(s.totalCpuPercent)}' : ''}',
-      if (peak > self.memoryBytes) 'CodeLiteX 近 30 秒峰值 ${formatBytes(peak)}(界面绘制时的 GPU 帧缓冲,停止绘制后释放)',
+      if (s.processes.length > 1) '${tr('合计', 'Total')}  ${formatBytes(s.totalMemoryBytes)}${hasCpu ? ' · CPU ${formatCpu(s.totalCpuPercent)}' : ''}',
+      if (peak > self.memoryBytes)
+        tr('CodeLiteX 近 30 秒峰值 ${formatBytes(peak)}(界面绘制时的 GPU 帧缓冲,停止绘制后释放)',
+            'CodeLiteX peak in the last 30 s: ${formatBytes(peak)} (GPU frame buffers while the UI draws; released when drawing stops)'),
     ].join('\n');
     // 悬停时刷新一次,提示里的数字不会停在上次重建时
     return MouseRegion(
       onEnter: (_) => setState(() {}),
       child: Tooltip(
-        message: '${s.processes.length > 1 ? 'IDE 本身 + 子进程(语言服务器等)\n' : ''}当前占用:\n$details',
+        message: s.processes.length > 1
+            ? tr('IDE 本身 + 子进程(语言服务器等)\n当前占用:\n$details', 'IDE itself + child processes (language servers etc.)\nCurrent usage:\n$details')
+            : tr('当前占用:\n$details', 'Current usage:\n$details'),
         waitDuration: const Duration(milliseconds: 400),
         child: Padding(
           padding: const EdgeInsets.only(left: 6),
@@ -407,16 +412,20 @@ class _LspStatusChipState extends State<LspStatusChip> {
     final name = LspStatusChip.displayName(widget.group, s['command'] as String? ?? '');
     final error = s['error'] as String?;
     final (IconData icon, Color color, String label, String tip) = switch (s['state']) {
-      'missing' => (Icons.extension_off_outlined, IntelliJTheme.textMuted, '未安装 $name', '没有找到 $name。可在 CodeLiteX ▸ Plugins… 安装对应的语言插件;目前只做括号配对检查。'),
-      'crashed' => (Icons.error_outline, IntelliJTheme.diagError, '$name 已退出', '$name 反复崩溃,已停用,只做括号配对检查。${error == null ? '' : '\n$error'}'),
-      'suspended' => (Icons.pause_circle_outline, IntelliJTheme.textMuted, '$name 已暂停', '项目在后台太久,$name 已停下省内存;打开文件或切回来时会重新启动'),
-      _ when s['initialized'] != true => (Icons.sync, IntelliJTheme.textMuted, '$name 启动中…', '$name 正在启动(大项目首次打开需要建索引)'),
+      'missing' => (Icons.extension_off_outlined, IntelliJTheme.textMuted, tr('未安装 $name', '$name not installed'),
+          tr('没有找到 $name。可在 CodeLiteX ▸ 插件… 安装对应的语言插件;目前只做括号配对检查。', '$name was not found. Install the language plugin in CodeLiteX ▸ Plugins…; only bracket matching is checked for now.')),
+      'crashed' => (Icons.error_outline, IntelliJTheme.diagError, tr('$name 已退出', '$name exited'),
+          '${tr('$name 反复崩溃,已停用,只做括号配对检查。', '$name kept crashing and was disabled; only bracket matching is checked.')}${error == null ? '' : '\n$error'}'),
+      'suspended' => (Icons.pause_circle_outline, IntelliJTheme.textMuted, tr('$name 已暂停', '$name paused'),
+          tr('项目在后台太久,$name 已停下省内存;打开文件或切回来时会重新启动', 'The project was in the background too long, so $name was stopped to save memory; it restarts when you open a file or switch back')),
+      _ when s['initialized'] != true => (Icons.sync, IntelliJTheme.textMuted, tr('$name 启动中…', '$name starting…'),
+          tr('$name 正在启动(大项目首次打开需要建索引)', '$name is starting (large projects need indexing the first time)')),
       _ => (
           Icons.check_circle_outline,
           IntelliJTheme.gitGreen,
           name,
-          '$name 运行中${s['source'] != null ? '(插件 ${s['source']})' : ''}'
-              '${s['shared'] != null && (s['projects'] as int? ?? 1) > 1 ? '\n和项目组里的 ${s['projects']} 个项目共用一个进程' : ''}'
+          '${tr('$name 运行中', '$name running')}${s['source'] != null ? tr('(插件 ${s['source']})', ' (plugin ${s['source']})') : ''}'
+              '${s['shared'] != null && (s['projects'] as int? ?? 1) > 1 ? tr('\n和项目组里的 ${s['projects']} 个项目共用一个进程', '\nShared by ${s['projects']} projects in the project group') : ''}'
               '\n${s['command']}'
         ),
     };

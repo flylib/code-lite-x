@@ -284,14 +284,14 @@ void main() {
       await press([LogicalKeyboardKey.altLeft], LogicalKeyboardKey.digit7);
       expect(find.byType(StructureWidget), findsOneWidget);
       await press([LogicalKeyboardKey.altLeft], LogicalKeyboardKey.f12);
-      expect(find.text('Terminal'), findsOneWidget);
+      expect(find.text('终端'), findsOneWidget);
 
       await press([LogicalKeyboardKey.controlLeft, LogicalKeyboardKey.shiftLeft], LogicalKeyboardKey.f12);
       expect(find.byType(StructureWidget), findsNothing);
-      expect(find.text('Terminal'), findsNothing);
+      expect(find.text('终端'), findsNothing);
       await press([LogicalKeyboardKey.controlLeft, LogicalKeyboardKey.shiftLeft], LogicalKeyboardKey.f12);
       expect(find.byType(StructureWidget), findsOneWidget, reason: '再按一次恢复刚才开着的');
-      expect(find.text('Terminal'), findsOneWidget);
+      expect(find.text('终端'), findsOneWidget);
       expect(find.byTooltip('结构 (Alt+7)'), findsOneWidget, reason: '按钮提示显示当前快捷键');
     });
   });

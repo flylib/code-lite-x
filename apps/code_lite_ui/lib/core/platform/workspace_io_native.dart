@@ -3,6 +3,8 @@ import 'dart:io';
 
 import 'package:flutter/services.dart';
 
+import '../l10n/l10n.dart';
+
 const _dialogs = MethodChannel('codelitex/dialogs');
 
 /// 弹出系统"选择文件夹"面板(macOS 为 NSOpenPanel)。取消返回 null。
@@ -44,10 +46,10 @@ Future<(String?, String?)> detectMake(String path) async {
   try {
     final r = await Process.run(exe, ['--version'], environment: env).timeout(const Duration(seconds: 5));
     final out = '${r.stdout}'.trim();
-    if (r.exitCode != 0 || out.isEmpty) return (null, '运行失败(退出码 ${r.exitCode}):${'${r.stderr}'.trim()}');
+    if (r.exitCode != 0 || out.isEmpty) return (null, tr('运行失败(退出码 ${r.exitCode}):${'${r.stderr}'.trim()}', 'Failed to run (exit code ${r.exitCode}): ${'${r.stderr}'.trim()}'));
     return (out.split('\n').first.trim(), null);
   } on ProcessException {
-    return (null, '找不到 $exe');
+    return (null, tr('找不到 $exe', 'Cannot find $exe'));
   } catch (e) {
     return (null, '$e');
   }
@@ -76,7 +78,7 @@ Future<String?> writeTextFile(String path, String content) async {
 Future<String?> createEmptyFile(String root, String relPath) async {
   final file = File('$root/$relPath');
   if (await file.exists() || await Directory(file.path).exists()) {
-    return '已存在: $relPath';
+    return tr('已存在: $relPath', 'Already exists: $relPath');
   }
   try {
     await file.create(recursive: true);
@@ -90,9 +92,9 @@ Future<String?> createEmptyFile(String root, String relPath) async {
 /// 只改大小写(`foo.txt` → `Foo.txt`)在不分大小写的磁盘上「已存在」的是它自己,照样改。
 Future<String?> renamePath(String from, String to) async {
   final type = await FileSystemEntity.type(from, followLinks: false);
-  if (type == FileSystemEntityType.notFound) return '找不到: $from';
+  if (type == FileSystemEntityType.notFound) return tr('找不到: $from', 'Not found: $from');
   if (from.toLowerCase() != to.toLowerCase() && await FileSystemEntity.type(to, followLinks: false) != FileSystemEntityType.notFound) {
-    return '已存在: ${to.split('/').last}';
+    return tr('已存在: ${to.split('/').last}', 'Already exists: ${to.split('/').last}');
   }
   try {
     switch (type) {
@@ -287,13 +289,13 @@ bool _isFreeDirectory(String path) {
 /// 返回 (项目目录, 错误);不会弹出凭据输入,没有权限就直接失败。
 Future<(String?, String?)> cloneRepository(String url, String parentDir, {String? name}) async {
   final address = url.trim();
-  if (address.isEmpty) return (null, '请输入仓库地址');
-  if (address.startsWith('-')) return (null, '仓库地址无效');
+  if (address.isEmpty) return (null, tr('请输入仓库地址', 'Enter a repository URL'));
+  if (address.startsWith('-')) return (null, tr('仓库地址无效', 'Invalid repository URL'));
   final folder = (name ?? '').trim().isNotEmpty ? name!.trim() : repositoryNameFromUrl(address);
-  if (folder.isEmpty || folder == '.' || folder == '..' || folder.contains('/')) return (null, '无法确定目录名');
-  if (!Directory(parentDir).existsSync()) return (null, '目录不存在: $parentDir');
+  if (folder.isEmpty || folder == '.' || folder == '..' || folder.contains('/')) return (null, tr('无法确定目录名', 'Cannot determine the directory name'));
+  if (!Directory(parentDir).existsSync()) return (null, tr('目录不存在: $parentDir', 'Directory does not exist: $parentDir'));
   final target = '$parentDir/$folder';
-  if (!_isFreeDirectory(target)) return (null, '目录已存在且不为空: $target');
+  if (!_isFreeDirectory(target)) return (null, tr('目录已存在且不为空: $target', 'Directory already exists and is not empty: $target'));
   try {
     final r = await Process.run(
       'git',
@@ -302,29 +304,29 @@ Future<(String?, String?)> cloneRepository(String url, String parentDir, {String
     );
     if (r.exitCode != 0) {
       final msg = (r.stderr as String).trim();
-      return (null, msg.isEmpty ? 'git clone 失败(退出码 ${r.exitCode})' : msg);
+      return (null, msg.isEmpty ? tr('git clone 失败(退出码 ${r.exitCode})', 'git clone failed (exit code ${r.exitCode})') : msg);
     }
     return (target, null);
   } on ProcessException catch (e) {
-    return (null, '无法运行 git: ${e.message}');
+    return (null, tr('无法运行 git: ${e.message}', 'Cannot run git: ${e.message}'));
   }
 }
 
 /// 在 [parentDir] 下新建项目目录 [name] 并 `git init`。返回 (项目目录, 错误)。
 Future<(String?, String?)> createProject(String parentDir, String name) async {
   final folder = name.trim();
-  if (folder.isEmpty) return (null, '请输入项目名');
-  if (folder == '.' || folder == '..' || folder.contains('/') || folder.contains('\\')) return (null, '项目名不能包含路径分隔符');
-  if (!Directory(parentDir).existsSync()) return (null, '目录不存在: $parentDir');
+  if (folder.isEmpty) return (null, tr('请输入项目名', 'Enter a project name'));
+  if (folder == '.' || folder == '..' || folder.contains('/') || folder.contains('\\')) return (null, tr('项目名不能包含路径分隔符', 'The project name cannot contain path separators'));
+  if (!Directory(parentDir).existsSync()) return (null, tr('目录不存在: $parentDir', 'Directory does not exist: $parentDir'));
   final target = '$parentDir/$folder';
-  if (!_isFreeDirectory(target)) return (null, '目录已存在且不为空: $target');
+  if (!_isFreeDirectory(target)) return (null, tr('目录已存在且不为空: $target', 'Directory already exists and is not empty: $target'));
   try {
     await Directory(target).create(recursive: true);
     final r = await Process.run('git', ['init', '-q'], workingDirectory: target);
     if (r.exitCode != 0) return (target, null); // 没能 init 也照样能打开,只是不是仓库
     return (target, null);
   } on FileSystemException catch (e) {
-    return (null, '无法创建目录: ${e.message}');
+    return (null, tr('无法创建目录: ${e.message}', 'Cannot create directory: ${e.message}'));
   } on ProcessException {
     return (target, null);
   }

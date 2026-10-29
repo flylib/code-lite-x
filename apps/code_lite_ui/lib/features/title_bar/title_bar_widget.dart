@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/l10n/l10n.dart';
 import '../../core/platform/window_chrome.dart';
 import '../../core/theme/intellij_theme.dart';
 
@@ -68,12 +69,12 @@ class TitleBarWidget extends StatelessWidget {
           const SizedBox(width: 8),
           // 右:运行配置与运行 / 调试 / 更多,隔开一点是搜索和设置
           _buildRunTarget(),
-          _iconBtn(Icons.play_arrow_outlined, '运行 (⇧F10)', null, dim: true),
-          _iconBtn(Icons.bug_report_outlined, 'Debug (⇧F9)', null, dim: true),
-          _iconBtn(Icons.more_vert, '更多', null),
+          _iconBtn(Icons.play_arrow_outlined, tr('运行 (⇧F10)', 'Run (⇧F10)'), null, dim: true),
+          _iconBtn(Icons.bug_report_outlined, tr('调试 (⇧F9)', 'Debug (⇧F9)'), null, dim: true),
+          _iconBtn(Icons.more_vert, tr('更多', 'More'), null),
           const SizedBox(width: 18),
-          _iconBtn(Icons.search, '搜索 (⇧⌘F)', onSearch),
-          _iconBtn(Icons.settings_outlined, '设置 (⌘,)', onSettings),
+          _iconBtn(Icons.search, tr('搜索 (⇧⌘F)', 'Search (⇧⌘F)'), onSearch),
+          _iconBtn(Icons.settings_outlined, tr('设置 (⌘,)', 'Settings (⌘,)'), onSettings),
         ],
       ),
     );
@@ -91,20 +92,20 @@ class TitleBarWidget extends StatelessWidget {
 
   Widget _buildRunTarget() {
     return Tooltip(
-      message: '运行配置',
+      message: tr('运行配置', 'Run Configurations'),
       waitDuration: const Duration(milliseconds: 400),
       child: InkWell(
         onTap: () {},
         borderRadius: BorderRadius.circular(6),
         hoverColor: IntelliJTheme.hoverBg,
-        child: const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('Current File', style: TextStyle(color: IntelliJTheme.textHigh, fontSize: 13)),
-              SizedBox(width: 4),
-              Icon(Icons.keyboard_arrow_down, size: 15, color: IntelliJTheme.textSecondary),
+              Text(tr('当前文件', 'Current File'), style: const TextStyle(color: IntelliJTheme.textHigh, fontSize: 13)),
+              const SizedBox(width: 4),
+              const Icon(Icons.keyboard_arrow_down, size: 15, color: IntelliJTheme.textSecondary),
             ],
           ),
         ),

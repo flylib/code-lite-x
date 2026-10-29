@@ -16,6 +16,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import '../ffi/rust_syntax.dart' show rustOutline;
+import '../l10n/l10n.dart';
 import 'lsp_common.dart';
 
 export 'lsp_common.dart' show LspDiagnosticsEvent, LspTextChange, LspLaunch, LspLaunchResolver;
@@ -599,7 +600,7 @@ class LspService {
     if (argv == null) {
       server.state = _State.missing;
       server.argv = _commandFor(group).first;
-      server.lastError = 'language server not found';
+      server.lastError = tr('找不到语言服务器', 'language server not found');
       return server;
     }
     server.argv = argv;
@@ -668,7 +669,7 @@ class LspService {
         runInShell: Platform.isWindows && RegExp(r'\.(cmd|bat)$', caseSensitive: false).hasMatch(server.argv.first),
       );
     } catch (e) {
-      server.lastError = 'failed to start: $e';
+      server.lastError = tr('启动失败: $e', 'failed to start: $e');
       _onCrash(server);
       return;
     }
@@ -709,7 +710,7 @@ class LspService {
     if (server.closed || server.proc != proc || proc.exited) return; // 退出由 _onExit 处理
     if (result is! Map) {
       // 初始化超时或报错:服务端没救了,直接降级,不再重试。
-      server.lastError = 'initialize failed or timed out';
+      server.lastError = tr('初始化失败或超时', 'initialize failed or timed out');
       server.state = _State.crashed;
       proc.process.kill(ProcessSignal.sigkill);
       _enterFallback(server);
@@ -740,7 +741,7 @@ class LspService {
     proc.failPending();
     if (server.closed || server.retired || server.proc != proc || server.fallback || server.suspended) return;
     final tail = proc.stderrTail.isEmpty ? '' : ': ${proc.stderrTail.last}';
-    server.lastError = 'exited with code $code$tail';
+    server.lastError = tr('已退出(退出码 $code)$tail', 'exited with code $code$tail');
     // rustup 代理在组件未安装时以错误退出:本质是「没装」,不必反复重启。
     if (!proc.initialized && proc.stderrTail.any((l) => l.contains('Unknown binary') || l.contains('is not installed'))) {
       server.state = _State.missing;

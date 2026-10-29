@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/plugins/plugin_manager.dart';
 import '../../core/theme/intellij_theme.dart';
+import '../../core/l10n/l10n.dart';
 
 const TextStyle _text = TextStyle(color: IntelliJTheme.textHigh, fontSize: 12.5);
 const TextStyle _muted = TextStyle(color: IntelliJTheme.textMuted, fontSize: 12);
@@ -69,8 +70,8 @@ class PluginBanner extends StatelessWidget {
 
   Widget _suggest(PluginManifest m) {
     final ext = filePath.split('.').last;
-    final what = m.languageServers.isNotEmpty ? '错误检查、文件大纲' : '语法高亮';
-    final size = (m.sizeMB ?? 0) > 0 ? '(约 ${m.sizeMB!.round()} MB)' : '';
+    final what = m.languageServers.isNotEmpty ? tr('错误检查、文件大纲', 'error checking and file structure') : tr('语法高亮', 'syntax highlighting');
+    final size = (m.sizeMB ?? 0) > 0 ? tr('(约 ${m.sizeMB!.round()} MB)', ' (about ${m.sizeMB!.round()} MB)') : '';
     final unmet = plugins.unmetRequirements(m.id);
     return _bar(
       color: const Color(0xFF2B3544),
@@ -79,16 +80,16 @@ class PluginBanner extends StatelessWidget {
         Expanded(
           child: Text.rich(
             TextSpan(children: [
-              TextSpan(text: '「${m.name}」插件可以为 .$ext 文件提供$what$size', style: _text),
-              if (unmet.isNotEmpty) TextSpan(text: '  需要 ${unmet.map((r) => r.label).join('、')}(未找到)', style: _muted),
+              TextSpan(text: tr('「${m.name}」插件可以为 .$ext 文件提供$what$size', 'The "${m.name}" plugin provides $what for .$ext files$size'), style: _text),
+              if (unmet.isNotEmpty) TextSpan(text: tr('  需要 ${unmet.map((r) => r.label).join('、')}(未找到)', '  Requires ${unmet.map((r) => r.label).join(', ')} (not found)'), style: _muted),
             ]),
             overflow: TextOverflow.ellipsis,
             maxLines: 1,
           ),
         ),
-        _Action('安装', () => plugins.install(m.id), primary: true),
-        _Action('以后再说', () => plugins.snooze(m.id)),
-        _Action('不再提示', () => plugins.dismiss(m.id)),
+        _Action(tr('安装', 'Install'), () => plugins.install(m.id), primary: true),
+        _Action(tr('以后再说', 'Not Now'), () => plugins.snooze(m.id)),
+        _Action(tr('不再提示', "Don't Ask Again"), () => plugins.dismiss(m.id)),
       ],
     );
   }
@@ -99,9 +100,9 @@ class PluginBanner extends StatelessWidget {
       icon: Icons.downloading,
       children: [
         Expanded(
-          child: Text('正在安装「${m.name}」:${task.message}', overflow: TextOverflow.ellipsis, maxLines: 1, style: _text),
+          child: Text(tr('正在安装「${m.name}」:${task.message}', 'Installing "${m.name}": ${task.message}'), overflow: TextOverflow.ellipsis, maxLines: 1, style: _text),
         ),
-        _Action('取消', () => plugins.cancelInstall(m.id)),
+        _Action(tr('取消', 'Cancel'), () => plugins.cancelInstall(m.id)),
       ],
       bottom: ClipRRect(
         borderRadius: BorderRadius.circular(2),
@@ -116,11 +117,11 @@ class PluginBanner extends StatelessWidget {
       icon: Icons.error_outline,
       children: [
         Expanded(
-          child: Text('「${m.name}」插件安装失败:${task.error}', overflow: TextOverflow.ellipsis, maxLines: 2, style: _text),
+          child: Text(tr('「${m.name}」插件安装失败:${task.error}', 'Failed to install the "${m.name}" plugin: ${task.error}'), overflow: TextOverflow.ellipsis, maxLines: 2, style: _text),
         ),
-        _Action('重试', () => plugins.install(m.id), primary: true),
-        if (task.log.isNotEmpty) _Action('详情', () => showPluginLog(context, m, task.log)),
-        _Action('关闭', () => plugins.clearTask(m.id)),
+        _Action(tr('重试', 'Retry'), () => plugins.install(m.id), primary: true),
+        if (task.log.isNotEmpty) _Action(tr('详情', 'Details'), () => showPluginLog(context, m, task.log)),
+        _Action(tr('关闭', 'Close'), () => plugins.clearTask(m.id)),
       ],
     );
   }
@@ -131,7 +132,7 @@ Future<void> showPluginLog(BuildContext context, PluginManifest m, String log) =
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: IntelliJTheme.panelBg,
-        title: Text('「${m.name}」安装日志', style: const TextStyle(color: IntelliJTheme.textHigh, fontSize: 15)),
+        title: Text(tr('「${m.name}」安装日志', 'Installation Log: ${m.name}'), style: const TextStyle(color: IntelliJTheme.textHigh, fontSize: 15)),
         content: SizedBox(
           width: 640,
           height: 360,
@@ -142,7 +143,7 @@ Future<void> showPluginLog(BuildContext context, PluginManifest m, String log) =
             ),
           ),
         ),
-        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('关闭'))],
+        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: Text(tr('关闭', 'Close')))],
       ),
     );
 

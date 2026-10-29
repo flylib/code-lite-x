@@ -84,20 +84,20 @@ void main() {
   test('RepoOperation: labels, abortability, and nothing when there is neither an operation nor a conflict', () {
     expect(RepoOperation.fromJson({'operation': null, 'conflicts': []}), isNull);
     final merge = RepoOperation.fromJson({'operation': 'merge', 'branch': 'kdev', 'incoming': 'feat/x', 'conflicts': []})!;
-    expect(merge.verb, 'Merging');
-    expect(merge.noun, 'Merge');
+    expect(merge.verb, '正在合并');
+    expect(merge.noun, '合并');
     expect(merge.canAbort, isTrue);
     expect(merge.hasConflicts, isFalse);
-    expect(merge.describe(null).map((s) => s.$1).join(), 'Merging branch feat/x into branch kdev');
+    expect(merge.describe(null).map((s) => s.$1).join(), '正在将分支 feat/x 合并到分支 kdev');
     expect(merge.describe(null).where((s) => s.$2).map((s) => s.$1), ['feat/x', 'kdev']);
     final rebase = RepoOperation.fromJson({'operation': 'rebase', 'branch': 'feat', 'onto': 'main', 'conflicts': []})!;
-    expect(rebase.describe(null).map((s) => s.$1).join(), 'Rebasing branch feat onto main');
+    expect(rebase.describe(null).map((s) => s.$1).join(), '正在将分支 feat 变基到 main');
     final loose = RepoOperation.fromJson({
       'operation': null,
       'conflicts': [file('a/b/c.txt')],
     })!;
     expect(loose.canAbort, isFalse);
-    expect(loose.verb, 'Conflicts');
+    expect(loose.verb, '冲突');
     expect(loose.conflicts.single.name, 'c.txt');
     expect(loose.conflicts.single.dir, 'a/b');
     expect(ConflictFile.fromJson(file('top.txt')).dir, '');
@@ -143,12 +143,12 @@ void main() {
     testWidgets('merging: the chip says Merging <branch> with a warning icon and both buttons appear', (tester) async {
       repo.startMerge([file('a.txt'), file('sub/b.txt', 'Deleted', 'Modified')]);
       await show(tester);
-      expect(find.text('Merging kdev'), findsOneWidget);
+      expect(find.text('正在合并 kdev'), findsOneWidget);
       expect(find.byIcon(Icons.warning_amber_rounded), findsOneWidget);
       expect(find.byKey(const ValueKey('operation-conflicts')), findsOneWidget);
       expect(find.byKey(const ValueKey('operation-abort')), findsOneWidget);
       expect(find.byTooltip('2 个文件有冲突,点击查看并解决'), findsOneWidget);
-      expect(find.byTooltip('放弃这次合并(Abort Merge)'), findsOneWidget);
+      expect(find.byTooltip('放弃这次合并'), findsOneWidget);
     });
 
     testWidgets('a merge started in the terminal shows up on the next poll, and disappears when it is finished there', (tester) async {
@@ -157,7 +157,7 @@ void main() {
       repo.startMerge([file('a.txt')]);
       await store.load(); // 轮询发现指纹变了就会这样重新加载
       await tester.pump();
-      expect(find.text('Merging kdev'), findsOneWidget);
+      expect(find.text('正在合并 kdev'), findsOneWidget);
       repo.kind = null;
       repo.conflicts = [];
       await store.load();
@@ -173,15 +173,15 @@ void main() {
         ..onto = 'main'
         ..conflicts = [file('a.txt')];
       await show(tester);
-      expect(find.text('Rebasing feat/login'), findsOneWidget);
-      expect(find.byTooltip('放弃这次变基(Abort Rebase)'), findsOneWidget);
+      expect(find.text('正在变基 feat/login'), findsOneWidget);
+      expect(find.byTooltip('放弃这次变基'), findsOneWidget);
 
       repo
         ..kind = null
         ..conflicts = [file('a.txt')];
       await store.load();
       await tester.pump();
-      expect(find.text('Conflicts'), findsOneWidget, reason: '不是合并 / 变基造成的冲突(比如 stash apply):只说有冲突'); 
+      expect(find.text('冲突'), findsOneWidget, reason: '不是合并 / 变基造成的冲突(比如 stash apply):只说有冲突'); 
       expect(find.byKey(const ValueKey('operation-conflicts')), findsOneWidget);
       expect(find.byKey(const ValueKey('operation-abort')), findsNothing);
     });
@@ -191,16 +191,16 @@ void main() {
       await show(tester);
       await tester.tap(find.byKey(const ValueKey('operation-abort')));
       await tester.pumpAndSettle();
-      expect(find.text('Abort Merge'), findsWidgets);
+      expect(find.text('中止合并'), findsWidgets);
       expect(find.textContaining('git merge --abort'), findsOneWidget);
-      await tester.tap(find.text('Cancel'));
+      await tester.tap(find.text('取消'));
       await tester.pumpAndSettle();
       expect(repo.callsTo('git.abort_operation'), isEmpty);
-      expect(find.text('Merging kdev'), findsOneWidget);
+      expect(find.text('正在合并 kdev'), findsOneWidget);
 
       await tester.tap(find.byKey(const ValueKey('operation-abort')));
       await tester.pumpAndSettle();
-      await tester.tap(find.widgetWithText(FilledButton, 'Abort Merge'));
+      await tester.tap(find.widgetWithText(FilledButton, '中止合并'));
       await tester.pumpAndSettle();
       expect(repo.callsTo('git.abort_operation'), hasLength(1));
       expect(find.text('kdev'), findsOneWidget);
@@ -212,23 +212,23 @@ void main() {
       await show(tester);
       await tester.tap(find.byKey(const ValueKey('operation-conflicts')));
       await tester.pumpAndSettle();
-      expect(find.text('Conflicts'), findsOneWidget);
-      expect(find.textContaining('Merging branch feat/retention into branch kdev'), findsOneWidget);
-      expect(find.text('Yours (kdev)'), findsOneWidget);
-      expect(find.text('Theirs (feat/retention)'), findsOneWidget);
+      expect(find.text('冲突'), findsOneWidget);
+      expect(find.textContaining('正在将分支 feat/retention 合并到分支 kdev'), findsOneWidget);
+      expect(find.text('你的 (kdev)'), findsOneWidget);
+      expect(find.text('他们的 (feat/retention)'), findsOneWidget);
       expect(find.text('MigrationHoconBuilder.java'), findsOneWidget);
       expect(find.text('data-archiving-service/src'), findsOneWidget);
       expect(find.text('README.md'), findsOneWidget);
-      expect(find.text('Added'), findsNWidgets(2));
-      expect(find.text('Accept Yours'), findsOneWidget);
-      expect(find.text('Accept Theirs'), findsOneWidget);
-      expect(find.text('Merge...'), findsOneWidget);
+      expect(find.text('已添加'), findsNWidgets(2));
+      expect(find.text('接受你的'), findsOneWidget);
+      expect(find.text('接受他们的'), findsOneWidget);
+      expect(find.text('合并...'), findsOneWidget);
       // 两个文件、都没选:按钮不可用
-      expect(tester.widget<OutlinedButton>(find.widgetWithText(OutlinedButton, 'Accept Yours')).onPressed, isNull);
+      expect(tester.widget<OutlinedButton>(find.widgetWithText(OutlinedButton, '接受你的')).onPressed, isNull);
 
-      await tester.tap(find.text('Close'));
+      await tester.tap(find.text('关闭'));
       await tester.pumpAndSettle();
-      expect(find.text('Conflicts'), findsNothing);
+      expect(find.text('冲突'), findsNothing);
     });
 
     testWidgets('accepting a side resolves that file; when none are left the window offers to commit the merge', (tester) async {
@@ -239,7 +239,7 @@ void main() {
 
       await tester.tap(find.byKey(const ValueKey('conflict-a.txt')));
       await tester.pump();
-      await tester.tap(find.text('Accept Theirs'));
+      await tester.tap(find.text('接受他们的'));
       await tester.pumpAndSettle();
       expect(repo.callsTo('git.accept_side'), [
         {'path': 'a.txt', 'side': 'theirs'},
@@ -250,17 +250,17 @@ void main() {
 
       await tester.tap(find.byKey(const ValueKey('conflict-b.txt')));
       await tester.pump();
-      await tester.tap(find.text('Accept Yours'));
+      await tester.tap(find.text('接受你的'));
       await tester.pumpAndSettle();
       expect(repo.callsTo('git.accept_side').last, {'path': 'b.txt', 'side': 'yours'});
       expect(find.text('所有冲突都已解决。'), findsOneWidget);
-      expect(find.text('Commit Merge'), findsOneWidget);
-      expect(find.byTooltip('冲突都解决了,点击完成Merge'), findsOneWidget);
+      expect(find.text('提交合并'), findsOneWidget);
+      expect(find.byTooltip('冲突都解决了,点击完成合并'), findsOneWidget);
 
-      await tester.tap(find.text('Commit Merge'));
+      await tester.tap(find.text('提交合并'));
       await tester.pumpAndSettle();
       expect(repo.callsTo('git.continue_operation'), hasLength(1));
-      expect(find.text('Conflicts'), findsNothing, reason: '完成后窗口自己关掉');
+      expect(find.text('冲突'), findsNothing, reason: '完成后窗口自己关掉');
       expect(find.text('kdev'), findsOneWidget);
     });
 
@@ -269,8 +269,8 @@ void main() {
       await show(tester);
       await tester.tap(find.byKey(const ValueKey('operation-conflicts')));
       await tester.pumpAndSettle();
-      expect(tester.widget<OutlinedButton>(find.widgetWithText(OutlinedButton, 'Accept Yours')).onPressed, isNotNull, reason: '只有一个文件:默认选中');
-      await tester.tap(find.text('Close'));
+      expect(tester.widget<OutlinedButton>(find.widgetWithText(OutlinedButton, '接受你的')).onPressed, isNotNull, reason: '只有一个文件:默认选中');
+      await tester.tap(find.text('关闭'));
       await tester.pumpAndSettle();
 
       repo.startMerge([file('a.txt'), file('b.txt'), file('c.txt')]);
@@ -282,9 +282,9 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('conflict-c.txt')));
       await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
       await tester.pump();
-      expect(tester.widget<OutlinedButton>(find.widgetWithText(OutlinedButton, 'Accept Yours')).onPressed, isNotNull);
-      expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Merge...')).onPressed, isNull, reason: '选了两个:不能同时合并');
-      await tester.tap(find.text('Accept Yours'));
+      expect(tester.widget<OutlinedButton>(find.widgetWithText(OutlinedButton, '接受你的')).onPressed, isNotNull);
+      expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, '合并...')).onPressed, isNull, reason: '选了两个:不能同时合并');
+      await tester.tap(find.text('接受你的'));
       await tester.pumpAndSettle();
       expect([for (final c in repo.callsTo('git.accept_side')) c['path']], ['a.txt', 'c.txt']);
       expect(find.byKey(const ValueKey('conflict-b.txt')), findsOneWidget);
@@ -299,26 +299,26 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('conflict-svc/A.java')));
       await tester.pump(const Duration(milliseconds: 500));
-      await tester.tap(find.text('Merge...'));
+      await tester.tap(find.text('合并...'));
       await tester.pumpAndSettle();
       expect(repo.callsTo('git.merge_versions'), [
         {'path': 'svc/A.java'},
       ]);
-      expect(find.text('Merge Revisions for svc/A.java'), findsOneWidget);
-      expect(find.text('Changes from kdev'), findsOneWidget);
-      expect(find.text('Changes from feat/retention'), findsOneWidget);
-      expect(find.text('2 changes. 0 conflicts.'), findsOneWidget);
+      expect(find.text('合并 svc/A.java 的修订'), findsOneWidget);
+      expect(find.text('来自 kdev 的更改'), findsOneWidget);
+      expect(find.text('来自 feat/retention 的更改'), findsOneWidget);
+      expect(find.text('2 处改动。0 处冲突。'), findsOneWidget);
 
       await tester.tap(find.byTooltip('采用两侧所有不冲突的改动'));
       await tester.pump();
       expect(find.text('所有改动都处理完了'), findsOneWidget);
-      await tester.tap(find.text('Apply'));
+      await tester.tap(find.text('应用'));
       await tester.pumpAndSettle();
       expect(repo.callsTo('git.resolve_with'), [
         {'path': 'svc/A.java', 'content': 'A\nm\nB\n'},
       ]);
-      expect(find.text('Merge Revisions for svc/A.java'), findsNothing);
-      expect(find.text('Conflicts'), findsOneWidget, reason: '回到冲突窗口');
+      expect(find.text('合并 svc/A.java 的修订'), findsNothing);
+      expect(find.text('冲突'), findsOneWidget, reason: '回到冲突窗口');
       expect(find.byKey(const ValueKey('conflict-svc/A.java')), findsNothing);
       expect(find.byKey(const ValueKey('conflict-b.txt')), findsOneWidget);
     });
@@ -333,22 +333,22 @@ void main() {
       // 一侧删除了:没法逐块合并
       await tester.tap(find.byKey(const ValueKey('conflict-gone.txt')));
       await tester.pump(const Duration(milliseconds: 500));
-      expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Merge...')).onPressed, isNull);
+      expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, '合并...')).onPressed, isNull);
 
       await tester.tap(find.byKey(const ValueKey('conflict-a.txt')));
       await tester.pump(const Duration(milliseconds: 50));
       await tester.tap(find.byKey(const ValueKey('conflict-a.txt')));
       await tester.pumpAndSettle();
-      expect(find.text('Merge Revisions for a.txt'), findsOneWidget);
-      await tester.tap(find.text('Cancel'));
+      expect(find.text('合并 a.txt 的修订'), findsOneWidget);
+      await tester.tap(find.text('取消'));
       await tester.pumpAndSettle();
-      expect(find.text('Merge Revisions for a.txt'), findsNothing);
+      expect(find.text('合并 a.txt 的修订'), findsNothing);
       expect(repo.callsTo('git.resolve_with'), isEmpty);
       expect(repo.callsTo('git.accept_side'), isEmpty);
 
-      await tester.tap(find.text('Merge...'));
+      await tester.tap(find.text('合并...'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Accept Right'));
+      await tester.tap(find.text('接受右侧'));
       await tester.pumpAndSettle();
       expect(repo.callsTo('git.accept_side'), [
         {'path': 'a.txt', 'side': 'theirs'},
@@ -361,18 +361,18 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('operation-conflicts')));
       await tester.pumpAndSettle();
       repo.failures['git.accept_side'] = {'status': 'error', 'error': 'disk full'};
-      await tester.tap(find.text('Accept Yours'));
+      await tester.tap(find.text('接受你的'));
       await tester.pumpAndSettle();
       expect(find.textContaining('disk full'), findsOneWidget);
       expect(find.byKey(const ValueKey('conflict-a.txt')), findsOneWidget);
       repo.failures.clear();
 
-      await tester.tap(find.widgetWithText(TextButton, 'Abort Merge'));
+      await tester.tap(find.widgetWithText(TextButton, '中止合并'));
       await tester.pumpAndSettle();
-      await tester.tap(find.widgetWithText(FilledButton, 'Abort Merge'));
+      await tester.tap(find.widgetWithText(FilledButton, '中止合并'));
       await tester.pumpAndSettle();
       expect(repo.callsTo('git.abort_operation'), hasLength(1));
-      expect(find.text('Conflicts'), findsNothing, reason: '操作没了,窗口跟着关');
+      expect(find.text('冲突'), findsNothing, reason: '操作没了,窗口跟着关');
 
       repo
         ..kind = 'rebase'
@@ -383,9 +383,9 @@ void main() {
       await tester.pump();
       await tester.tap(find.byKey(const ValueKey('operation-conflicts')));
       await tester.pumpAndSettle();
-      expect(find.textContaining('Rebasing branch feat onto main'), findsOneWidget);
-      expect(find.text('Yours (feat)'), findsOneWidget);
-      expect(find.text('Theirs (main)'), findsOneWidget);
+      expect(find.textContaining('正在将分支 feat 变基到 main'), findsOneWidget);
+      expect(find.text('你的 (feat)'), findsOneWidget);
+      expect(find.text('他们的 (main)'), findsOneWidget);
     });
   });
 }

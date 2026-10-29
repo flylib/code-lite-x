@@ -9,7 +9,10 @@ const String builtinPluginCatalog = r'''
       "name": "Java",
       "version": "1.61.0",
       "publisher": "CodeLiteX",
-      "description": "Java 语言支持:Eclipse JDT Language Server(jdtls)提供错误检查、文件大纲,支持 Maven / Gradle 项目。",
+      "description": {
+        "zh": "Java 语言支持:Eclipse JDT Language Server(jdtls)提供错误检查、文件大纲,支持 Maven / Gradle 项目。",
+        "en": "Java language support: Eclipse JDT Language Server (jdtls) for error checking and file outline. Supports Maven / Gradle projects."
+      },
       "categories": [
         "Programming Languages"
       ],
@@ -17,7 +20,10 @@ const String builtinPluginCatalog = r'''
       "requires": [
         {
           "java": 21,
-          "hint": "jdtls 需要 JDK 21 或更新版本运行(只用于运行语言服务器,不影响项目本身的 JDK)。可从 https://adoptium.net 安装。"
+          "hint": {
+            "zh": "jdtls 需要 JDK 21 或更新版本运行(只用于运行语言服务器,不影响项目本身的 JDK)。可从 https://adoptium.net 安装。",
+            "en": "jdtls needs JDK 21 or later to run (only for running the language server; your project's own JDK is not affected). Install one from https://adoptium.net."
+          }
         }
       ],
       "contributes": {
@@ -84,7 +90,10 @@ const String builtinPluginCatalog = r'''
       "name": "Maven",
       "version": "1.0.0",
       "publisher": "CodeLiteX",
-      "description": "Maven 项目管理:检测 pom.xml,左侧工具窗显示模块树与生命周期(clean、compile、test、package、install……),双击在终端里运行;项目带 mvnw 时用它,否则用 shell 里的 mvn。",
+      "description": {
+        "zh": "Maven 项目管理:检测 pom.xml,左侧工具窗显示模块树与生命周期(clean、compile、test、package、install……),双击在终端里运行;项目带 mvnw 时用它,否则用 shell 里的 mvn。",
+        "en": "Maven project management: detects pom.xml and shows the module tree and lifecycle (clean, compile, test, package, install…) in a tool window; double-click to run in the terminal. Uses the project's mvnw if present, otherwise mvn from the shell."
+      },
       "categories": [
         "Build Tools"
       ],
@@ -123,7 +132,10 @@ const String builtinPluginCatalog = r'''
             "options": [
               {
                 "id": "offline",
-                "label": "Offline 模式(-o)",
+                "label": {
+                  "zh": "Offline 模式(-o)",
+                  "en": "Offline Mode (-o)"
+                },
                 "args": [
                   "-o"
                 ],
@@ -131,7 +143,10 @@ const String builtinPluginCatalog = r'''
               },
               {
                 "id": "skipTests",
-                "label": "跳过测试(-DskipTests)",
+                "label": {
+                  "zh": "跳过测试(-DskipTests)",
+                  "en": "Skip Tests (-DskipTests)"
+                },
                 "args": [
                   "-DskipTests"
                 ],
@@ -147,7 +162,10 @@ const String builtinPluginCatalog = r'''
       "name": "Go",
       "version": "0.23.0",
       "publisher": "CodeLiteX",
-      "description": "Go 语言支持:官方语言服务器 gopls。通过本机的 go 命令安装到插件目录。",
+      "description": {
+        "zh": "Go 语言支持:官方语言服务器 gopls。通过本机的 go 命令安装到插件目录。",
+        "en": "Go language support: the official language server gopls, installed into the plugin directory with your local go command."
+      },
       "categories": [
         "Programming Languages"
       ],
@@ -155,7 +173,10 @@ const String builtinPluginCatalog = r'''
       "requires": [
         {
           "tool": "go",
-          "hint": "需要先安装 Go:https://go.dev/dl/"
+          "hint": {
+            "zh": "需要先安装 Go:https://go.dev/dl/",
+            "en": "Install Go first: https://go.dev/dl/"
+          }
         }
       ],
       "contributes": {
@@ -202,7 +223,10 @@ const String builtinPluginCatalog = r'''
       "name": "TypeScript / JavaScript",
       "version": "6.0.1",
       "publisher": "CodeLiteX",
-      "description": "TypeScript、JavaScript、TSX/JSX 语言支持:typescript-language-server + tsserver。通过本机的 npm 安装到插件目录。",
+      "description": {
+        "zh": "TypeScript、JavaScript、TSX/JSX 语言支持:typescript-language-server + tsserver。通过本机的 npm 安装到插件目录。",
+        "en": "TypeScript, JavaScript, TSX/JSX language support: typescript-language-server + tsserver, installed into the plugin directory with your local npm."
+      },
       "categories": [
         "Programming Languages"
       ],
@@ -210,7 +234,10 @@ const String builtinPluginCatalog = r'''
       "requires": [
         {
           "tool": "npm",
-          "hint": "需要先安装 Node.js(自带 npm):https://nodejs.org"
+          "hint": {
+            "zh": "需要先安装 Node.js(自带 npm):https://nodejs.org",
+            "en": "Install Node.js (includes npm) first: https://nodejs.org"
+          }
         }
       ],
       "contributes": {
@@ -277,7 +304,10 @@ const String builtinPluginCatalog = r'''
       "name": "Python",
       "version": "1.1.0",
       "publisher": "CodeLiteX",
-      "description": "Python 语言支持:Pyright 语言服务器(类型检查、错误提示、大纲)。通过本机的 npm 安装到插件目录。",
+      "description": {
+        "zh": "Python 语言支持:Pyright 语言服务器(类型检查、错误提示、大纲)。通过本机的 npm 安装到插件目录。",
+        "en": "Python language support: the Pyright language server (type checking, errors, outline), installed into the plugin directory with your local npm."
+      },
       "categories": [
         "Programming Languages"
       ],
@@ -285,7 +315,10 @@ const String builtinPluginCatalog = r'''
       "requires": [
         {
           "tool": "npm",
-          "hint": "Pyright 通过 npm 安装,需要先装 Node.js:https://nodejs.org"
+          "hint": {
+            "zh": "Pyright 通过 npm 安装,需要先装 Node.js:https://nodejs.org",
+            "en": "Pyright is installed with npm; install Node.js first: https://nodejs.org"
+          }
         }
       ],
       "contributes": {
@@ -337,7 +370,10 @@ const String builtinPluginCatalog = r'''
       "name": "Rust",
       "version": "latest",
       "publisher": "CodeLiteX",
-      "description": "Rust 语言支持:rust-analyzer(官方预编译版本,从 GitHub Releases 下载)。",
+      "description": {
+        "zh": "Rust 语言支持:rust-analyzer(官方预编译版本,从 GitHub Releases 下载)。",
+        "en": "Rust language support: rust-analyzer (official prebuilt binaries, downloaded from GitHub Releases)."
+      },
       "categories": [
         "Programming Languages"
       ],
@@ -388,7 +424,10 @@ const String builtinPluginCatalog = r'''
       "name": "C / C++",
       "version": "23.1.0",
       "publisher": "CodeLiteX",
-      "description": "C、C++ 语言支持:clangd(LLVM 官方发布版)。macOS 装了 Xcode 命令行工具时已自带,无需下载。",
+      "description": {
+        "zh": "C、C++ 语言支持:clangd(LLVM 官方发布版)。macOS 装了 Xcode 命令行工具时已自带,无需下载。",
+        "en": "C and C++ language support: clangd (official LLVM release). Already included with the Xcode Command Line Tools on macOS; no download needed."
+      },
       "categories": [
         "Programming Languages"
       ],
@@ -451,7 +490,10 @@ const String builtinPluginCatalog = r'''
       "name": "Scala",
       "version": "1.0.0",
       "publisher": "CodeLiteX",
-      "description": "Scala 语法高亮。",
+      "description": {
+        "zh": "Scala 语法高亮。",
+        "en": "Scala syntax highlighting."
+      },
       "categories": [
         "Programming Languages"
       ],
@@ -556,7 +598,10 @@ const String builtinPluginCatalog = r'''
       "name": "Lua",
       "version": "1.0.0",
       "publisher": "CodeLiteX",
-      "description": "Lua 语法高亮。",
+      "description": {
+        "zh": "Lua 语法高亮。",
+        "en": "Lua syntax highlighting."
+      },
       "categories": [
         "Programming Languages"
       ],
@@ -629,7 +674,10 @@ const String builtinPluginCatalog = r'''
       "name": "PowerShell",
       "version": "1.0.0",
       "publisher": "CodeLiteX",
-      "description": "PowerShell 语法高亮。",
+      "description": {
+        "zh": "PowerShell 语法高亮。",
+        "en": "PowerShell syntax highlighting."
+      },
       "categories": [
         "Programming Languages"
       ],
@@ -708,7 +756,10 @@ const String builtinPluginCatalog = r'''
       "name": "Protocol Buffers",
       "version": "1.0.0",
       "publisher": "CodeLiteX",
-      "description": "Protocol Buffers(.proto)语法高亮。",
+      "description": {
+        "zh": "Protocol Buffers(.proto)语法高亮。",
+        "en": "Protocol Buffers (.proto) syntax highlighting."
+      },
       "categories": [
         "Programming Languages"
       ],
@@ -789,7 +840,10 @@ const String builtinPluginCatalog = r'''
       "name": "GraphQL",
       "version": "1.0.0",
       "publisher": "CodeLiteX",
-      "description": "GraphQL 语法高亮。",
+      "description": {
+        "zh": "GraphQL 语法高亮。",
+        "en": "GraphQL syntax highlighting."
+      },
       "categories": [
         "Programming Languages"
       ],

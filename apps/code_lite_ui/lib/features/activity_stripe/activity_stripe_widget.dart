@@ -2,6 +2,7 @@ import '../project_explorer/project_explorer_widget.dart' show MakefileIcon;
 import 'package:flutter/material.dart';
 
 import '../../core/keymap/keymap.dart';
+import '../../core/l10n/l10n.dart';
 import '../../core/state/layout_store.dart';
 import '../../core/theme/app_icons.dart';
 import '../../core/theme/intellij_theme.dart';
@@ -86,14 +87,14 @@ class ActivityStripeWidget extends StatelessWidget {
           // 下半段:底部工具窗(与 IntelliJ 一致,贴着它们打开的位置)。
           StripeButton(
             icon: Icons.terminal_outlined,
-            tooltip: withShortcut('终端', KeymapIds.terminal, keymap),
+            tooltip: withShortcut(tr('终端', 'Terminal'), KeymapIds.terminal, keymap),
             isActive: isBottomOpen && bottomTab == BottomToolTab.terminal,
             onTap: () => onSelectBottomTab(BottomToolTab.terminal),
           ),
           const SizedBox(height: _gap),
           StripeButton(
             iconBuilder: (color, size) => GitBranchIcon(color: color, size: size),
-            tooltip: withShortcut('Git 提交与日志', KeymapIds.git, keymap),
+            tooltip: withShortcut(tr('Git 提交与日志', 'Git'), KeymapIds.git, keymap),
             isActive: isBottomOpen && bottomTab == BottomToolTab.git,
             onTap: () => onSelectBottomTab(BottomToolTab.git),
           ),
@@ -101,7 +102,7 @@ class ActivityStripeWidget extends StatelessWidget {
           // 调试放在最下面(原先在标题栏右上角)。
           StripeButton(
             icon: Icons.bug_report_outlined,
-            tooltip: 'Debug (Shift+F9)',
+            tooltip: tr('调试 (Shift+F9)', 'Debug (Shift+F9)'),
             isActive: false,
             onTap: () {},
           ),
@@ -137,16 +138,16 @@ Widget? sideToolButton(SideTool tool,
     {required bool active, required VoidCallback onTap, String? buildToolTitle, bool showMake = false, KeymapStore? keymap}) {
   String tip(String name) => withShortcut(name, keymapIdOf(tool), keymap);
   return switch (tool) {
-    SideTool.project => StripeButton(icon: Icons.folder_outlined, tooltip: tip('项目'), isActive: active, onTap: onTap),
-    SideTool.commit => StripeButton(icon: Icons.task_alt, tooltip: tip('Commit'), isActive: active, onTap: onTap),
+    SideTool.project => StripeButton(icon: Icons.folder_outlined, tooltip: tip(tr('项目', 'Project')), isActive: active, onTap: onTap),
+    SideTool.commit => StripeButton(icon: Icons.task_alt, tooltip: tip(tr('提交', 'Commit')), isActive: active, onTap: onTap),
     SideTool.pullRequests => StripeButton(
         iconBuilder: (color, size) => PullRequestIcon(color: color, size: size),
-        tooltip: tip('Pull Requests'),
+        tooltip: tip(tr('拉取请求', 'Pull Requests')),
         isActive: active,
         onTap: onTap,
       ),
-    SideTool.structure => StripeButton(icon: Icons.account_tree_outlined, tooltip: tip('结构'), isActive: active, onTap: onTap),
-    SideTool.openProjects => StripeButton(icon: Icons.layers_outlined, tooltip: tip('Opening Projects'), isActive: active, onTap: onTap),
+    SideTool.structure => StripeButton(icon: Icons.account_tree_outlined, tooltip: tip(tr('结构', 'Structure')), isActive: active, onTap: onTap),
+    SideTool.openProjects => StripeButton(icon: Icons.layers_outlined, tooltip: tip(tr('打开的项目', 'Opening Projects')), isActive: active, onTap: onTap),
     SideTool.build => buildToolTitle == null
         ? null
         : StripeButton(
@@ -240,7 +241,7 @@ class RightStripeWidget extends StatelessWidget {
           StripeButton(
             icon: Icons.notifications_none_outlined,
             key: const ValueKey('stripe-notifications'),
-            tooltip: '通知',
+            tooltip: tr('通知', 'Notifications'),
             isActive: notificationsOpen,
             badgeColor: hasNotification ? IntelliJTheme.diagError : null,
             onTap: onNotifications ?? () {},
@@ -256,7 +257,7 @@ class RightStripeWidget extends StatelessWidget {
             StripeButton(
               key: const ValueKey('stripe-problems'),
               icon: Icons.error_outline,
-              tooltip: withShortcut('Problems', KeymapIds.problems, keymap),
+              tooltip: withShortcut(tr('问题', 'Problems'), KeymapIds.problems, keymap),
               isActive: problemsOpen,
               badgeColor: hasNotification ? IntelliJTheme.diagError : null,
               onTap: onProblems!,

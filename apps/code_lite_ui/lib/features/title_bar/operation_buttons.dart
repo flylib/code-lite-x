@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/l10n/l10n.dart';
 import '../../core/theme/intellij_theme.dart';
 import '../git/branch_actions.dart';
 import '../git/branch_store.dart';
@@ -32,7 +33,9 @@ class OperationButtons extends StatelessWidget {
               key: const ValueKey('operation-conflicts'),
               color: _green,
               icon: Icons.keyboard_double_arrow_right,
-              tooltip: op.hasConflicts ? '$n 个文件有冲突,点击查看并解决' : '冲突都解决了,点击完成${op.noun}',
+              tooltip: op.hasConflicts
+                  ? tr('$n 个文件有冲突,点击查看并解决', n == 1 ? '1 file has conflicts. Click to view and resolve' : '$n files have conflicts. Click to view and resolve')
+                  : tr('冲突都解决了,点击完成${op.noun}', 'All conflicts resolved. Click to finish ${op.noun}'),
               onTap: () => actions.showConflicts(context),
             ),
             if (op.canAbort) ...[
@@ -41,7 +44,7 @@ class OperationButtons extends StatelessWidget {
                 key: const ValueKey('operation-abort'),
                 color: _red,
                 icon: Icons.close,
-                tooltip: '放弃这次${_zh(op.kind)}(Abort ${op.noun})',
+                tooltip: tr('放弃这次${op.noun}', 'Abort ${op.noun}'),
                 onTap: () => actions.abortOperation(context),
               ),
             ],
@@ -50,12 +53,6 @@ class OperationButtons extends StatelessWidget {
       },
     );
   }
-
-  static String _zh(String? kind) => switch (kind) {
-        'merge' => '合并',
-        'rebase' => '变基',
-        _ => '操作',
-      };
 }
 
 class _Button extends StatelessWidget {

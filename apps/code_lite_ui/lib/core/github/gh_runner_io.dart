@@ -3,6 +3,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import '../l10n/l10n.dart';
 import 'github_models.dart';
 
 String? _ghPath;
@@ -19,7 +20,11 @@ Future<void> openUrl(String url) async {
 Future<List<int>> runGh(String root, List<String> args, {String? stdin}) async {
   final exe = _ghPath ??= _findGh();
   if (exe == null) {
-    throw GhException('没有找到 GitHub CLI(gh)。请先安装:brew install gh,然后运行 gh auth login。', notInstalled: true);
+    throw GhException(
+      tr('没有找到 GitHub CLI(gh)。请先安装:brew install gh,然后运行 gh auth login。',
+          'GitHub CLI (gh) not found. Install it first (brew install gh), then run gh auth login.'),
+      notInstalled: true,
+    );
   }
   final Process proc;
   try {
@@ -30,7 +35,7 @@ Future<List<int>> runGh(String root, List<String> args, {String? stdin}) async {
       environment: {'PATH': _searchDirs().join(Platform.isWindows ? ';' : ':'), 'GH_PROMPT_DISABLED': '1', 'NO_COLOR': '1'},
     );
   } on ProcessException catch (e) {
-    throw GhException('无法启动 gh: ${e.message}');
+    throw GhException(tr('无法启动 gh: ${e.message}', 'Cannot start gh: ${e.message}'));
   }
   if (stdin != null) {
     proc.stdin.add(utf8.encode(stdin));
@@ -45,7 +50,7 @@ Future<List<int>> runGh(String root, List<String> args, {String? stdin}) async {
     final msg = err.trim().isNotEmpty ? err.trim() : utf8.decode(out, allowMalformed: true).trim();
     final notLoggedIn = msg.contains('gh auth login') || msg.contains('not logged');
     throw GhException(
-      notLoggedIn ? 'gh 尚未登录 GitHub。请在终端运行 gh auth login。' : _friendly(msg),
+      notLoggedIn ? tr('gh 尚未登录 GitHub。请在终端运行 gh auth login。', 'gh is not logged in to GitHub. Run gh auth login in a terminal.') : _friendly(msg),
       notLoggedIn: notLoggedIn,
     );
   }
@@ -63,7 +68,7 @@ String _friendly(String msg) {
       return errors == null || errors.isEmpty ? m : '$m: $errors';
     } catch (_) {}
   }
-  return msg.isEmpty ? 'gh 执行失败' : msg;
+  return msg.isEmpty ? tr('gh 执行失败', 'gh failed') : msg;
 }
 
 String? _findGh() {

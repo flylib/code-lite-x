@@ -10,6 +10,7 @@
 // 只覆盖 api_client 实际调用的成员;jsonRpcCall 带 Pointer<Void>,
 // 而它唯一的调用方 core_api_client.dart 不在 web 构建的导入链里,故不包含。
 
+import '../l10n/l10n.dart';
 import 'pty_frame.dart';
 
 class CodeLiteBindings {
@@ -28,13 +29,13 @@ class CodeLiteBindings {
 
   void dispose() {}
 
-  Map<String, dynamic> terminalExec(String cmd, List<String> args) => {'status': 'error', 'error': 'Bindings unavailable'};
+  Map<String, dynamic> terminalExec(String cmd, List<String> args) => {'status': 'error', 'error': tr('原生库不可用', 'Bindings unavailable')};
 
-  Map<String, dynamic> ptyOpen(int rows, int cols) => {'status': 'error', 'error': 'FFI not available'};
+  Map<String, dynamic> ptyOpen(int rows, int cols) => {'status': 'error', 'error': tr('FFI 不可用', 'FFI not available')};
 
-  Map<String, dynamic> ptyWrite(String id, String data) => {'status': 'error', 'error': 'FFI not available'};
+  Map<String, dynamic> ptyWrite(String id, String data) => {'status': 'error', 'error': tr('FFI 不可用', 'FFI not available')};
 
-  Map<String, dynamic> ptyResize(String id, int rows, int cols) => {'status': 'error', 'error': 'FFI not available'};
+  Map<String, dynamic> ptyResize(String id, int rows, int cols) => {'status': 'error', 'error': tr('FFI 不可用', 'FFI not available')};
 
   bool indexRefresh(String root) => false;
 
@@ -47,8 +48,8 @@ class CodeLiteBindings {
   PtyFrame? ptyFrame(String id, {int sinceSeq = -1, int scrollback = 0}) => null;
 
   Map<String, dynamic> ptySnapshot(String id, {int sinceSeq = -1, int scrollback = 0}) =>
-      {'status': 'error', 'error': 'FFI not available'};
+      {'status': 'error', 'error': tr('FFI 不可用', 'FFI not available')};
 
-  Map<String, dynamic> ptyClose(String id) => {'status': 'error', 'error': 'FFI not available'};
+  Map<String, dynamic> ptyClose(String id) => {'status': 'error', 'error': tr('FFI 不可用', 'FFI not available')};
 
 }

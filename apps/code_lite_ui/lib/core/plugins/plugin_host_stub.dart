@@ -1,5 +1,6 @@
 // web 没有本机文件系统与进程:插件只能声明式启用(着色规则),不能安装语言服务器。
 
+import '../l10n/l10n.dart';
 import 'plugin_manifest.dart';
 
 class InstallProgress {
@@ -50,12 +51,12 @@ class PluginHost {
   String? systemProvides(LanguageServerContribution s) => null;
 
   String resolve(String template, {required String pluginId, String? projectRoot}) =>
-      throw PluginInstallException('web 版不支持');
+      throw PluginInstallException(tr('web 版不支持', 'Not supported in the web version'));
 
   void cancel(String id) {}
 
   Future<void> install(PluginManifest m, {void Function(InstallProgress p)? onProgress}) async =>
-      throw PluginInstallException('web 版不支持安装插件');
+      throw PluginInstallException(tr('web 版不支持安装插件', 'Installing plugins is not supported in the web version'));
 
   Future<void> uninstall(String id) async {}
 }

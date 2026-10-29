@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/github/github_service.dart';
+import '../../core/l10n/l10n.dart';
 import '../../core/theme/intellij_theme.dart';
 import 'pr_store.dart';
 import '../notifications/notifications.dart';
@@ -69,8 +70,8 @@ class _PrCommentThreadState extends State<PrCommentThread> {
             Padding(
               padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
               child: PrCommentComposer(
-                hint: '回复…',
-                submitLabel: 'Reply',
+                hint: tr('回复…', 'Reply…'),
+                submitLabel: tr('回复', 'Reply'),
                 onCancel: () => setState(() => _replying = false),
                 onSubmit: (text) async {
                   await widget.session.reply(widget.thread.first.id, text);
@@ -85,7 +86,7 @@ class _PrCommentThreadState extends State<PrCommentThread> {
                 padding: const EdgeInsets.fromLTRB(6, 0, 6, 6),
                 child: TextButton(
                   onPressed: () => setState(() => _replying = true),
-                  child: const Text('Reply', style: prLink),
+                  child: Text(tr('回复', 'Reply'), style: prLink),
                 ),
               ),
             ),
@@ -148,15 +149,18 @@ class PrCommentComposer extends StatefulWidget {
     super.key,
     required this.onSubmit,
     this.onCancel,
-    this.hint = '写评论…',
-    this.submitLabel = 'Comment',
+    this.hint,
+    this.submitLabel,
     this.autofocus = true,
   });
 
   final Future<void> Function(String text) onSubmit;
   final VoidCallback? onCancel;
-  final String hint;
-  final String submitLabel;
+  /// 没给时用「写评论…」。
+  final String? hint;
+
+  /// 没给时用「评论」。
+  final String? submitLabel;
   final bool autofocus;
 
   @override
@@ -209,7 +213,7 @@ class _PrCommentComposerState extends State<PrCommentComposer> {
             maxLines: 10,
             style: prText,
             decoration: InputDecoration(
-              hintText: widget.hint,
+              hintText: widget.hint ?? tr('写评论…', 'Write a comment…'),
               hintStyle: prMuted,
               isDense: true,
               filled: true,
@@ -228,12 +232,12 @@ class _PrCommentComposerState extends State<PrCommentComposer> {
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
               if (widget.onCancel != null)
-                TextButton(onPressed: _busy ? null : widget.onCancel, child: const Text('Cancel')),
+                TextButton(onPressed: _busy ? null : widget.onCancel, child: Text(tr('取消', 'Cancel'))),
               const SizedBox(width: 6),
               FilledButton(
                 onPressed: _busy ? null : _submit,
                 style: FilledButton.styleFrom(visualDensity: VisualDensity.compact),
-                child: Text(_busy ? '提交中…' : widget.submitLabel),
+                child: Text(_busy ? tr('提交中…', 'Submitting…') : widget.submitLabel ?? tr('评论', 'Comment')),
               ),
             ],
           ),
@@ -255,7 +259,9 @@ Future<void> showSubmitReviewDialog(BuildContext context, PrSession session) asy
       builder: (ctx, setD) {
         Future<void> submit(String event) async {
           if (event != 'APPROVE' && text.text.trim().isEmpty) {
-            setD(() => error = event == 'COMMENT' ? '评论内容不能为空' : '要求修改时请写明原因');
+            setD(() => error = event == 'COMMENT'
+                ? tr('评论内容不能为空', 'The comment cannot be empty')
+                : tr('请求更改时请写明原因', 'Please explain the changes you are requesting'));
             return;
           }
           setD(() {
@@ -275,7 +281,7 @@ Future<void> showSubmitReviewDialog(BuildContext context, PrSession session) asy
 
         return AlertDialog(
           backgroundColor: IntelliJTheme.panelBg,
-          title: Text('Submit Review — #${session.number}', style: const TextStyle(color: IntelliJTheme.textHigh, fontSize: 15)),
+          title: Text(tr('提交审查 — #${session.number}', 'Submit Review — #${session.number}'), style: const TextStyle(color: IntelliJTheme.textHigh, fontSize: 15)),
           content: SizedBox(
             width: 460,
             child: Column(
@@ -288,12 +294,15 @@ Future<void> showSubmitReviewDialog(BuildContext context, PrSession session) asy
                   minLines: 4,
                   maxLines: 10,
                   style: prText,
-                  decoration: const InputDecoration(hintText: '评审意见(可选)', border: OutlineInputBorder(), isDense: true),
+                  decoration: InputDecoration(hintText: tr('审查意见(可选)', 'Review comment (optional)'), border: const OutlineInputBorder(), isDense: true),
                 ),
                 if (isAuthor)
-                  const Padding(
-                    padding: EdgeInsets.only(top: 8),
-                    child: Text('这是你自己的 PR:GitHub 只允许评论,不能批准或要求修改。', style: prMuted),
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Text(
+                        tr('这是你自己的 PR:GitHub 只允许评论,不能批准或请求更改。',
+                            'This is your own pull request: GitHub only allows comments, not approving or requesting changes.'),
+                        style: prMuted),
                   ),
                 if (error != null)
                   Padding(
@@ -304,16 +313,16 @@ Future<void> showSubmitReviewDialog(BuildContext context, PrSession session) asy
             ),
           ),
           actions: [
-            TextButton(onPressed: busy ? null : () => Navigator.pop(ctx), child: const Text('Cancel')),
-            OutlinedButton(onPressed: busy ? null : () => submit('COMMENT'), child: const Text('Comment')),
+            TextButton(onPressed: busy ? null : () => Navigator.pop(ctx), child: Text(tr('取消', 'Cancel'))),
+            OutlinedButton(onPressed: busy ? null : () => submit('COMMENT'), child: Text(tr('评论', 'Comment'))),
             OutlinedButton(
               onPressed: busy || isAuthor ? null : () => submit('REQUEST_CHANGES'),
-              child: const Text('Request Changes'),
+              child: Text(tr('请求更改', 'Request Changes')),
             ),
             FilledButton(
               onPressed: busy || isAuthor ? null : () => submit('APPROVE'),
               style: FilledButton.styleFrom(backgroundColor: const Color(0xFF3F8F4A)),
-              child: const Text('Approve'),
+              child: Text(tr('批准', 'Approve')),
             ),
           ],
         );

@@ -178,7 +178,7 @@ void main() {
     // 失败路径:错误编码为 {"status":"error","error":"Git command failed ..."}
     final bad = await g.commit('nothing staged');
     expect(bad['status'], 'error');
-    expect(bad['error'], startsWith('Git command failed (exit code 1)'));
+    expect(bad['error'], startsWith('Git 命令失败(退出码 1)'));
   });
 
   test('diff hunks and revert file', () async {
@@ -832,7 +832,7 @@ void main() {
     final (dir, g) = initRepo();
     final c1 = commitFile(dir, 'a', '1', 'one');
     expect(await g.call('git.nope'), {'status': 'error', 'error': '未知的 git 方法: git.nope'});
-    expect(await g.call('  '), {'status': 'error', 'error': 'method is required'});
+    expect(await g.call('  '), {'status': 'error', 'error': '缺少 method'});
     expect(await err(g, 'git.cherry_pick'), '参数无效: missing field `hash`');
     expect(await err(g, 'git.cherry_pick', {'hash': 42}), startsWith('参数无效: invalid type: integer `42`'));
     expect(await err(g, 'git.log', {'limit': 'ten'}), startsWith('参数无效: invalid type'));
@@ -840,7 +840,7 @@ void main() {
     expect((await g.call(' git.is_pushed ', {'hash': c1, 'extra': true}))['status'], 'ok');
     // 非仓库目录:git 自己的报错原样带回
     final outside = GitService(tempDir('plain').path);
-    expect(await err(outside, 'git.branches'), startsWith('Git command failed (exit code 128)'));
+    expect(await err(outside, 'git.branches'), startsWith('Git 命令失败(退出码 128)'));
     expect((await outside.status())['status'], 'error');
     expect(await outside.isRepo(), isFalse);
   });

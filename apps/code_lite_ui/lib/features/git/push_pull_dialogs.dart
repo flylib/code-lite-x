@@ -4,6 +4,7 @@
 
 import 'package:flutter/material.dart';
 
+import '../../core/l10n/l10n.dart';
 import '../../core/theme/intellij_theme.dart';
 import 'git_log_window.dart' show formatGitDate, gitChangeColor;
 
@@ -68,7 +69,7 @@ class PushDialog extends StatelessWidget {
   Widget build(BuildContext context) {
     return AlertDialog(
       backgroundColor: IntelliJTheme.panelBg,
-      title: const Text('Push Commits', style: _title),
+      title: Text(tr('推送提交', 'Push Commits'), style: _title),
       content: SizedBox(
         width: 640,
         child: Column(
@@ -91,7 +92,7 @@ class PushDialog extends StatelessWidget {
                     key: const ValueKey('push-new-branch'),
                     padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
                     decoration: BoxDecoration(border: Border.all(color: IntelliJTheme.accentBlue), borderRadius: BorderRadius.circular(4)),
-                    child: const Text('New', style: TextStyle(color: IntelliJTheme.accentBlue, fontSize: 11)),
+                    child: Text(tr('新建', 'New'), style: const TextStyle(color: IntelliJTheme.accentBlue, fontSize: 11)),
                   ),
                 ],
               ],
@@ -107,7 +108,11 @@ class PushDialog extends StatelessWidget {
               child: commits.isEmpty
                   ? Padding(
                       padding: const EdgeInsets.all(16),
-                      child: Text(setUpstream ? '没有新的提交,推送会在远程上建出这个分支' : '没有要推送的提交,已经和远程一致', style: _muted),
+                      child: Text(
+                          setUpstream
+                              ? tr('没有新的提交,推送会在远程上建出这个分支', 'No new commits; pushing will create this branch on the remote')
+                              : tr('没有要推送的提交,已经和远程一致', 'No commits to push; the branch is up to date with the remote'),
+                          style: _muted),
                     )
                   : ListView.builder(
                       shrinkWrap: true,
@@ -117,7 +122,10 @@ class PushDialog extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              commits.isEmpty ? '' : '${commits.length} 个提交${setUpstream ? ',推送后设为上游分支' : ''}',
+              commits.isEmpty
+                  ? ''
+                  : tr('${commits.length} 个提交${setUpstream ? ',推送后设为上游分支' : ''}',
+                      '${commits.length} commit${commits.length == 1 ? '' : 's'}${setUpstream ? ', the branch will be set as upstream after pushing' : ''}'),
               key: const ValueKey('push-count'),
               style: _muted,
             ),
@@ -125,11 +133,11 @@ class PushDialog extends StatelessWidget {
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')),
+        TextButton(onPressed: () => Navigator.pop(context, false), child: Text(tr('取消', 'Cancel'))),
         FilledButton(
           key: const ValueKey('push-confirm'),
           onPressed: canPush ? () => Navigator.pop(context, true) : null,
-          child: const Text('Push'),
+          child: Text(tr('推送', 'Push')),
         ),
       ],
     );
@@ -175,14 +183,17 @@ Future<UpdateWithChanges?> showLocalChangesDialog(BuildContext context, List<Map
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: IntelliJTheme.panelBg,
-        title: const Text('本地有未提交的改动', style: _title),
+        title: Text(tr('本地有未提交的改动', 'Uncommitted Local Changes'), style: _title),
         content: SizedBox(
           width: 560,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text('这 ${changes.length} 个文件还没提交。更新时可能被拉下来的改动覆盖或产生冲突。', style: _text),
+              Text(
+                  tr('这 ${changes.length} 个文件还没提交。更新时可能被拉下来的改动覆盖或产生冲突。',
+                      '${changes.length} file${changes.length == 1 ? ' has' : 's have'} not been committed. Incoming changes may overwrite them or cause conflicts during the update.'),
+                  style: _text),
               const SizedBox(height: 10),
               Container(
                 constraints: const BoxConstraints(maxHeight: 260),
@@ -209,17 +220,20 @@ Future<UpdateWithChanges?> showLocalChangesDialog(BuildContext context, List<Map
                 ),
               ),
               const SizedBox(height: 10),
-              const Text('「Stash 后更新」会先把这些改动存起来(git stash),更新完再自动恢复。', style: _muted),
+              Text(
+                  tr('「Stash 后更新」会先把这些改动存起来(git stash),更新完再自动恢复。',
+                      '"Stash and Update" saves these changes first (git stash) and restores them automatically after the update.'),
+                  style: _muted),
             ],
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('取消')),
-          OutlinedButton(onPressed: () => Navigator.pop(context, UpdateWithChanges.plain), child: const Text('直接更新')),
+          TextButton(onPressed: () => Navigator.pop(context), child: Text(tr('取消', 'Cancel'))),
+          OutlinedButton(onPressed: () => Navigator.pop(context, UpdateWithChanges.plain), child: Text(tr('直接更新', 'Update Without Stash'))),
           FilledButton(
             key: const ValueKey('update-stash'),
             onPressed: () => Navigator.pop(context, UpdateWithChanges.stash),
-            child: const Text('Stash 后更新'),
+            child: Text(tr('Stash 后更新', 'Stash and Update')),
           ),
         ],
       ),

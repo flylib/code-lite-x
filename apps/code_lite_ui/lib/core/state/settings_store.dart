@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../features/editor/editor_appearance.dart';
 import '../../features/editor/editor_session_manager.dart';
+import '../l10n/l10n.dart';
 import '../platform/workspace_io.dart' as io;
 import '../keymap/keymap.dart';
 import 'layout_store.dart';
@@ -91,9 +92,24 @@ class SettingsStore extends ChangeNotifier {
 
   bool _loading = false;
 
+  /// 用户选过的界面语言;null = 没选过,跟系统走([L10n.systemLanguage])。
+  AppLanguage? _language;
+
+  AppLanguage get language => L10n.language.value;
+
+  /// 设置 ▸ 语言和地区:换了立刻生效(整个界面重画),并记下来。
+  void setLanguage(AppLanguage value) {
+    if (_language == value && L10n.language.value == value) return;
+    _language = value;
+    L10n.language.value = value;
+    _changed();
+  }
+
   Future<void> load() async {
     final j = await _load();
     _loading = true;
+    _language = AppLanguage.parse(j['language']);
+    L10n.language.value = _language ?? L10n.systemLanguage();
     final editor = j['editor'] is Map ? Map<String, dynamic>.from(j['editor'] as Map) : const <String, dynamic>{};
     if (editor['autosave'] is bool) _autosave = editor['autosave'] as bool;
     final ms = editor['autosaveDelayMs'];
@@ -139,6 +155,7 @@ class SettingsStore extends ChangeNotifier {
   }
 
   Map<String, dynamic> toJson() => {
+        if (_language != null) 'language': _language!.name,
         'editor': {
           'autosave': _autosave,
           'autosaveDelayMs': _autosaveDelay.inMilliseconds,

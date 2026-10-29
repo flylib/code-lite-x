@@ -65,7 +65,7 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('tree-menu-rename')));
       await tester.pumpAndSettle();
 
-      expect(find.text("Rename file 'Main.java' to:"), findsOneWidget);
+      expect(find.text("将文件 'Main.java' 重命名为:"), findsOneWidget);
       final field = tester.widget<TextField>(find.byKey(const ValueKey('rename-field')));
       expect(field.controller!.selection, const TextSelection(baseOffset: 0, extentOffset: 4), reason: '选中 Main,不选 .java');
 
@@ -92,7 +92,7 @@ void main() {
       await tester.sendKeyEvent(LogicalKeyboardKey.f6);
       await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
       await tester.pumpAndSettle();
-      expect(find.text("Rename directory 'src' to:"), findsOneWidget);
+      expect(find.text("将目录 'src' 重命名为:"), findsOneWidget);
       final field = tester.widget<TextField>(find.byKey(const ValueKey('rename-field')));
       expect(field.controller!.selection, const TextSelection(baseOffset: 0, extentOffset: 3), reason: '目录选中整个名字');
 
@@ -168,7 +168,7 @@ void main() {
         expect(opened, isEmpty);
         await tester.tap(find.byKey(const ValueKey('tree-menu-rename')));
         await tester.pumpAndSettle();
-        expect(find.text("Rename file 'README.md' to:"), findsOneWidget);
+        expect(find.text("将文件 'README.md' 重命名为:"), findsOneWidget);
       } finally {
         debugDefaultTargetPlatformOverride = null;
       }

@@ -4,6 +4,7 @@ import '../ffi/pty_frame.dart';
 import '../fs/workspace_fs.dart' as fs;
 import '../git/git.dart';
 import '../github/github_service.dart';
+import '../l10n/l10n.dart';
 import '../lsp/lsp.dart';
 // web 没有 dart:ffi —— 条件导入让 web 拿到桩(isAvailable 恒 false),
 // 原生拿到真实的 FFI 绑定。两者类名与签名一致。
@@ -206,7 +207,7 @@ class ApiClient {
     if (_ffi.isAvailable) {
       return _ffi.terminalExec(cmd, args);
     }
-    return {'status': 'error', 'error': 'FFI unavailable'};
+    return {'status': 'error', 'error': tr('FFI 不可用', 'FFI unavailable')};
   }
 
   // 交互式终端(PTY)。同步调用:都是内存操作,轮询频率下开销可忽略。
@@ -227,7 +228,7 @@ class ApiClient {
   Map<String, dynamic> fileIndexQuery(String query, {int limit = 50}) => isSingleFile
       // 单独打开的文件:不给它所在的目录建清单
       ? const {'status': 'ok', 'ready': true, 'files': 0, 'generation': 0, 'results': []}
-      : _ffi.indexQuery(_root, query, limit) ?? const {'status': 'error', 'error': '文件索引不可用(需要 Rust 库)'};
+      : _ffi.indexQuery(_root, query, limit) ?? {'status': 'error', 'error': tr('文件索引不可用(需要 Rust 库)', 'The file index is unavailable (requires the Rust library)')};
 
   /// 后台重新扫一遍项目文件清单(打开 Go to File 时调,新建 / 删掉的文件跟上)。
   void fileIndexRefresh() {

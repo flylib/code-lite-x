@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../../core/theme/intellij_theme.dart';
 import '../project_explorer/project_explorer_widget.dart' show fileTypeIconWidget;
+import '../../core/l10n/l10n.dart';
 
 /// 按文件名查找:给查询词和条数,返回 Rust 文件索引的结果(`ApiClient.fileIndexQuery`)。
 typedef FileQuery = Map<String, dynamic> Function(String query, int limit);
@@ -107,7 +108,7 @@ class _GotoFileDialogState extends State<GotoFileDialog> {
     final r = widget.query(q, _limit);
     if (r['status'] != 'ok') {
       setState(() {
-        _error = r['error'] as String? ?? '查找失败';
+        _error = r['error'] as String? ?? tr('查找失败', 'Search failed');
         _hits = const [];
       });
       return;
@@ -191,11 +192,11 @@ class _GotoFileDialogState extends State<GotoFileDialog> {
     final (q, _, _) = parseGotoQuery(_input.text);
     final String? hint = _error ??
         (!_ready
-            ? '正在建立文件索引…'
+            ? tr('正在建立文件索引…', 'Indexing files…')
             : q.isEmpty
-                ? (widget.recent.isEmpty ? '输入文件名;可加 / 按路径找,加 :行号 跳到那一行' : null)
+                ? (widget.recent.isEmpty ? tr('输入文件名;可加 / 按路径找,加 :行号 跳到那一行', 'Type a file name; add / to match the path, :line to go to that line') : null)
                 : _hits.isEmpty
-                    ? '没有匹配的文件($_files 个文件中)'
+                    ? tr('没有匹配的文件($_files 个文件中)', 'No matching files (out of $_files)')
                     : null);
     return Align(
       alignment: const Alignment(0, -0.55),
@@ -214,9 +215,9 @@ class _GotoFileDialogState extends State<GotoFileDialog> {
                 padding: const EdgeInsets.fromLTRB(14, 10, 14, 6),
                 child: Row(
                   children: [
-                    const Text('Files', style: TextStyle(color: IntelliJTheme.textHigh, fontSize: 13, fontWeight: FontWeight.w600)),
+                    Text(tr('文件', 'Files'), style: const TextStyle(color: IntelliJTheme.textHigh, fontSize: 13, fontWeight: FontWeight.w600)),
                     const Spacer(),
-                    if (_ready && _files > 0) Text('$_files 个文件', style: const TextStyle(color: IntelliJTheme.textMuted, fontSize: 11.5)),
+                    if (_ready && _files > 0) Text(tr('$_files 个文件', '$_files files'), style: const TextStyle(color: IntelliJTheme.textMuted, fontSize: 11.5)),
                   ],
                 ),
               ),
@@ -235,7 +236,7 @@ class _GotoFileDialogState extends State<GotoFileDialog> {
                       isDense: true,
                       prefixIcon: const Icon(Icons.search, size: 18, color: IntelliJTheme.textMuted),
                       prefixIconConstraints: const BoxConstraints(minWidth: 32),
-                      hintText: '文件名',
+                      hintText: tr('文件名', 'File name'),
                       hintStyle: const TextStyle(color: IntelliJTheme.textMuted, fontSize: 14),
                       filled: true,
                       fillColor: IntelliJTheme.islandBg,

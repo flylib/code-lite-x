@@ -41,7 +41,8 @@ CodeLiteX 是一款高性能的原生跨平台代码编辑器，内置 Git 管�
    - 遵循 IntelliJ IDEA Darcula 工业级暗色主题规范（`IntelliJTheme`）；
    - 在任何嵌套 `Row` 或面板标题区域，文本标签**必须使用 `Expanded`/`Flexible` 包裹并设置 `overflow: TextOverflow.ellipsis`**，避免因屏幕缩放或视口收窄触发 RenderFlex 溢出；
    - 图标按钮优先使用轻量 `InkWell` 或 ShrinkWrap 约束，严禁出现默认 48px 强制触控区域挤占紧凑桌面布局。
-5. **配置与敏感信息红线**：
+5. **界面文字一律两种语言**：用户看得见的字（文字、按钮、菜单、tooltip、对话框、提示、显示给用户的错误信息）都写成 `tr('中文', 'English')`（`lib/core/l10n/l10n.dart`），不许只写一种语言、也不许中英混在一句里。英文用 IntelliJ 英文版的说法，中文用 JetBrains 官方中文语言包的说法；专有名词（Git、GitHub、Maven、make、HEAD）两边一样。`tr` 不是常量，含它的 widget 不能 `const`；会被拿来当 key 的名字（折叠状态、分组）要用固定的 key，只在显示时翻译。测试默认按中文界面跑（`test/flutter_test_config.dart`）。
+6. **配置与敏感信息红线**：
    严禁将以下信息提交至 Git：
    - 第三方服务 API Key / Token
    - 私钥、证书与生产环境凭证
@@ -61,6 +62,10 @@ CodeLiteX 是一款高性能的原生跨平台代码编辑器，内置 Git 管�
 - 每个项目都恢复上次的状态：打开的标签、光标、滚动位置。从文件树打开的标签存的是绝对路径，也要恢复。
 - Markdown 有 Editor / Editor+Preview / Preview 三种模式。能接开源库就接开源库（现用 `flutter_markdown_plus` + `markdown`）；两栏同步滚动不能卡。
 - HTML 文件：编辑器右上角列出本机装了的浏览器，点哪个就用哪个打开。打开方式同 IntelliJ：经内置服务器按 `http://localhost:63342/<项目名>/<相对路径>` 打开，不用 file://。**每个项目一个服务器**，第一次用时启动，项目关闭时随之关闭（`ProjectContext.browserUrlFor`、`core/platform/web_server_native.dart`）；63342 被占了（别的项目或 IntelliJ）就往后找空端口；只听本机、只认 Host 为 localhost 的请求。
+
+**界面语言**
+- 设置 ▸ **语言和地区**（导航第一项）选「中文 / English」，换了**立刻生效**（整个界面连同开着的对话框按新语言重画，不用重启），记在设置文件的 `language`；没选过时跟系统语言（中文系统用中文，其余英文）。macOS 系统菜单里 Quit / Hide / Services 等系统自带项由系统按系统语言显示，不归这个设置管。
+- 中文界面里所有术语都用中文（提交、推送、拉取、回滚、储藏、拣选、变基、问题、按键映射……，照 JetBrains 中文语言包），英文界面全英文；以前中英混排的地方（Problems 面板标签、「Opening」等）都按这条改了：Problems 面板标签中文是「全部 / 错误 / 通知」，英文是 All / Errors / Notify；「Opening」中文叫「打开的项目」。
 
 **整体外观（分支 `feat/islands-ui`）**
 - 完整复刻 IntelliJ 新 UI 的「Islands Dark」：标题栏、活动条、状态栏和岛之间的缝是窗口底色 `#24282C`；编辑区、侧边工具窗、底部工具窗是一块块 8px 圆角的岛 `#181A1C`，岛之间留 5px 缝（缝就是拖动调整大小的地方）。颜色是从用户给的 IntelliJ 截图逐像素取的，见 `IntelliJTheme` / `IntelliJMetrics`、`core/theme/island.dart`。
@@ -98,7 +103,7 @@ CodeLiteX 是一款高性能的原生跨平台代码编辑器，内置 Git 管�
 - Git 工具窗（Log）的 **Branch 筛选默认是 HEAD**（只看当前分支的历史，左边分支树的「HEAD (Current Branch)」高亮）；点 × 清掉就看所有分支，下次打开 Git 窗口时如果没选分支又回到 HEAD；选了别的分支就保持（`GitLogStore.defaultToHead`）。
 - Git 工具窗（Log）筛选栏：左边是搜索框和 Branch / User / Date / Paths 筛选；刷新、Cherry-Pick、显示详情、跳转这几个工具按钮靠右，紧挨着最右边的 **Pull / Push**（只有图标，大小、线宽和其它工具按钮一致：箭头 + 托盘，Pull 向下、Push 向上；默认和左边工具按钮一样灰，按下时 Pull 蓝 `#4A86F7`、Push 绿 `#3DD68C` 并衬同色深底；**正在 Pull / Push 时那个按钮的图标换成同色转圈**，结束才恢复，期间两个都点不了，标题栏分支菜单发起的也一样，看 `BranchStore.busy`）。Push 先弹「Push Commits」确认框：`分支 → 远程 : 分支`（第一次推的标 New，推后设为上游）+ 这次要推的提交列表，确认才推；没有要推的就不能点 Push。Pull（Update）时本地有没提交的改动先弹框列出来，选「Stash 后更新」（先 stash，拉完自动恢复；恢复有冲突就留在 stash 里并提示）/「直接更新」/ 取消。标题栏分支菜单的 Update / Push 也走同样的确认（`git.outgoing`、`git.local_changes`、`git.update` 的 `stash`）。
 - Git Blame 注释（编辑器行号栏、Merge 窗口）：作者名最多显示 6 个字符，多的用 `...` 省略（按字符算）；鼠标停上去弹小窗，第一行完整作者名，第二行 提交号 · 日期 · 提交说明（`blameShortName`、`blameTooltip`）。
-- 解决冲突用三栏 Merge 窗口（标题叫「Merge」，不叫「Open File」），中间的结果栏可以直接编辑。右键左 / 右两栏的行号 ▸ Annotate with Git Blame：在文字和行号之间显示每行的「日期 作者」（今天的显示 Today），悬停看提交号和提交说明，再右键 Close Annotations 关掉；两栏各开各的。注释取自那一侧来自的提交（合并：HEAD / MERGE_HEAD；变基两侧对调：REBASE_HEAD / HEAD；cherry-pick / revert 同理），`git.merge_blame`。
+- 解决冲突用三栏 Merge 窗口（标题叫「Merge」，不叫「Open File」），中间的结果栏可以直接编辑。右键左 / 右两栏的行号 ▸ Annotate with Git Blame：在文字和行号之间显示每行的「日期 作者」（今天的显示「今天」/ Today），悬停看提交号和提交说明，再右键 Close Annotations 关掉；两栏各开各的。注释取自那一侧来自的提交（合并：HEAD / MERGE_HEAD；变基两侧对调：REBASE_HEAD / HEAD；cherry-pick / revert 同理），`git.merge_blame`。
 
 **快捷键**
 - 快捷键可配置，默认键位同 IntelliJ（macOS「Mac OS X 10.5+」；其它平台「Default」），存储格式和 action id 也用 IntelliJ 的（`meta 1`、`ActivateProjectToolWindow`），所以能直接「从 IntelliJ 导入」：读最新 `IntelliJIdea*` 配置目录的 `options/mac/keymap.xml`（当前配置名）+ `keymaps/*.xml`（用户改的）+ 安装包 `lib/app.jar` 里的自带配置，沿 parent 链解析；macOS 键位继承 `$default` 时 Ctrl 换成 ⌘（IntelliJ 自己也这么换）。设置 ▸ Keymap 可加（按下组合键录入，冲突的从原操作移走）、删、恢复默认。设置文件只存改过的（`keymap.overrides`）。

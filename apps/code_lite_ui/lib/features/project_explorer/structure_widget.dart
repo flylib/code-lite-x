@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/intellij_theme.dart';
 import '../tool_window/tool_window_actions.dart';
+import '../../core/l10n/l10n.dart';
 
 class StructureWidget extends StatelessWidget {
   final String activeFile;
@@ -34,12 +35,12 @@ class StructureWidget extends StatelessWidget {
             // 侧栏可拖窄到 160px:文件名与计数都要能省略,不能溢出。
             child: Row(
               children: [
-                const Flexible(
+                Flexible(
                   child: Text(
-                    'STRUCTURE',
+                    tr('结构', 'STRUCTURE'),
                     overflow: TextOverflow.ellipsis,
                     maxLines: 1,
-                    style: TextStyle(color: IntelliJTheme.textMuted, fontSize: 10, fontWeight: FontWeight.bold),
+                    style: const TextStyle(color: IntelliJTheme.textMuted, fontSize: 10, fontWeight: FontWeight.bold),
                   ),
                 ),
                 const SizedBox(width: 6),
@@ -61,10 +62,10 @@ class StructureWidget extends StatelessWidget {
           // Symbol Tree List
           Expanded(
             child: outline.isEmpty
-                ? const Center(
+                ? Center(
                     child: Text(
-                      'No symbols found in outline',
-                      style: TextStyle(color: IntelliJTheme.textMuted, fontSize: 11),
+                      tr('大纲中没有符号', 'No symbols found in outline'),
+                      style: const TextStyle(color: IntelliJTheme.textMuted, fontSize: 11),
                     ),
                   )
                 : ListView.builder(

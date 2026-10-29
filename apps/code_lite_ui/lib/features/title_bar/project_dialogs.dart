@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/l10n/l10n.dart';
 import '../../core/platform/workspace_io.dart' as io;
 import '../../core/theme/intellij_theme.dart';
 import 'project_menu.dart';
@@ -23,13 +24,13 @@ Future<String?> showNewProjectDialog(
   return showDialog<String>(
     context: context,
     builder: (_) => _ProjectDialog(
-      title: 'New Project',
-      action: 'Create',
-      busyLabel: '正在创建…',
+      title: tr('新建项目', 'New Project'),
+      action: tr('创建', 'Create'),
+      busyLabel: tr('正在创建…', 'Creating…'),
       initialLocation: initialLocation,
       home: home,
       pickDirectory: pickDirectory ?? io.pickDirectory,
-      fields: const [_Field.name('Name', hint: 'my-app')],
+      fields: [_Field.name('Name', tr('名称', 'Name'), hint: 'my-app')],
       run: (parent, values) => (create ?? io.createProject)(parent, values['Name']!),
     ),
   );
@@ -46,13 +47,17 @@ Future<String?> showCloneDialog(
   return showDialog<String>(
     context: context,
     builder: (_) => _ProjectDialog(
-      title: 'Clone Repository',
-      action: 'Clone',
-      busyLabel: '正在克隆…',
+      title: tr('克隆存储库', 'Clone Repository'),
+      action: tr('克隆', 'Clone'),
+      busyLabel: tr('正在克隆…', 'Cloning…'),
       initialLocation: initialLocation,
       home: home,
       pickDirectory: pickDirectory ?? io.pickDirectory,
-      fields: const [_Field.name('URL', hint: 'https://github.com/owner/repo.git 或 git@host:owner/repo.git'), _Field.name('Name', hint: '默认取地址的最后一段', optional: true)],
+      fields: [
+        _Field.name('URL', 'URL',
+            hint: tr('https://github.com/owner/repo.git 或 git@host:owner/repo.git', 'https://github.com/owner/repo.git or git@host:owner/repo.git')),
+        _Field.name('Name', tr('名称', 'Name'), hint: tr('默认取地址的最后一段', 'Defaults to the last segment of the URL'), optional: true),
+      ],
       run: (parent, values) => (clone ?? io.cloneRepository)(values['URL']!, parent, name: values['Name']),
       // 填了地址、名字还空着时,名字框里提示将要用的目录名
       hintFrom: (values) => values['URL'] == null ? null : io.repositoryNameFromUrl(values['URL']!),
@@ -61,8 +66,12 @@ Future<String?> showCloneDialog(
 }
 
 class _Field {
-  const _Field.name(this.label, {this.hint, this.optional = false});
+  const _Field.name(this.key, this.label, {this.hint, this.optional = false});
 
+  /// 取值用的固定标识(不随界面语言变)。
+  final String key;
+
+  /// 显示的名字。
   final String label;
   final String? hint;
   final bool optional;
@@ -97,7 +106,7 @@ class _ProjectDialog extends StatefulWidget {
 
 class _ProjectDialogState extends State<_ProjectDialog> {
   late final TextEditingController _location = TextEditingController(text: abbreviatePath(widget.initialLocation, widget.home));
-  late final Map<String, TextEditingController> _values = {for (final f in widget.fields) f.label: TextEditingController()};
+  late final Map<String, TextEditingController> _values = {for (final f in widget.fields) f.key: TextEditingController()};
   bool _busy = false;
   String? _error;
 
@@ -123,14 +132,14 @@ class _ProjectDialogState extends State<_ProjectDialog> {
     if (_busy) return;
     final values = _current;
     for (final f in widget.fields) {
-      if (!f.optional && values[f.label] == null) {
-        setState(() => _error = '请填写 ${f.label}');
+      if (!f.optional && values[f.key] == null) {
+        setState(() => _error = tr('请填写${f.label}', 'Please enter ${f.label}'));
         return;
       }
     }
     final parent = expandHome(_location.text, widget.home);
     if (parent.isEmpty) {
-      setState(() => _error = '请选择位置');
+      setState(() => _error = tr('请选择位置', 'Please choose a location'));
       return;
     }
     setState(() {
@@ -144,7 +153,7 @@ class _ProjectDialogState extends State<_ProjectDialog> {
     } else {
       setState(() {
         _busy = false;
-        _error = error ?? '失败';
+        _error = error ?? tr('失败', 'Failed');
       });
     }
   }
@@ -175,7 +184,7 @@ class _ProjectDialogState extends State<_ProjectDialog> {
                 ListenableBuilder(
                   listenable: Listenable.merge(_values.values.toList()), // 名字框的提示跟着地址框变
                   builder: (context, _) => TextField(
-                    controller: _values[widget.fields[i].label],
+                    controller: _values[widget.fields[i].key],
                     autofocus: i == 0,
                     enabled: !_busy,
                     style: _text,
@@ -188,13 +197,13 @@ class _ProjectDialogState extends State<_ProjectDialog> {
                 ),
               ),
             _labelled(
-              'Location',
+              tr('位置', 'Location'),
               Row(children: [
                 Expanded(
                   child: TextField(controller: _location, enabled: !_busy, style: _text, decoration: decoration, onSubmitted: (_) => _submit()),
                 ),
                 const SizedBox(width: 8),
-                OutlinedButton(onPressed: _busy ? null : _choose, child: const Text('Choose…')),
+                OutlinedButton(onPressed: _busy ? null : _choose, child: Text(tr('选择…', 'Choose…'))),
               ]),
             ),
             if (_busy)
@@ -208,7 +217,7 @@ class _ProjectDialogState extends State<_ProjectDialog> {
         ),
       ),
       actions: [
-        TextButton(onPressed: _busy ? null : () => Navigator.pop(context), child: const Text('Cancel')),
+        TextButton(onPressed: _busy ? null : () => Navigator.pop(context), child: Text(tr('取消', 'Cancel'))),
         FilledButton(onPressed: _busy ? null : _submit, child: Text(widget.action)),
       ],
     );

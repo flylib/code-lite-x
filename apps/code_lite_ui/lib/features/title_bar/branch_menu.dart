@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/l10n/l10n.dart';
 import '../../core/theme/intellij_theme.dart';
 import '../git/branch_actions.dart';
 import '../git/branch_menu_model.dart';
@@ -25,7 +26,9 @@ class BranchChip extends StatelessWidget {
         final label = op == null ? store.label : (op.kind == null ? op.verb : '${op.verb} ${op.branch ?? store.label}'.trim());
         return Builder(
           builder: (context) => Tooltip(
-            message: store.busy != null ? '${store.busy}…' : (op == null ? 'Git Branch: ${store.label}' : '$label(有冲突要解决时点右边的按钮)'),
+            message: store.busy != null ? '${store.busy}…' : (op == null
+                    ? tr('Git 分支: ${store.label}', 'Git Branch: ${store.label}')
+                    : tr('$label(有冲突要解决时点右边的按钮)', '$label (use the buttons on the right to resolve conflicts)')),
             waitDuration: const Duration(milliseconds: 600),
             child: InkWell(
               borderRadius: BorderRadius.circular(6),
@@ -72,10 +75,12 @@ class BranchChip extends StatelessWidget {
 }
 
 class _Item {
-  const _Item(this.icon, this.label, this.shortcut, this.run);
+  const _Item(this.icon, this.zh, this.en, this.shortcut, this.run);
 
   final IconData? icon;
-  final String label;
+  final String zh;
+  final String en;
+  String get label => tr(zh, en);
   final String? shortcut;
   final void Function(BuildContext anchor) run;
 }
@@ -108,11 +113,11 @@ class _BranchPopupState extends State<BranchPopup> {
   }
 
   List<_Item> get _items => [
-        _Item(Icons.south_west, 'Update Project…', '⌘T', actions.update),
-        _Item(Icons.commit, 'Commit…', '⌘K', (_) => actions.showCommitWindow()),
-        _Item(Icons.north_east, 'Push…', '⇧⌘P', actions.push),
-        _Item(Icons.add, 'New Branch…', '⌥⌘N', (c) => actions.newBranch(c)),
-        _Item(null, 'Checkout Tag or Revision…', null, actions.checkoutRevision),
+        _Item(Icons.south_west, '更新项目…', 'Update Project…', '⌘T', actions.update),
+        _Item(Icons.commit, '提交…', 'Commit…', '⌘K', (_) => actions.showCommitWindow()),
+        _Item(Icons.north_east, '推送…', 'Push…', '⇧⌘P', actions.push),
+        _Item(Icons.add, '新建分支…', 'New Branch…', '⌥⌘N', (c) => actions.newBranch(c)),
+        _Item(null, '签出标签或修订…', 'Checkout Tag or Revision…', null, actions.checkoutRevision),
       ];
 
   void _do(void Function(BuildContext) run) {
@@ -127,7 +132,7 @@ class _BranchPopupState extends State<BranchPopup> {
       builder: (context, _) {
         final query = _search.text.trim();
         final q = query.toLowerCase();
-        final items = [for (final i in _items) if (q.isEmpty || i.label.toLowerCase().contains(q)) i];
+        final items = [for (final i in _items) if (matchesEitherLanguage(q, i.zh, i.en)) i];
         final tree = buildBranchMenuTree(local: store.local, remote: store.remote, recent: store.recent, query: query);
         final rows = flattenBranchTree(tree, _collapsed, expandAll: query.isNotEmpty);
         return Column(
@@ -146,11 +151,11 @@ class _BranchPopupState extends State<BranchPopup> {
                     autofocus: true,
                     style: popupText,
                     cursorColor: IntelliJTheme.caret,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       isDense: true,
                       border: InputBorder.none,
-                      hintText: 'Search for branches and actions',
-                      hintStyle: TextStyle(color: IntelliJTheme.textMuted, fontSize: 13),
+                      hintText: tr('搜索分支和操作', 'Search for branches and actions'),
+                      hintStyle: const TextStyle(color: IntelliJTheme.textMuted, fontSize: 13),
                     ),
                   ),
                 ),
@@ -166,7 +171,7 @@ class _BranchPopupState extends State<BranchPopup> {
                   if (items.isNotEmpty && rows.isNotEmpty) const Divider(height: 9, thickness: 1, color: IntelliJTheme.borderSubtle, indent: 8, endIndent: 8),
                   for (final row in rows) _branchRow(row),
                   if (items.isEmpty && rows.isEmpty)
-                    const Padding(padding: EdgeInsets.all(16), child: Text('没有匹配的分支或操作', style: popupMuted)),
+                    Padding(padding: const EdgeInsets.all(16), child: Text(tr('没有匹配的分支或操作', 'No matching branches or actions'), style: popupMuted)),
                 ],
               ),
             ),
@@ -272,15 +277,15 @@ class _BranchPopupState extends State<BranchPopup> {
       color: IntelliJTheme.panelBg,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6), side: const BorderSide(color: IntelliJTheme.border)),
       items: [
-        item('checkout', 'Checkout', enabled: !isCurrent),
-        item('new', "New Branch from '$rev'…"),
+        item('checkout', tr('签出', 'Checkout'), enabled: !isCurrent),
+        item('new', tr("从 '$rev' 新建分支…", "New Branch from '$rev'…")),
         const PopupMenuDivider(height: 9),
-        item('merge', "Merge '$rev' into '${current ?? 'HEAD'}'", enabled: canCompare),
-        item('rebase', "Rebase '${current ?? 'HEAD'}' onto '$rev'", enabled: canCompare),
+        item('merge', tr("将 '$rev' 合并到 '${current ?? 'HEAD'}'", "Merge '$rev' into '${current ?? 'HEAD'}'"), enabled: canCompare),
+        item('rebase', tr("将 '${current ?? 'HEAD'}' 变基到 '$rev'", "Rebase '${current ?? 'HEAD'}' onto '$rev'"), enabled: canCompare),
         if (isLocal) ...[
           const PopupMenuDivider(height: 9),
-          item('rename', 'Rename…'),
-          item('delete', 'Delete', enabled: !isCurrent, danger: true),
+          item('rename', tr('重命名…', 'Rename…')),
+          item('delete', tr('删除', 'Delete'), enabled: !isCurrent, danger: true),
         ],
       ],
     );

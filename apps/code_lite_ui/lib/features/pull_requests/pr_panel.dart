@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/github/github_service.dart';
+import '../../core/l10n/l10n.dart';
 import '../../core/theme/intellij_theme.dart';
 import 'pr_diff_tab.dart' show prFileColor;
 import 'pr_store.dart';
@@ -80,7 +81,7 @@ class _PullRequestsPanelState extends State<PullRequestsPanel> {
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
               children: [
                 _Chip(
-                  label: _store.repoName.isEmpty ? 'Pull Requests' : _store.repoName.split('/').last,
+                  label: _store.repoName.isEmpty ? tr('拉取请求', 'Pull Requests') : _store.repoName.split('/').last,
                   tooltip: _store.repoName,
                   active: _store.selected == null,
                   onTap: _store.showList,
@@ -98,7 +99,7 @@ class _PullRequestsPanelState extends State<PullRequestsPanel> {
           ),
           _IconBtn(
             icon: Icons.refresh,
-            tooltip: '刷新',
+            tooltip: tr('刷新', 'Refresh'),
             onTap: () {
               final s = _store.selected;
               s == null ? _store.refresh() : _store.session(s).reload();
@@ -128,7 +129,7 @@ class _PullRequestsPanelState extends State<PullRequestsPanel> {
               style: prText,
               onSubmitted: _store.setSearch,
               decoration: InputDecoration(
-                hintText: '搜索(GitHub 语法,如 is:open fix)',
+                hintText: tr('搜索(GitHub 语法,如 is:open fix)', 'Search (GitHub syntax, e.g. is:open fix)'),
                 hintStyle: prMuted,
                 isDense: true,
                 prefixIcon: const Icon(Icons.search, size: 16, color: IntelliJTheme.textSecondary),
@@ -158,25 +159,35 @@ class _PullRequestsPanelState extends State<PullRequestsPanel> {
             padding: const EdgeInsets.symmetric(horizontal: 6),
             children: [
               _FilterChip(
-                label: switch (_store.stateFilter) { 'closed' => 'Closed', 'merged' => 'Merged', 'all' => 'State', _ => 'Open' },
+                label: switch (_store.stateFilter) {
+                  'closed' => tr('已关闭', 'Closed'),
+                  'merged' => tr('已合并', 'Merged'),
+                  'all' => tr('状态', 'State'),
+                  _ => tr('打开', 'Open'),
+                },
                 isSet: _store.stateFilter != 'all',
-                options: const [('open', 'Open'), ('closed', 'Closed'), ('merged', 'Merged'), ('all', 'All')],
+                options: [
+                  ('open', tr('打开', 'Open')),
+                  ('closed', tr('已关闭', 'Closed')),
+                  ('merged', tr('已合并', 'Merged')),
+                  ('all', tr('全部', 'All')),
+                ],
                 onSelected: (v) => _store.setStateFilter(v ?? 'all'),
               ),
               _FilterChip(
-                label: _store.author ?? 'Author',
+                label: _store.author ?? tr('作者', 'Author'),
                 isSet: _store.author != null,
                 options: _peopleOptions(_store.knownAuthors),
                 onSelected: _store.setAuthor,
               ),
               _FilterChip(
-                label: _store.label ?? 'Label',
+                label: _store.label ?? tr('标签', 'Label'),
                 isSet: _store.label != null,
                 options: [for (final l in _store.knownLabels.toList()..sort()) (l, l)],
                 onSelected: _store.setLabel,
               ),
               _FilterChip(
-                label: _store.assignee ?? 'Assignee',
+                label: _store.assignee ?? tr('受理人', 'Assignee'),
                 isSet: _store.assignee != null,
                 options: _peopleOptions(_store.knownAssignees),
                 onSelected: _store.setAssignee,
@@ -191,7 +202,7 @@ class _PullRequestsPanelState extends State<PullRequestsPanel> {
   }
 
   List<(String, String)> _peopleOptions(Set<String> known) => [
-        if (_store.viewer.isNotEmpty) ('@me', 'Me (${_store.viewer})'),
+        if (_store.viewer.isNotEmpty) ('@me', tr('我 (${_store.viewer})', 'Me (${_store.viewer})')),
         for (final p in known.toList()..sort())
           if (p.isNotEmpty) (p, p),
       ];
@@ -207,7 +218,7 @@ class _PullRequestsPanelState extends State<PullRequestsPanel> {
             const SizedBox(height: 8),
             Text(_store.error ?? '', style: prText),
             const SizedBox(height: 12),
-            TextButton(onPressed: _store.refresh, child: const Text('重试')),
+            TextButton(onPressed: _store.refresh, child: Text(tr('重试', 'Retry'))),
           ],
         ),
       );
@@ -222,12 +233,12 @@ class _PullRequestsPanelState extends State<PullRequestsPanel> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             SelectableText(_store.error!, style: prMuted),
-            TextButton(onPressed: _store.refresh, child: const Text('重试')),
+            TextButton(onPressed: _store.refresh, child: Text(tr('重试', 'Retry'))),
           ],
         ),
       );
     }
-    if (_store.items.isEmpty) return const Center(child: Text('没有符合条件的 Pull Request', style: prMuted));
+    if (_store.items.isEmpty) return Center(child: Text(tr('没有符合条件的拉取请求', 'No matching pull requests'), style: prMuted));
     return Stack(
       children: [
         ListView.builder(
@@ -271,7 +282,7 @@ class _PrRow extends StatelessWidget {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
                     decoration: BoxDecoration(color: const Color(0xFF3C3F44), borderRadius: BorderRadius.circular(3)),
-                    child: const Text('DRAFT', style: TextStyle(color: IntelliJTheme.textMuted, fontSize: 10.5)),
+                    child: Text(tr('草稿', 'DRAFT'), style: const TextStyle(color: IntelliJTheme.textMuted, fontSize: 10.5)),
                   ),
                 ],
                 if (pr.checks == ChecksState.failure || pr.checks == ChecksState.pending) ...[
@@ -280,7 +291,7 @@ class _PrRow extends StatelessWidget {
                 ],
                 if (pr.reviewDecision == 'APPROVED') ...[
                   const SizedBox(width: 6),
-                  const Tooltip(message: 'Approved', child: Icon(Icons.verified_outlined, size: 16, color: Color(0xFF5FB865))),
+                  Tooltip(message: tr('已批准', 'Approved'), child: const Icon(Icons.verified_outlined, size: 16, color: Color(0xFF5FB865))),
                 ],
                 const SizedBox(width: 8),
                 const Icon(Icons.chat_bubble_outline, size: 14, color: IntelliJTheme.textSecondary),
@@ -290,7 +301,7 @@ class _PrRow extends StatelessWidget {
             ),
             const SizedBox(height: 3),
             Text(
-              '#${pr.number} · created ${prDate(pr.createdAt)}, by ${pr.author}',
+              tr('#${pr.number} · ${pr.author} 创建于 ${prDate(pr.createdAt)}', '#${pr.number} · created ${prDate(pr.createdAt)}, by ${pr.author}'),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: prMuted,
@@ -369,12 +380,12 @@ class _PrDetailViewState extends State<_PrDetailView> {
                   const SizedBox(height: 4),
                   Align(
                     alignment: Alignment.centerLeft,
-                    child: InkWell(onTap: widget.onOpenTimeline, child: const Text('View Timeline', style: prLink)),
+                    child: InkWell(onTap: widget.onOpenTimeline, child: Text(tr('查看时间线', 'View Timeline'), style: prLink)),
                   ),
                   const SizedBox(height: 12),
                   Row(
                     children: [
-                      const Text('Changes', style: TextStyle(color: IntelliJTheme.textHigh, fontSize: 13, fontWeight: FontWeight.w600)),
+                      Text(tr('更改', 'Changes'), style: const TextStyle(color: IntelliJTheme.textHigh, fontSize: 13, fontWeight: FontWeight.w600)),
                       const SizedBox(width: 8),
                       const Icon(Icons.call_split, size: 14, color: IntelliJTheme.textSecondary),
                       const SizedBox(width: 4),
@@ -398,7 +409,7 @@ class _PrDetailViewState extends State<_PrDetailView> {
                       ),
                       InkWell(
                         onTap: () => setState(() => _showDetails = !_showDetails),
-                        child: Text(_showDetails ? 'Hide details' : 'Show details', style: prLink),
+                        child: Text(_showDetails ? tr('隐藏详细信息', 'Hide details') : tr('显示详细信息', 'Show details'), style: prLink),
                       ),
                     ],
                   ),
@@ -407,7 +418,7 @@ class _PrDetailViewState extends State<_PrDetailView> {
                       margin: const EdgeInsets.only(top: 6),
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(color: IntelliJTheme.editorBg, borderRadius: BorderRadius.circular(4)),
-                      child: SelectableText(d.body.trim().isEmpty ? '(没有描述)' : d.body.trim(), style: prText.copyWith(height: 1.4)),
+                      child: SelectableText(d.body.trim().isEmpty ? tr('(没有描述)', '(No description)') : d.body.trim(), style: prText.copyWith(height: 1.4)),
                     ),
                   const SizedBox(height: 8),
                   ..._fileTree(),
@@ -450,7 +461,7 @@ class _PrDetailViewState extends State<_PrDetailView> {
           expanded: open,
           icon: Icons.folder_outlined,
           label: name,
-          trailing: '${node.fileCount} ${node.fileCount == 1 ? 'file' : 'files'}',
+          trailing: tr('${node.fileCount} 个文件', '${node.fileCount} ${node.fileCount == 1 ? 'file' : 'files'}'),
           onTap: () => setState(() => open ? _collapsed.add(key) : _collapsed.remove(key)),
         ));
         if (open) walk(node, key, depth + 1);
@@ -481,22 +492,24 @@ class _PrDetailViewState extends State<_PrDetailView> {
     final failed = d.checks.where((c) => c.state == ChecksState.failure).length;
     final pending = d.checks.where((c) => c.state == ChecksState.pending).length;
     final checksText = switch (checks) {
-      ChecksState.none => 'No checks',
-      ChecksState.success => 'All checks have passed',
-      ChecksState.pending => '$pending ${pending == 1 ? 'check is' : 'checks are'} pending',
-      ChecksState.failure => '$failed ${failed == 1 ? 'check has' : 'checks have'} failed',
+      ChecksState.none => tr('没有检查', 'No checks'),
+      ChecksState.success => tr('所有检查均已通过', 'All checks have passed'),
+      ChecksState.pending => tr('$pending 个检查正在进行', '$pending ${pending == 1 ? 'check is' : 'checks are'} pending'),
+      ChecksState.failure => tr('$failed 个检查失败', '$failed ${failed == 1 ? 'check has' : 'checks have'} failed'),
     };
     final me = _s.viewer;
     final isAuthor = me.isNotEmpty && d.author == me;
     final requested = d.reviewRequests.contains(me) || d.reviews.any((r) => r.author == me);
     final (reviewIcon, reviewColor, reviewText) = switch (d.reviewDecision) {
-      'APPROVED' => (Icons.check_circle, const Color(0xFF5FB865), 'Approved'),
-      'CHANGES_REQUESTED' => (Icons.error, const Color(0xFFE5534B), 'Changes requested'),
-      _ when d.reviewRequests.isEmpty && d.reviews.isEmpty => (Icons.warning_amber_rounded, const Color(0xFFE5C07B), 'Missing reviewer'),
+      'APPROVED' => (Icons.check_circle, const Color(0xFF5FB865), tr('已批准', 'Approved')),
+      'CHANGES_REQUESTED' => (Icons.error, const Color(0xFFE5534B), tr('已请求更改', 'Changes requested')),
+      _ when d.reviewRequests.isEmpty && d.reviews.isEmpty => (Icons.warning_amber_rounded, const Color(0xFFE5C07B), tr('缺少审查者', 'Missing reviewer')),
       _ => (
           Icons.schedule,
           IntelliJTheme.textSecondary,
-          d.reviewRequests.isEmpty ? 'Review required' : 'Waiting for ${d.reviewRequests.join(', ')}',
+          d.reviewRequests.isEmpty
+              ? tr('需要审查', 'Review required')
+              : tr('正在等待 ${d.reviewRequests.join(', ')} 审查', 'Waiting for ${d.reviewRequests.join(', ')}'),
         ),
     };
     return Padding(
@@ -510,7 +523,7 @@ class _PrDetailViewState extends State<_PrDetailView> {
               const SizedBox(width: 8),
               Expanded(child: Text(checksText, overflow: TextOverflow.ellipsis, style: prText)),
               if (d.checks.isNotEmpty)
-                InkWell(onTap: () => GitHubService.openInBrowser('${d.url}/checks'), child: const Text('Details', style: prLink)),
+                InkWell(onTap: () => GitHubService.openInBrowser('${d.url}/checks'), child: Text(tr('详细信息', 'Details'), style: prLink)),
             ],
           ),
           const SizedBox(height: 8),
@@ -529,7 +542,7 @@ class _PrDetailViewState extends State<_PrDetailView> {
                   child: OutlinedButton(
                     onPressed: _busy ? null : _setMeAsReviewer,
                     style: _btnStyle,
-                    child: const Text('Set Myself as Reviewer', overflow: TextOverflow.ellipsis),
+                    child: Text(tr('将自己设为审查者', 'Set Myself as Reviewer'), overflow: TextOverflow.ellipsis),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -538,12 +551,12 @@ class _PrDetailViewState extends State<_PrDetailView> {
                 child: OutlinedButton(
                   onPressed: () => showSubmitReviewDialog(context, _s),
                   style: _btnStyle,
-                  child: const Text('Submit Review…', overflow: TextOverflow.ellipsis),
+                  child: Text(tr('提交审查…', 'Submit Review…'), overflow: TextOverflow.ellipsis),
                 ),
               ),
               const Spacer(),
               PopupMenuButton<String>(
-                tooltip: '更多',
+                tooltip: tr('更多', 'More'),
                 color: IntelliJTheme.panelBg,
                 icon: const Icon(Icons.more_vert, size: 18, color: IntelliJTheme.textSecondary),
                 onSelected: (v) {
@@ -551,10 +564,10 @@ class _PrDetailViewState extends State<_PrDetailView> {
                   if (v == 'timeline') widget.onOpenTimeline();
                   if (v == 'refresh') _s.reload();
                 },
-                itemBuilder: (_) => const [
-                  PopupMenuItem(value: 'timeline', height: 30, child: Text('View Timeline', style: prText)),
-                  PopupMenuItem(value: 'web', height: 30, child: Text('Open on GitHub', style: prText)),
-                  PopupMenuItem(value: 'refresh', height: 30, child: Text('Refresh', style: prText)),
+                itemBuilder: (_) => [
+                  PopupMenuItem(value: 'timeline', height: 30, child: Text(tr('查看时间线', 'View Timeline'), style: prText)),
+                  PopupMenuItem(value: 'web', height: 30, child: Text(tr('在 GitHub 上打开', 'Open on GitHub'), style: prText)),
+                  PopupMenuItem(value: 'refresh', height: 30, child: Text(tr('刷新', 'Refresh'), style: prText)),
                 ],
               ),
             ],
@@ -648,9 +661,9 @@ class _TreeRow extends StatelessWidget {
             ],
             if (unviewed) ...[
               const SizedBox(width: 6),
-              const Tooltip(
-                message: '未查看',
-                child: CircleAvatar(radius: 3, backgroundColor: IntelliJTheme.accentBlue),
+              Tooltip(
+                message: tr('未查看', 'Not viewed'),
+                child: const CircleAvatar(radius: 3, backgroundColor: IntelliJTheme.accentBlue),
               ),
             ],
             const SizedBox(width: 6),

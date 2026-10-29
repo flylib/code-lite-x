@@ -10,6 +10,7 @@
 // - Repositories:<repositories> / <pluginRepositories> 里声明的,加上 Maven 中央仓库;
 // - Dependencies:<dependencies> 里直接声明的(不含 dependencyManagement,也不展开传递依赖)。
 
+import '../l10n/l10n.dart';
 import 'build_model.dart';
 import 'xml_lite.dart';
 
@@ -21,16 +22,16 @@ Future<BuildModule> _read(String buildFile, BuildFileReader read, Set<String> se
   final fallbackName = dir.isEmpty ? buildFile : dir.split('/').last;
 
   final source = await read(buildFile);
-  if (source == null) return BuildModule(name: fallbackName, buildFile: buildFile, error: '找不到 $buildFile');
+  if (source == null) return BuildModule(name: fallbackName, buildFile: buildFile, error: tr('找不到 $buildFile', 'Cannot find $buildFile'));
 
   final XmlElement project;
   try {
     project = parseXml(source);
   } on FormatException catch (e) {
-    return BuildModule(name: fallbackName, buildFile: buildFile, error: '$buildFile 解析失败:${e.message}');
+    return BuildModule(name: fallbackName, buildFile: buildFile, error: tr('$buildFile 解析失败:${e.message}', 'Failed to parse $buildFile: ${e.message}'));
   }
   if (project.name != 'project') {
-    return BuildModule(name: fallbackName, buildFile: buildFile, error: '$buildFile 不是 Maven 项目文件(根元素是 <${project.name}>)');
+    return BuildModule(name: fallbackName, buildFile: buildFile, error: tr('$buildFile 不是 Maven 项目文件(根元素是 <${project.name}>)', '$buildFile is not a Maven project file (root element is <${project.name}>)'));
   }
 
   final artifactId = project.childText('artifactId');

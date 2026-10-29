@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/theme/intellij_theme.dart';
+import '../../core/l10n/l10n.dart';
 
 /// 当前文件里的一处匹配(只在一行之内,列是 UTF-16)。
 class FindMatch {
@@ -138,9 +139,9 @@ class FindBar extends StatelessWidget {
         final count = state.query.isEmpty
             ? ''
             : state.invalid
-                ? '正则有误'
+                ? tr('正则有误', 'Bad pattern')
                 : state.matches.isEmpty
-                    ? '0 results'
+                    ? tr('0 个结果', '0 results')
                     : '${state.current + 1}/${state.matches.length}';
         return Container(
           key: const ValueKey('find-bar'),
@@ -203,7 +204,7 @@ class FindBar extends StatelessWidget {
                         _FindButton(
                           key: const ValueKey('find-clear'),
                           icon: Icons.close,
-                          tooltip: '清空',
+                          tooltip: tr('清空', 'Clear'),
                           onTap: () {
                             state.text.clear();
                             state.query = '';
@@ -211,15 +212,15 @@ class FindBar extends StatelessWidget {
                             state.focus.requestFocus();
                           },
                         ),
-                      _FindToggle(label: 'Cc', tooltip: '区分大小写', value: state.matchCase, onTap: () {
+                      _FindToggle(label: 'Cc', tooltip: tr('区分大小写', 'Match Case'), value: state.matchCase, onTap: () {
                         state.matchCase = !state.matchCase;
                         onQueryChanged();
                       }),
-                      _FindToggle(label: 'W', tooltip: '整词', value: state.words, onTap: () {
+                      _FindToggle(label: 'W', tooltip: tr('整词', 'Words'), value: state.words, onTap: () {
                         state.words = !state.words;
                         onQueryChanged();
                       }),
-                      _FindToggle(label: '.*', tooltip: '正则表达式', value: state.regex, onTap: () {
+                      _FindToggle(label: '.*', tooltip: tr('正则表达式', 'Regex'), value: state.regex, onTap: () {
                         state.regex = !state.regex;
                         onQueryChanged();
                       }),
@@ -230,10 +231,10 @@ class FindBar extends StatelessWidget {
               const SizedBox(width: 12),
               Text(count, key: const ValueKey('find-count'), style: none || state.invalid ? _muted.copyWith(color: IntelliJTheme.diagError) : _muted),
               const SizedBox(width: 8),
-              _FindButton(key: const ValueKey('find-prev'), icon: Icons.arrow_upward, tooltip: '上一个 (⇧回车)', onTap: state.matches.isEmpty ? null : onPrevious),
-              _FindButton(key: const ValueKey('find-next'), icon: Icons.arrow_downward, tooltip: '下一个 (回车)', onTap: state.matches.isEmpty ? null : onNext),
+              _FindButton(key: const ValueKey('find-prev'), icon: Icons.arrow_upward, tooltip: tr('上一个 (⇧回车)', 'Previous Occurrence (⇧Enter)'), onTap: state.matches.isEmpty ? null : onPrevious),
+              _FindButton(key: const ValueKey('find-next'), icon: Icons.arrow_downward, tooltip: tr('下一个 (回车)', 'Next Occurrence (Enter)'), onTap: state.matches.isEmpty ? null : onNext),
               const Spacer(),
-              _FindButton(key: const ValueKey('find-close'), icon: Icons.close, tooltip: '关闭 (Esc)', onTap: onClose),
+              _FindButton(key: const ValueKey('find-close'), icon: Icons.close, tooltip: tr('关闭 (Esc)', 'Close (Esc)'), onTap: onClose),
             ],
           ),
         );

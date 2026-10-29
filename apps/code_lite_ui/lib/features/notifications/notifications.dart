@@ -8,6 +8,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../core/l10n/l10n.dart';
 import '../../core/theme/intellij_theme.dart';
 
 /// 一条通知。[title] 是「xxx 失败」这样的短句,[body] 是原因(可能为空)。
@@ -244,7 +245,7 @@ class _BalloonState extends State<_Balloon> {
             Padding(padding: const EdgeInsets.only(top: 1), child: _levelIcon(n.error)),
             const SizedBox(width: 10),
             Expanded(child: _NoticeText(notice: n, maxBodyLines: 4)),
-            _IconBtn(key: const ValueKey('notice-close'), icon: Icons.close, tooltip: '关闭', onTap: widget.onClose),
+            _IconBtn(key: const ValueKey('notice-close'), icon: Icons.close, tooltip: tr('关闭', 'Close'), onTap: widget.onClose),
           ],
         ),
       ),
@@ -356,13 +357,13 @@ class _ProblemsPanelState extends State<ProblemsPanel> {
                 padding: const EdgeInsets.only(left: 12, right: 6),
                 child: Row(
                   children: [
-                    const Text('Problems', style: TextStyle(color: IntelliJTheme.textHigh, fontSize: 13, fontWeight: FontWeight.w600)),
+                    Text(tr('问题', 'Problems'), style: const TextStyle(color: IntelliJTheme.textHigh, fontSize: 13, fontWeight: FontWeight.w600)),
                     const SizedBox(width: 16),
-                    tab(ProblemsFilter.all, '全部', center.errors.length + center.notifies.length),
-                    tab(ProblemsFilter.errors, 'Errors', center.errors.length),
-                    tab(ProblemsFilter.notify, 'Notify', center.notifies.length),
+                    tab(ProblemsFilter.all, tr('全部', 'All'), center.errors.length + center.notifies.length),
+                    tab(ProblemsFilter.errors, tr('错误', 'Errors'), center.errors.length),
+                    tab(ProblemsFilter.notify, tr('通知', 'Notify'), center.notifies.length),
                     const Spacer(),
-                    _IconBtn(icon: Icons.remove, tooltip: '隐藏', onTap: widget.onHide, size: 16),
+                    _IconBtn(icon: Icons.remove, tooltip: tr('隐藏', 'Hide'), onTap: widget.onHide, size: 16),
                   ],
                 ),
               ),
@@ -380,7 +381,7 @@ class _ProblemsPanelState extends State<ProblemsPanel> {
                           _IconBtn(
                             key: const ValueKey('problems-copy-all'),
                             icon: Icons.content_copy,
-                            tooltip: '复制全部',
+                            tooltip: tr('复制全部', 'Copy All'),
                             size: 16,
                             onTap: items.isEmpty ? null : () => Clipboard.setData(ClipboardData(text: [for (final n in items) '[${_clock(n.time)}] ${n.text}'].join('\n'))),
                           ),
@@ -388,7 +389,7 @@ class _ProblemsPanelState extends State<ProblemsPanel> {
                           _IconBtn(
                             key: const ValueKey('problems-clear'),
                             icon: Icons.delete_outline,
-                            tooltip: '清空',
+                            tooltip: tr('清空', 'Clear'),
                             size: 16,
                             onTap: items.isEmpty ? null : () => center.clear(filter),
                           ),
@@ -400,9 +401,9 @@ class _ProblemsPanelState extends State<ProblemsPanel> {
                           ? Center(
                               child: Text(
                                 switch (filter) {
-                                  ProblemsFilter.all => 'No errors or notifications.',
-                                  ProblemsFilter.errors => 'No errors.',
-                                  ProblemsFilter.notify => 'No notifications.',
+                                  ProblemsFilter.all => tr('没有错误或通知。', 'No errors or notifications.'),
+                                  ProblemsFilter.errors => tr('没有错误。', 'No errors.'),
+                                  ProblemsFilter.notify => tr('没有通知。', 'No notifications.'),
                                 },
                                 key: const ValueKey('problems-empty'),
                                 style: const TextStyle(color: IntelliJTheme.textMuted, fontSize: 13),
@@ -465,7 +466,7 @@ class _ProblemRowState extends State<_ProblemRow> {
             const SizedBox(width: 12),
             Text(_clock(n.time), style: const TextStyle(color: IntelliJTheme.textMuted, fontSize: 12)),
             const SizedBox(width: 4),
-            _IconBtn(icon: Icons.content_copy, tooltip: '复制', onTap: () => Clipboard.setData(ClipboardData(text: n.text))),
+            _IconBtn(icon: Icons.content_copy, tooltip: tr('复制', 'Copy'), onTap: () => Clipboard.setData(ClipboardData(text: n.text))),
           ],
         ),
       ),

@@ -1,6 +1,7 @@
 // 标题栏分支菜单里的三棵树(Recent / Local / Remote)。分支名按 `/` 折成文件夹,
 // 与 IntelliJ 的 Branches 弹窗一致。纯数据,不碰界面,单测直接喂分支列表。
 
+import '../../core/l10n/l10n.dart';
 import 'git_log_store.dart';
 
 /// 一个分支(叶子)或一个文件夹 / 分组。
@@ -68,14 +69,14 @@ List<BranchNode> buildBranchMenuTree({
 
   final byName = {for (final b in local) b.name: b};
 
-  final recentGroup = BranchNode.group('Recent');
+  final recentGroup = BranchNode.group(tr('最近', 'Recent'));
   for (final name in recent) {
     final b = byName[name];
     if (b == null || !keep(name)) continue;
     _insert(recentGroup, name.split('/'), leafOf(b));
   }
 
-  final localGroup = BranchNode.group('Local');
+  final localGroup = BranchNode.group(tr('本地', 'Local'));
   final sorted = [...local]..sort((a, b) {
       if (a.current != b.current) return a.current ? -1 : 1;
       return a.name.compareTo(b.name);
@@ -84,7 +85,7 @@ List<BranchNode> buildBranchMenuTree({
     _insert(localGroup, b.name.split('/'), leafOf(b));
   }
 
-  final remoteGroup = BranchNode.group('Remote');
+  final remoteGroup = BranchNode.group(tr('远程', 'Remote'));
   final byRemote = <String, BranchNode>{};
   final sortedRemote = [...remote]..sort((a, b) => a.name.compareTo(b.name));
   for (final b in sortedRemote.where((b) => keep(b.name))) {

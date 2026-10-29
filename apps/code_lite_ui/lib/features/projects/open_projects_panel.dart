@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/l10n/l10n.dart';
 import '../../core/state/project_manager.dart';
 import '../../core/theme/intellij_theme.dart';
 import '../editor/context_menu_region.dart';
@@ -67,9 +68,9 @@ class OpenProjectsPanel extends StatelessWidget {
           menuChildren: [
             for (final g in targets) MenuItemButton(onPressed: () => manager.moveToGroup(path, g), child: Text(g.name)),
           ],
-          child: const Text('移到项目组'),
+          child: Text(tr('移到项目组', 'Move to Project Group')),
         ),
-      if (current != null) MenuItemButton(onPressed: () => manager.moveToGroup(path, null), child: Text('移出项目组「${current.name}」')),
+      if (current != null) MenuItemButton(onPressed: () => manager.moveToGroup(path, null), child: Text(tr('移出项目组「${current.name}」', 'Remove from Project Group "${current.name}"'))),
     ];
   }
 
@@ -94,19 +95,19 @@ class OpenProjectsPanel extends StatelessWidget {
                 // 侧栏可拖窄到 160px:标题可省略
                 child: Row(
                   children: [
-                    const Flexible(
+                    Flexible(
                       child: Text(
-                        'Opening',
+                        tr('打开的项目', 'Opening'),
                         overflow: TextOverflow.ellipsis,
                         maxLines: 1,
-                        style: TextStyle(color: IntelliJTheme.textHigh, fontSize: 13, fontWeight: FontWeight.w600),
+                        style: const TextStyle(color: IntelliJTheme.textHigh, fontSize: 13, fontWeight: FontWeight.w600),
                       ),
                     ),
                     const SizedBox(width: 6),
                     if (projects.isNotEmpty) Text('${projects.length}', key: const ValueKey('open-projects-count'), style: _muted),
                     const Spacer(),
                     Tooltip(
-                      message: '新建项目组…',
+                      message: tr('新建项目组…', 'New Project Group…'),
                       child: InkWell(
                         key: const ValueKey('open-projects-add'),
                         onTap: () => _newGroup(context),
@@ -120,7 +121,7 @@ class OpenProjectsPanel extends StatelessWidget {
               ),
               Expanded(
                 child: projects.isEmpty && groups.isEmpty
-                    ? const Center(child: Padding(padding: EdgeInsets.all(16), child: Text('没有打开的项目', style: _muted)))
+                    ? Center(child: Padding(padding: const EdgeInsets.all(16), child: Text(tr('没有打开的项目', 'No open projects'), style: _muted)))
                     // 组外的空白处也是放置区:组里的项目拖到这里就移出项目组
                     : _DropZone(
                         key: const ValueKey('ungrouped-drop'),
@@ -175,15 +176,15 @@ class OpenProjectsPanel extends StatelessWidget {
   }
 
   Future<void> _newGroup(BuildContext context) async {
-    final name = await showGroupNameDialog(context, title: '新建项目组', action: '创建', available: manager.groupNameAvailable);
+    final name = await showGroupNameDialog(context, title: tr('新建项目组', 'New Project Group'), action: tr('创建', 'Create'), available: manager.groupNameAvailable);
     if (name != null) await manager.createGroup(name);
   }
 
   Future<void> _renameGroup(BuildContext context, ProjectGroup g) async {
     final name = await showGroupNameDialog(
       context,
-      title: '重命名项目组',
-      action: '重命名',
+      title: tr('重命名项目组', 'Rename Project Group'),
+      action: tr('重命名', 'Rename'),
       initial: g.name,
       available: (n) => manager.groupNameAvailable(n, except: g),
     );
@@ -251,14 +252,14 @@ class _GroupNameDialogState extends State<_GroupNameDialog> {
             enabledBorder: const OutlineInputBorder(borderSide: BorderSide(color: Colors.white)),
             focusedBorder: const OutlineInputBorder(borderSide: BorderSide(color: Colors.white, width: 1.5)),
             isDense: true,
-            errorText: name.isEmpty || ok ? null : '已经有叫「$name」的项目组了',
+            errorText: name.isEmpty || ok ? null : tr('已经有叫「$name」的项目组了', 'A project group named "$name" already exists'),
           ),
           onChanged: (_) => setState(() {}),
           onSubmitted: (_) => _submit(),
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('取消')),
+        TextButton(onPressed: () => Navigator.pop(context), child: Text(tr('取消', 'Cancel'))),
         FilledButton(onPressed: ok ? _submit : null, child: Text(widget.action)),
       ],
     );
@@ -347,11 +348,11 @@ class _GroupHeader extends StatelessWidget {
     final total = group.members.length;
     return ContextMenuRegion(
       menuBuilder: (_) => [
-        MenuItemButton(onPressed: openCount < total ? onOpenAll : null, child: const Text('全部打开')),
-        MenuItemButton(onPressed: openCount > 0 ? onCloseAll : null, child: const Text('全部关闭')),
+        MenuItemButton(onPressed: openCount < total ? onOpenAll : null, child: Text(tr('全部打开', 'Open All'))),
+        MenuItemButton(onPressed: openCount > 0 ? onCloseAll : null, child: Text(tr('全部关闭', 'Close All'))),
         const MenuDivider(),
-        MenuItemButton(onPressed: onRename, child: const Text('重命名…')),
-        MenuItemButton(onPressed: onDelete, child: const Text('删除项目组(项目不关)')),
+        MenuItemButton(onPressed: onRename, child: Text(tr('重命名…', 'Rename…'))),
+        MenuItemButton(onPressed: onDelete, child: Text(tr('删除项目组(项目不关)', 'Delete Project Group (Projects Stay Open)'))),
       ],
       child: InkWell(
         key: ValueKey('group-${group.name}'),
@@ -375,7 +376,7 @@ class _GroupHeader extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 6),
-              Text(total == 0 ? '把项目拖到这里' : '$openCount/$total', style: _muted),
+              Text(total == 0 ? tr('把项目拖到这里', 'Drag projects here') : '$openCount/$total', style: _muted),
               const SizedBox(width: 8),
             ],
           ),
@@ -407,12 +408,12 @@ class _ClosedMemberRow extends StatelessWidget {
     final name = OpenProject(path).name;
     return ContextMenuRegion(
       menuBuilder: (_) => [
-        MenuItemButton(onPressed: onOpen, child: const Text('打开项目')),
+        MenuItemButton(onPressed: onOpen, child: Text(tr('打开项目', 'Open Project'))),
         const MenuDivider(),
         ...groupMenu,
       ],
       child: Tooltip(
-        message: '已关闭,点击重新打开',
+        message: tr('已关闭,点击重新打开', 'Closed. Click to reopen'),
         waitDuration: const Duration(milliseconds: 500),
         child: InkWell(
           onTap: onOpen,
@@ -532,7 +533,7 @@ class _ProjectRowState extends State<_ProjectRow> {
                   listenable: e.context!.sessions,
                   builder: (context, _) => e.context!.hasDirtyTabs
                       ? Tooltip(
-                          message: '有未保存的改动',
+                          message: tr('有未保存的改动', 'Has unsaved changes'),
                           child: Container(key: const ValueKey('project-dirty'), width: 7, height: 7, margin: const EdgeInsets.symmetric(horizontal: 6), decoration: const BoxDecoration(color: IntelliJTheme.accentYellow, shape: BoxShape.circle)),
                         )
                       : const SizedBox.shrink(),
@@ -541,7 +542,7 @@ class _ProjectRowState extends State<_ProjectRow> {
                 width: 22,
                 child: showClose
                     ? Tooltip(
-                        message: '关闭项目(释放它的语言服务器和终端)',
+                        message: tr('关闭项目(释放它的语言服务器和终端)', 'Close Project (releases its language servers and terminals)'),
                         waitDuration: const Duration(milliseconds: 400),
                         child: InkWell(
                           key: ValueKey('close-project-${e.path}'),
@@ -559,10 +560,10 @@ class _ProjectRowState extends State<_ProjectRow> {
     );
     return ContextMenuRegion(
       menuBuilder: (_) => [
-        MenuItemButton(onPressed: widget.active ? null : widget.onSwitch, child: const Text('切换到此项目')),
+        MenuItemButton(onPressed: widget.active ? null : widget.onSwitch, child: Text(tr('切换到此项目', 'Switch to This Project'))),
         const MenuDivider(),
-        MenuItemButton(onPressed: widget.onClose, child: const Text('关闭项目')),
-        MenuItemButton(onPressed: widget.others ? widget.onCloseOthers : null, child: const Text('关闭其它项目')),
+        MenuItemButton(onPressed: widget.onClose, child: Text(tr('关闭项目', 'Close Project'))),
+        MenuItemButton(onPressed: widget.others ? widget.onCloseOthers : null, child: Text(tr('关闭其它项目', 'Close Other Projects'))),
         if (widget.groupMenu.isNotEmpty) ...[const MenuDivider(), ...widget.groupMenu],
       ],
       child: row,

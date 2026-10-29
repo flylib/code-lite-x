@@ -3,6 +3,7 @@
 
 import 'package:flutter/material.dart';
 
+import '../../core/l10n/l10n.dart';
 import '../../core/theme/intellij_theme.dart';
 import '../editor/blame.dart';
 import 'branch_store.dart';
@@ -35,7 +36,7 @@ class BranchActions {
     final err = await store.run(label, method, params, worktree);
     if (!context.mounted) return err == null; // 窗口已经没了,不必再提示
     if (err != null) {
-      _toast(context, '$label 失败: $err', error: true);
+      _toast(context, tr('$label失败: $err', '$label failed: $err'), error: true);
       return false;
     }
     if (success != null) _toast(context, success);
@@ -53,14 +54,19 @@ class BranchActions {
       if (choice == null || !context.mounted) return;
       stash = choice == UpdateWithChanges.stash;
     }
-    final ok = await _run(context, 'Update', 'git.update', {'stash': stash});
+    final ok = await _run(context, BranchStore.updateLabel, 'git.update', {'stash': stash});
     if (!ok || !context.mounted) return;
     if (store.lastResult['stash_conflict'] == true) {
-      _toast(context, '已更新,但恢复本地改动时有冲突:改动还在 stash 里(git stash list),解决冲突后再恢复', error: true);
+      _toast(
+          context,
+          tr('已更新,但恢复本地改动时有冲突:改动还在 stash 里(git stash list),解决冲突后再恢复',
+              'Updated, but restoring local changes caused conflicts: the changes are still in the stash (git stash list). Resolve the conflicts, then restore them'),
+          error: true);
       return;
     }
     final out = ((store.lastResult['output'] as String?) ?? '').trim();
-    _toast(context, out.isEmpty ? '已更新' : '已更新: ${out.split('\n').map((l) => l.trim()).where((l) => l.isNotEmpty).lastOrNull ?? out}');
+    final last = out.split('\n').map((l) => l.trim()).where((l) => l.isNotEmpty).lastOrNull ?? out;
+    _toast(context, out.isEmpty ? tr('已更新', 'Updated') : tr('已更新: $last', 'Updated: $last'));
   }
 
   /// Push:先列出要推到远程的提交,确认后才推(同 IntelliJ 的 Push Commits)。
@@ -68,7 +74,7 @@ class BranchActions {
     final res = await store.call('git.outgoing');
     if (!context.mounted) return;
     if (res['status'] != 'ok') {
-      _toast(context, 'Push 失败: ${res['error'] ?? '无法读取要推送的提交'}', error: true);
+      _toast(context, tr('推送失败: ${res['error'] ?? '无法读取要推送的提交'}', 'Push failed: ${res['error'] ?? 'Cannot read the commits to push'}'), error: true);
       return;
     }
     final confirmed = await showPushDialog(
@@ -80,15 +86,18 @@ class BranchActions {
       commits: [for (final c in (res['commits'] as List? ?? const [])) if (c is Map<String, dynamic>) OutgoingCommit.fromJson(c)],
     );
     if (!confirmed || !context.mounted) return;
-    final ok = await _run(context, 'Push', 'git.push', const {}, worktree: false);
+    final ok = await _run(context, BranchStore.pushLabel, 'git.push', const {}, worktree: false);
     if (!ok || !context.mounted) return;
     final r = store.lastResult;
-    _toast(context, '已推送 ${r['branch']} 到 ${r['remote']}${r['set_upstream'] == true ? '(并设为上游)' : ''}');
+    final upstream = r['set_upstream'] == true;
+    _toast(context, tr('已推送 ${r['branch']} 到 ${r['remote']}${upstream ? '(并设为上游)' : ''}',
+        'Pushed ${r['branch']} to ${r['remote']}${upstream ? ' (and set as upstream)' : ''}'));
   }
 
   Future<void> checkout(BuildContext context, String revision) async {
-    final ok = await _run(context, 'Checkout', 'git.checkout', {'name': revision});
-    if (ok && context.mounted) _toast(context, '已切换到 ${store.lastResult['branch'] ?? revision}');
+    final ok = await _run(context, tr('签出', 'Checkout'), 'git.checkout', {'name': revision});
+    final branch = store.lastResult['branch'] ?? revision;
+    if (ok && context.mounted) _toast(context, tr('已切换到 $branch', 'Checked out $branch'));
   }
 
   /// New Branch…:[from] 为空时从当前 HEAD 出发。
@@ -99,22 +108,28 @@ class BranchActions {
     );
     if (result == null || !context.mounted) return;
     final (name, checkout) = result;
-    await _run(context, 'New Branch', 'git.new_branch', {'name': name, 'hash': from ?? 'HEAD', 'checkout': checkout},
-        success: checkout ? '已创建并切换到 $name' : '已创建分支 $name', worktree: checkout);
+    await _run(context, tr('新建分支', 'New Branch'), 'git.new_branch', {'name': name, 'hash': from ?? 'HEAD', 'checkout': checkout},
+        success: checkout ? tr('已创建并切换到 $name', 'Created and checked out $name') : tr('已创建分支 $name', 'Created branch $name'),
+        worktree: checkout);
   }
 
   Future<void> checkoutRevision(BuildContext context) async {
-    final rev = await _prompt(context, title: 'Checkout Tag or Revision', label: '输入标签、分支名或提交哈希', action: 'Checkout');
+    final rev = await _prompt(context,
+        title: tr('签出标签或修订', 'Checkout Tag or Revision'),
+        label: tr('输入标签、分支名或提交哈希', 'Enter a tag, branch name or commit hash'),
+        action: tr('签出', 'Checkout'));
     if (rev == null || rev.trim().isEmpty || !context.mounted) return;
-    final ok = await _run(context, 'Checkout', 'git.checkout_revision', {'hash': rev.trim()});
-    if (ok && context.mounted) _toast(context, '已签出 ${rev.trim()}(游离 HEAD)');
+    final ok = await _run(context, tr('签出', 'Checkout'), 'git.checkout_revision', {'hash': rev.trim()});
+    if (ok && context.mounted) _toast(context, tr('已签出 ${rev.trim()}(游离 HEAD)', 'Checked out ${rev.trim()} (detached HEAD)'));
   }
 
   Future<void> merge(BuildContext context, String revision) async {
     final into = store.current ?? 'HEAD';
-    final ok = await _confirm(context, 'Merge', "把 '$revision' 合并进 '$into'?", action: 'Merge');
+    final ok = await _confirm(context, tr('合并', 'Merge'), tr("把 '$revision' 合并进 '$into'?", "Merge '$revision' into '$into'?"),
+        action: tr('合并', 'Merge'));
     if (!ok || !context.mounted) return;
-    await _run(context, 'Merge', 'git.merge', {'name': revision}, success: "已把 '$revision' 合并进 '$into'");
+    await _run(context, tr('合并', 'Merge'), 'git.merge', {'name': revision},
+        success: tr("已把 '$revision' 合并进 '$into'", "Merged '$revision' into '$into'"));
   }
 
   Future<void> rebase(BuildContext context, String revision) async {
@@ -122,26 +137,32 @@ class BranchActions {
     if (current == null) return;
     final ok = await _confirm(
       context,
-      'Rebase',
-      "把 '$current' 变基到 '$revision' 上?\n\n这会改写 '$current' 上的提交;如果已经推送过,之后需要强制推送。",
-      action: 'Rebase',
+      tr('变基', 'Rebase'),
+      tr("把 '$current' 变基到 '$revision' 上?\n\n这会改写 '$current' 上的提交;如果已经推送过,之后需要强制推送。",
+          "Rebase '$current' onto '$revision'?\n\nThis rewrites the commits on '$current'; if they have already been pushed, you will need to force-push afterwards."),
+      action: tr('变基', 'Rebase'),
     );
     if (!ok || !context.mounted) return;
-    await _run(context, 'Rebase', 'git.rebase_onto', {'name': revision}, success: "已把 '$current' 变基到 '$revision'");
+    await _run(context, tr('变基', 'Rebase'), 'git.rebase_onto', {'name': revision},
+        success: tr("已把 '$current' 变基到 '$revision'", "Rebased '$current' onto '$revision'"));
   }
 
   Future<void> rename(BuildContext context, String name) async {
-    final next = await _prompt(context, title: "Rename Branch '$name'", label: '新的分支名', initial: name, action: 'Rename');
+    final next = await _prompt(context,
+        title: tr("重命名分支 '$name'", "Rename Branch '$name'"),
+        label: tr('新的分支名', 'New branch name'),
+        initial: name,
+        action: tr('重命名', 'Rename'));
     if (next == null || next.trim() == name || !context.mounted) return;
-    await _run(context, 'Rename', 'git.rename_branch', {'name': name, 'new_name': next},
-        success: '已重命名为 ${next.trim()}', worktree: false);
+    await _run(context, tr('重命名', 'Rename'), 'git.rename_branch', {'name': name, 'new_name': next},
+        success: tr('已重命名为 ${next.trim()}', 'Renamed to ${next.trim()}'), worktree: false);
   }
 
   Future<void> delete(BuildContext context, String name) async {
     final result = await showDialog<bool>(context: context, builder: (_) => _DeleteBranchDialog(name: name));
     if (result == null || !context.mounted) return;
-    await _run(context, 'Delete', 'git.delete_branch', {'name': name, 'force': result},
-        success: '已删除分支 $name', worktree: false);
+    await _run(context, tr('删除', 'Delete'), 'git.delete_branch', {'name': name, 'force': result},
+        success: tr('已删除分支 $name', 'Deleted branch $name'), worktree: false);
   }
 
   /// 标题栏的冲突按钮:列出有冲突的文件,可以整个采用一侧、打开文件,或者(没有冲突了)完成合并。
@@ -160,11 +181,11 @@ class BranchActions {
 
   /// 采用 [files] 里每个文件的 [side]('yours' / 'theirs')。有一个失败就停下并提示。
   Future<void> acceptSide(BuildContext context, List<ConflictFile> files, String side) async {
-    final label = side == 'yours' ? 'Accept Yours' : 'Accept Theirs';
+    final label = side == 'yours' ? tr('接受你的', 'Accept Yours') : tr('接受他们的', 'Accept Theirs');
     for (final f in files) {
       final err = await store.run(label, 'git.accept_side', {'path': f.path, 'side': side});
       if (err != null) {
-        if (context.mounted) _toast(context, '$label 失败(${f.path}): $err', error: true);
+        if (context.mounted) _toast(context, tr('$label失败(${f.path}): $err', '$label failed (${f.path}): $err'), error: true);
         return;
       }
     }
@@ -175,7 +196,7 @@ class BranchActions {
     final v = await store.call('git.merge_versions', {'path': file.path});
     if (!context.mounted) return;
     if (v['status'] != 'ok') {
-      _toast(context, '读取 ${file.path} 的各个版本失败: ${v['error']}', error: true);
+      _toast(context, tr('读取 ${file.path} 的各个版本失败: ${v['error']}', 'Failed to read the versions of ${file.path}: ${v['error']}'), error: true);
       return;
     }
     final op = store.operation;
@@ -185,8 +206,8 @@ class BranchActions {
       base: v['base'] as String? ?? '',
       yours: v['yours'] as String? ?? '',
       theirs: v['theirs'] as String? ?? '',
-      yoursTitle: op?.branch ?? store.current ?? 'Yours',
-      theirsTitle: (op?.kind == 'rebase' ? op?.onto : op?.incoming) ?? 'Theirs',
+      yoursTitle: op?.branch ?? store.current ?? tr('你的', 'Yours'),
+      theirsTitle: (op?.kind == 'rebase' ? op?.onto : op?.incoming) ?? tr('他们的', 'Theirs'),
       // 右键行号 ▸ Annotate:那一侧来自的提交的逐行修改记录(时间、作者)
       loadBlame: (side) async => BlameData.fromResult(
         await store.call('git.merge_blame', {'path': file.path, 'side': side == MergeSide.left ? 'yours' : 'theirs'}),
@@ -196,8 +217,8 @@ class BranchActions {
     if (outcome == null || !context.mounted) return;
     switch (outcome.kind) {
       case MergeOutcomeKind.apply:
-        final err = await store.run('Merge', 'git.resolve_with', {'path': file.path, 'content': outcome.content ?? ''});
-        if (err != null && context.mounted) _toast(context, '保存 ${file.path} 失败: $err', error: true);
+        final err = await store.run(tr('合并', 'Merge'), 'git.resolve_with', {'path': file.path, 'content': outcome.content ?? ''});
+        if (err != null && context.mounted) _toast(context, tr('保存 ${file.path} 失败: $err', 'Failed to save ${file.path}: $err'), error: true);
       case MergeOutcomeKind.acceptLeft:
         await acceptSide(context, [file], 'yours');
       case MergeOutcomeKind.acceptRight:
@@ -211,26 +232,29 @@ class BranchActions {
     if (op == null || !op.canAbort) return false;
     final ok = await _confirm(
       context,
-      'Abort ${op.noun}',
-      '放弃这次${_zh(op.kind)}?\n\n会执行 git ${op.kind} --abort:已经解决的冲突都会丢掉,工作区回到操作之前的状态。',
-      action: 'Abort ${op.noun}',
+      tr('中止${op.noun}', 'Abort ${op.noun}'),
+      tr('放弃这次${_zh(op.kind)}?\n\n会执行 git ${op.kind} --abort:已经解决的冲突都会丢掉,工作区回到操作之前的状态。',
+          'Abort this ${op.noun.toLowerCase()}?\n\nThis runs git ${op.kind} --abort: conflicts you have already resolved are lost and the working tree goes back to how it was before the operation.'),
+      action: tr('中止${op.noun}', 'Abort ${op.noun}'),
     );
     if (!ok || !context.mounted) return false;
-    return _run(context, 'Abort ${op.noun}', 'git.abort_operation', const {}, success: '已放弃${_zh(op.kind)}');
+    return _run(context, tr('中止${op.noun}', 'Abort ${op.noun}'), 'git.abort_operation', const {},
+        success: tr('已放弃${_zh(op.kind)}', '${op.noun} aborted'));
   }
 
   /// 冲突都解决后完成:合并 → 提交合并结果,变基 → 继续。
   Future<bool> continueOperation(BuildContext context) async {
     final op = store.operation;
     if (op == null || !op.canAbort) return false;
-    return _run(context, 'Continue ${op.noun}', 'git.continue_operation', const {}, success: '${_zh(op.kind)}已完成');
+    return _run(context, tr('继续${op.noun}', 'Continue ${op.noun}'), 'git.continue_operation', const {},
+        success: tr('${_zh(op.kind)}已完成', '${op.noun} completed'));
   }
 
   static String _zh(String? kind) => switch (kind) {
         'merge' => '合并',
         'rebase' => '变基',
-        'cherry-pick' => 'cherry-pick',
-        'revert' => 'revert',
+        'cherry-pick' => '拣选',
+        'revert' => '还原',
         _ => '操作',
       };
 
@@ -242,7 +266,7 @@ class BranchActions {
         title: Text(title, style: const TextStyle(color: IntelliJTheme.textHigh, fontSize: 15)),
         content: SizedBox(width: 420, child: Text(message, style: _text)),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(tr('取消', 'Cancel'))),
           FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(action)),
         ],
       ),
@@ -250,7 +274,7 @@ class BranchActions {
     return ok ?? false;
   }
 
-  Future<String?> _prompt(BuildContext context, {required String title, required String label, String initial = '', String action = 'OK'}) {
+  Future<String?> _prompt(BuildContext context, {required String title, required String label, String initial = '', String? action}) {
     return showDialog<String>(
       context: context,
       builder: (_) => PromptDialog(title: title, label: label, initial: initial, action: action),
@@ -260,12 +284,14 @@ class BranchActions {
 
 /// 单行输入对话框。输入框的控制器由对话框自己持有:关闭动画还在播的时候不能先释放它。
 class PromptDialog extends StatefulWidget {
-  const PromptDialog({super.key, required this.title, required this.label, this.initial = '', this.action = 'OK'});
+  const PromptDialog({super.key, required this.title, required this.label, this.initial = '', this.action});
 
   final String title;
   final String label;
   final String initial;
-  final String action;
+
+  /// 确定按钮上的字;为空时是「确定 / OK」。
+  final String? action;
 
   @override
   State<PromptDialog> createState() => _PromptDialogState();
@@ -304,8 +330,8 @@ class _PromptDialogState extends State<PromptDialog> {
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-        FilledButton(onPressed: () => Navigator.pop(context, _controller.text), child: Text(widget.action)),
+        TextButton(onPressed: () => Navigator.pop(context), child: Text(tr('取消', 'Cancel'))),
+        FilledButton(onPressed: () => Navigator.pop(context, _controller.text), child: Text(widget.action ?? tr('确定', 'OK'))),
       ],
     );
   }
@@ -342,20 +368,24 @@ class _NewBranchDialogState extends State<NewBranchDialog> {
   Widget build(BuildContext context) {
     return AlertDialog(
       backgroundColor: IntelliJTheme.panelBg,
-      title: const Text('New Branch', style: TextStyle(color: IntelliJTheme.textHigh, fontSize: 15)),
+      title: Text(tr('新建分支', 'New Branch'), style: const TextStyle(color: IntelliJTheme.textHigh, fontSize: 15)),
       content: SizedBox(
         width: 420,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(widget.startPoint == null ? '从当前位置(HEAD)创建' : "从 '${widget.startPoint}' 创建", style: _muted),
+            Text(
+                widget.startPoint == null
+                    ? tr('从当前位置(HEAD)创建', 'Create from the current position (HEAD)')
+                    : tr("从 '${widget.startPoint}' 创建", "Create from '${widget.startPoint}'"),
+                style: _muted),
             const SizedBox(height: 8),
             TextField(
               controller: _name,
               autofocus: true,
               style: _text,
-              decoration: const InputDecoration(border: OutlineInputBorder(), isDense: true, hintText: '分支名,例如 feat/login'),
+              decoration: InputDecoration(border: const OutlineInputBorder(), isDense: true, hintText: tr('分支名,例如 feat/login', 'Branch name, e.g. feat/login')),
               onSubmitted: (_) => _submit(),
             ),
             const SizedBox(height: 4),
@@ -365,14 +395,14 @@ class _NewBranchDialogState extends State<NewBranchDialog> {
               controlAffinity: ListTileControlAffinity.leading,
               value: _checkout,
               onChanged: (v) => setState(() => _checkout = v ?? true),
-              title: const Text('Checkout branch', style: _text),
+              title: Text(tr('签出分支', 'Checkout branch'), style: _text),
             ),
           ],
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-        FilledButton(onPressed: _submit, child: const Text('Create')),
+        TextButton(onPressed: () => Navigator.pop(context), child: Text(tr('取消', 'Cancel'))),
+        FilledButton(onPressed: _submit, child: Text(tr('创建', 'Create'))),
       ],
     );
   }
@@ -394,31 +424,31 @@ class _DeleteBranchDialogState extends State<_DeleteBranchDialog> {
   Widget build(BuildContext context) {
     return AlertDialog(
       backgroundColor: IntelliJTheme.panelBg,
-      title: Text("Delete Branch '${widget.name}'", style: const TextStyle(color: IntelliJTheme.textHigh, fontSize: 15)),
+      title: Text(tr("删除分支 '${widget.name}'", "Delete Branch '${widget.name}'"), style: const TextStyle(color: IntelliJTheme.textHigh, fontSize: 15)),
       content: SizedBox(
         width: 420,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('只删除这个本地分支;还没合并的提交会丢失(除非别处还引用着它们)。', style: _text),
+            Text(tr('只删除这个本地分支;还没合并的提交会丢失(除非别处还引用着它们)。', 'Deletes only this local branch; unmerged commits will be lost (unless something else still references them).'), style: _text),
             CheckboxListTile(
               dense: true,
               contentPadding: EdgeInsets.zero,
               controlAffinity: ListTileControlAffinity.leading,
               value: _force,
               onChanged: (v) => setState(() => _force = v ?? false),
-              title: const Text('即使有未合并的提交也删除', style: _text),
+              title: Text(tr('即使有未合并的提交也删除', 'Delete even if it has unmerged commits'), style: _text),
             ),
           ],
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+        TextButton(onPressed: () => Navigator.pop(context), child: Text(tr('取消', 'Cancel'))),
         FilledButton(
           style: FilledButton.styleFrom(backgroundColor: IntelliJTheme.gitRed),
           onPressed: () => Navigator.pop(context, _force),
-          child: const Text('Delete'),
+          child: Text(tr('删除', 'Delete')),
         ),
       ],
     );

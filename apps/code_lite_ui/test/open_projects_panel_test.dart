@@ -125,7 +125,7 @@ void main() {
 
   testWidgets('empty: a hint instead of a list; + creates a project group', (tester) async {
     await show(tester);
-    expect(find.text('Opening'), findsOneWidget);
+    expect(find.text('打开的项目'), findsOneWidget);
     expect(find.text('没有打开的项目'), findsOneWidget);
     expect(find.byKey(const ValueKey('open-projects-count')), findsNothing);
     expect(find.byTooltip('新建项目组…'), findsOneWidget);
