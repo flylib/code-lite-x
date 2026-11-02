@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/gestures.dart' show kPrimaryButton;
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show RenderProxyBox;
 import 'package:flutter/services.dart';
 
 import '../../core/build_tools/makefile.dart' show isMakefileName, parseMakeTargets;
@@ -647,6 +648,10 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
       return KeyEventResult.ignored;
     }
+    // 输入法正在组字(拼音还没上屏):退格、回车、方向键都是给输入法的,不能动文档
+    if (controller.composingRange.isValid && !controller.composingRange.isCollapsed) {
+      return KeyEventResult.ignored;
+    }
 
     final isCmd = HardwareKeyboard.instance.isMetaPressed || HardwareKeyboard.instance.isControlPressed;
     final isShift = HardwareKeyboard.instance.isShiftPressed;
@@ -854,7 +859,10 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
 
     // Printable character input。Windows / Linux 上 Alt+键是快捷键(Alt+1 打开项目窗),不当字符输入;
     // macOS 的 ⌥+键是在打特殊字符(⌥2 = ™),照常输入。
+    // 接上输入法时字符交给输入法(中文 / 日文要先组字,自己插进去的话输入法就收不到第一个字母),
+    // 由它经 updateEditingValue 写回;没有输入法连接时(测试 / 无 IME 平台)直接插入。
     final altShortcut = isAlt && defaultTargetPlatform != TargetPlatform.macOS;
+    if (!isCmd && !altShortcut && (imeBridge?.isAttached ?? false)) return KeyEventResult.ignored;
     if (!isCmd && !altShortcut && event.character != null && event.character!.isNotEmpty) {
       final code = event.character!.codeUnitAt(0);
       if (code >= 32) {
@@ -2171,11 +2179,16 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
               top: 2,
               bottom: 2,
               // 只有这一块随闪烁重绘
-              child: ValueListenableBuilder<bool>(
-                valueListenable: controller.caretBlink,
-                builder: (context, visible, _) => Container(
-                  width: 2,
-                  color: visible ? _appearance.colorScheme.caret : Colors.transparent,
+              child: _ImeCaretAnchor(
+                bridge: identical(controller, _controller)
+                    ? _imeBridge
+                    : (identical(controller, widget.secondaryTab?.controller) ? _secondaryImeBridge : null),
+                child: ValueListenableBuilder<bool>(
+                  valueListenable: controller.caretBlink,
+                  builder: (context, visible, _) => Container(
+                    width: 2,
+                    color: visible ? _appearance.colorScheme.caret : Colors.transparent,
+                  ),
                 ),
               ),
             ),
@@ -2382,3 +2395,28 @@ String _hunkKindLabel(DiffHunkKind kind) => switch (kind) {
       DiffHunkKind.modified => tr('修改', 'MODIFIED'),
       DiffHunkKind.deleted => tr('删除', 'DELETED'),
     };
+
+/// 包住光标:每次画光标时把它在屏幕上的位置告诉输入法(候选窗跟着光标走)。
+class _ImeCaretAnchor extends SingleChildRenderObjectWidget {
+  const _ImeCaretAnchor({required this.bridge, super.child});
+
+  final ImeTextInputBridge? bridge;
+
+  @override
+  RenderObject createRenderObject(BuildContext context) => _RenderImeCaretAnchor(bridge);
+
+  @override
+  void updateRenderObject(BuildContext context, _RenderImeCaretAnchor renderObject) => renderObject.bridge = bridge;
+}
+
+class _RenderImeCaretAnchor extends RenderProxyBox {
+  _RenderImeCaretAnchor(this.bridge);
+
+  ImeTextInputBridge? bridge;
+
+  @override
+  void paint(PaintingContext context, Offset offset) {
+    super.paint(context, offset);
+    bridge?.reportCaret(this);
+  }
+}

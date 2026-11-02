@@ -36,6 +36,26 @@ class ImeTextInputBridge implements TextInputClient {
 
     _syncFromController();
     _connection?.show();
+    _caretSize = null;
+    _caretTransform = null;
+  }
+
+  Size? _caretSize;
+  Matrix4? _caretTransform;
+
+  /// 告诉系统光标在屏幕上的位置,输入法的候选窗才会弹在光标旁边(否则在窗口角落)。
+  /// [caret] 是画光标的那个盒子;位置没变就不重发。
+  void reportCaret(RenderBox caret) {
+    if (!isAttached || !caret.attached || !caret.hasSize) return;
+    final transform = caret.getTransformTo(null);
+    if (caret.size == _caretSize && transform == _caretTransform) return;
+    _caretSize = caret.size;
+    _caretTransform = transform;
+    final rect = Offset.zero & caret.size;
+    _connection!
+      ..setEditableSizeAndTransform(caret.size, transform)
+      ..setComposingRect(rect)
+      ..setCaretRect(rect);
   }
 
   /// Detaches and closes active IME connection.
