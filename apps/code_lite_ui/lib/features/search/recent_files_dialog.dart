@@ -20,16 +20,19 @@ class RecentFileItem {
   final String directory;
 }
 
-/// Recent Files 左边的一个工具窗。
+/// Recent Files / Switcher 左边的一个工具窗。
 class RecentToolItem {
-  const RecentToolItem({required this.id, required this.label, required this.icon, this.shortcut});
+  const RecentToolItem({required this.id, required this.label, required this.icon, this.shortcut, this.mnemonic});
 
   final String id;
   final String label;
   final Widget Function(Color color, double size) icon;
 
-  /// 打开它的快捷键(显示用);没有就不显示。
+  /// 打开它的快捷键(Recent Files 里显示);没有就不显示。
   final String? shortcut;
+
+  /// Switcher 里名字前面的助记键(`1` 项目、`9` Git……):按住 Ctrl 再按它就打开这个工具窗。
+  final String? mnemonic;
 }
 
 /// 在 Recent Files 里选了什么:一个文件([split] 为 true 时在右侧拆分中打开),或一个工具窗。
@@ -42,6 +45,31 @@ class RecentFilesChoice {
   final String? file;
   final bool split;
   final String? tool;
+}
+
+/// 弹出 Switcher(IntelliJ 的 ⌃⇥):左边是工具窗(带助记键),右边是打开着的文件(最近用过的在前)。
+/// 按住 Ctrl 时每按一下 Tab 往下选一个(⇧Tab 往上,到头绕回),**松开 Ctrl 就打开选中的**;
+/// 按住 Ctrl 再按助记键打开那个工具窗。一开始选中第二个文件([reverse] 时选最后一个),
+/// 所以 ⌃⇥ 按一下就松开 = 回到上一个文件。
+Future<RecentFilesChoice?> showSwitcherDialog(
+  BuildContext context, {
+  required List<RecentFileItem> files,
+  required List<RecentToolItem> tools,
+  String? currentFile,
+  bool reverse = false,
+}) {
+  return showDialog<RecentFilesChoice>(
+    context: context,
+    barrierColor: Colors.transparent,
+    builder: (_) => RecentFilesDialog(
+      files: files,
+      editedFiles: const [],
+      tools: tools,
+      currentFile: currentFile,
+      switcher: true,
+      reverse: reverse,
+    ),
+  );
 }
 
 /// 弹出 Recent Files(IntelliJ 的 ⌘E):左边是工具窗,右边是最近打开的文件(新的在前)。
@@ -79,7 +107,15 @@ class RecentFilesDialog extends StatefulWidget {
     this.currentFile,
     this.toggleKeys = const [],
     this.toggleLabel,
+    this.switcher = false,
+    this.reverse = false,
   });
+
+  /// Switcher 模式(⌃⇥,见 [showSwitcherDialog]);否则是 Recent Files。
+  final bool switcher;
+
+  /// Switcher 是用 ⌃⇧⇥ 打开的:从最后一个往上选。
+  final bool reverse;
 
   final List<RecentFileItem> files;
   final List<RecentFileItem> editedFiles;
@@ -115,8 +151,32 @@ class _RecentFilesDialogState extends State<RecentFilesDialog> {
   void initState() {
     super.initState();
     final files = _files;
-    _file = files.length > 1 && files.first.path == widget.currentFile ? 1 : 0;
+    _file = widget.switcher && widget.reverse && files.isNotEmpty
+        ? files.length - 1
+        : files.length > 1 && files.first.path == widget.currentFile
+            ? 1
+            : 0;
+    // ⌃⇥ 按一下就松开(弹窗还没拿到焦点 Ctrl 已经松了):直接切到选中的那个
+    if (widget.switcher) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && !HardwareKeyboard.instance.isControlPressed) _commit();
+      });
+    }
   }
+
+  bool _closed = false;
+
+  /// 只关一次:Switcher 里回车 / 点了之后松开 Ctrl 还会来一次,不能把下面的页面也关掉。
+  void _close(RecentFilesChoice? choice) {
+    if (_closed || !mounted) return;
+    _closed = true;
+    Navigator.of(context).pop(choice);
+  }
+
+  /// 打开现在选中的(Switcher 松开 Ctrl、回车)。
+  void _commit() => _inFiles ? _openFile(_file) : _openTool(_tool);
+
+  bool _isControl(LogicalKeyboardKey k) => k == LogicalKeyboardKey.controlLeft || k == LogicalKeyboardKey.controlRight || k == LogicalKeyboardKey.control;
 
   @override
   void dispose() {
@@ -156,25 +216,27 @@ class _RecentFilesDialogState extends State<RecentFilesDialog> {
   void _openFile(int i, {bool split = false}) {
     final files = _files;
     if (i < 0 || i >= files.length) return;
-    Navigator.of(context).pop(RecentFilesChoice.file(files[i].path, split: split));
+    _close(RecentFilesChoice.file(files[i].path, split: split));
   }
 
   void _openTool(int i) {
     final tools = _tools;
     if (i < 0 || i >= tools.length) return;
-    Navigator.of(context).pop(RecentFilesChoice.tool(tools[i].id));
+    _close(RecentFilesChoice.tool(tools[i].id));
   }
 
-  void _move(int delta) {
+  /// [wrap]:到头绕回(Switcher 里按 Tab)。
+  void _move(int delta, {bool wrap = false}) {
+    int step(int i, int n) => wrap ? (i + delta) % n : (i + delta).clamp(0, n - 1);
     setState(() {
       if (_inFiles) {
         final n = _files.length;
         if (n == 0) return;
-        _file = (_file + delta).clamp(0, n - 1);
+        _file = step(_file, n);
       } else {
         final n = _tools.length;
         if (n == 0) return;
-        _tool = (_tool + delta).clamp(0, n - 1);
+        _tool = step(_tool, n);
       }
     });
     if (!_inFiles || !_scroll.hasClients) return;
@@ -188,6 +250,10 @@ class _RecentFilesDialogState extends State<RecentFilesDialog> {
   }
 
   KeyEventResult _onKey(FocusNode node, KeyEvent e) {
+    if (widget.switcher) {
+      final handled = _onSwitcherKey(e);
+      if (handled != null) return handled;
+    }
     if (e is! KeyDownEvent && e is! KeyRepeatEvent) return KeyEventResult.ignored;
     if (widget.toggleKeys.any((k) => k.accepts(e, HardwareKeyboard.instance))) {
       _toggleEditedOnly();
@@ -209,7 +275,7 @@ class _RecentFilesDialogState extends State<RecentFilesDialog> {
     } else if (k == LogicalKeyboardKey.enter || k == LogicalKeyboardKey.numpadEnter) {
       _inFiles ? _openFile(_file) : _openTool(_tool);
     } else if (k == LogicalKeyboardKey.escape) {
-      _query.isEmpty ? Navigator.of(context).pop() : _setQuery('');
+      _query.isEmpty ? _close(null) : _setQuery('');
     } else if (k == LogicalKeyboardKey.backspace) {
       if (_query.isNotEmpty) _setQuery(_query.substring(0, _query.length - 1));
     } else {
@@ -221,6 +287,27 @@ class _RecentFilesDialogState extends State<RecentFilesDialog> {
       _setQuery(_query + ch);
     }
     return KeyEventResult.handled;
+  }
+
+  /// Switcher 自己的按键:松开 Ctrl 打开、Tab / ⇧Tab 绕着选、助记键开工具窗。其余(方向键、回车、Esc)同 Recent Files,返回 null。
+  KeyEventResult? _onSwitcherKey(KeyEvent e) {
+    if (e is KeyUpEvent) {
+      if (!_isControl(e.logicalKey)) return KeyEventResult.ignored;
+      _commit();
+      return KeyEventResult.handled;
+    }
+    final k = e.logicalKey;
+    if (k == LogicalKeyboardKey.tab) {
+      _move(HardwareKeyboard.instance.isShiftPressed ? -1 : 1, wrap: true);
+      return KeyEventResult.handled;
+    }
+    final label = k.keyLabel.toUpperCase();
+    if (label.length == 1) {
+      final i = widget.tools.indexWhere((t) => t.mnemonic == label);
+      if (i >= 0) _close(RecentFilesChoice.tool(widget.tools[i].id));
+      return KeyEventResult.handled; // Switcher 里不做快速搜索
+    }
+    return null;
   }
 
   @override
@@ -267,7 +354,11 @@ class _RecentFilesDialogState extends State<RecentFilesDialog> {
                         child: files.isEmpty
                             ? Center(
                                 child: Text(
-                                  _editedOnly ? tr('没有编辑过的文件', 'No edited files') : tr('没有最近的文件', 'No recent files'),
+                                  widget.switcher
+                                      ? tr('没有打开的文件', 'No open files')
+                                      : _editedOnly
+                                          ? tr('没有编辑过的文件', 'No edited files')
+                                          : tr('没有最近的文件', 'No recent files'),
                                   key: const ValueKey('recent-files-empty'),
                                   style: const TextStyle(color: IntelliJTheme.textMuted, fontSize: 12.5),
                                 ),
@@ -312,7 +403,11 @@ class _RecentFilesDialogState extends State<RecentFilesDialog> {
         child: Row(
           children: [
             Text(
-              _editedOnly ? tr('最近编辑的文件', 'Recently Edited Files') : tr('最近的文件', 'Recent Files'),
+              widget.switcher
+                  ? tr('切换器', 'Switcher')
+                  : _editedOnly
+                      ? tr('最近编辑的文件', 'Recently Edited Files')
+                      : tr('最近的文件', 'Recent Files'),
               style: const TextStyle(color: IntelliJTheme.textHigh, fontSize: 13, fontWeight: FontWeight.w600),
             ),
             if (_query.isNotEmpty) ...[
@@ -341,6 +436,7 @@ class _RecentFilesDialogState extends State<RecentFilesDialog> {
               ),
             ],
             const Spacer(),
+            if (!widget.switcher)
             InkWell(
               key: const ValueKey('recent-files-edited-only'),
               onTap: _toggleEditedOnly,
@@ -399,10 +495,15 @@ class _RecentFilesDialogState extends State<RecentFilesDialog> {
           decoration: _rowDecoration(selected: selected, hovered: _hoverTool == i),
           child: Row(
             children: [
+              if (widget.switcher)
+                SizedBox(
+                  width: 18,
+                  child: Text(tool.mnemonic ?? '', style: const TextStyle(color: IntelliJTheme.textMuted, fontSize: 12.5)),
+                ),
               tool.icon(IntelliJTheme.textPrimary, 16),
               const SizedBox(width: 8),
               Expanded(child: _highlighted(tool.label, indices, const TextStyle(color: IntelliJTheme.textHigh, fontSize: 13))),
-              if (tool.shortcut != null) ...[
+              if (!widget.switcher && tool.shortcut != null) ...[
                 const SizedBox(width: 6),
                 Text(tool.shortcut!, style: const TextStyle(color: IntelliJTheme.textMuted, fontSize: 12)),
               ],

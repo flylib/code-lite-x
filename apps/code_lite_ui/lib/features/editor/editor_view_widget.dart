@@ -846,8 +846,8 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
       return KeyEventResult.handled;
     }
 
-    // Tab / Shift+Tab
-    if (event.logicalKey == LogicalKeyboardKey.tab) {
+    // Tab / Shift+Tab(⌃⇥ 是 Switcher,不在这里)
+    if (event.logicalKey == LogicalKeyboardKey.tab && !isCmd) {
       if (isShift) {
         controller.unindent();
       } else {

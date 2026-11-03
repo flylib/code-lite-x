@@ -50,6 +50,7 @@ void main() {
         KeymapIds.make: null,
         KeymapIds.gotoFile: '⇧⌘O',
         KeymapIds.recentFiles: '⌘E',
+        KeymapIds.switcher: '⌃⇥',
         KeymapIds.collapseRegion: '⌘-',
         KeymapIds.expandRegion: '⌘=',
         KeymapIds.collapseAll: '⇧⌘-',

@@ -536,6 +536,9 @@ class _TerminalViewState extends State<TerminalView> implements TextInputClient 
       return KeyEventResult.ignored; // 其余 ⌘ 组合留给应用快捷键
     }
 
+    // ⌃⇥ 是 Switcher(同 IntelliJ 的终端),交给应用
+    if (key == LogicalKeyboardKey.tab && keys.isControlPressed) return KeyEventResult.ignored;
+
     final special = _encodeSpecial(key, shift: keys.isShiftPressed, alt: keys.isAltPressed);
     if (special != null) {
       _send(special);

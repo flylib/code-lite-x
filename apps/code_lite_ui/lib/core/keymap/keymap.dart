@@ -74,6 +74,7 @@ abstract final class KeymapIds {
   static const hideAll = 'HideAllWindows';
   static const gotoFile = 'GotoFile';
   static const recentFiles = 'RecentFiles';
+  static const switcher = 'Switcher';
   static const make = 'ActivateMakeToolWindow';
   static const collapseRegion = 'CollapseRegion';
   static const expandRegion = 'ExpandRegion';
@@ -86,7 +87,7 @@ abstract final class KeymapIds {
   static const rename = 'RenameElement';
 }
 
-/// 目前支持配置的操作:打开 / 收起各个工具窗、Go to File、Recent Files、代码折叠、编辑(复制行、查找)。默认键位取自 IntelliJ。
+/// 目前支持配置的操作:打开 / 收起各个工具窗、Go to File、Recent Files、Switcher、代码折叠、编辑(复制行、查找)。默认键位取自 IntelliJ。
 const List<KeymapAction> keymapActions = [
   KeymapAction(id: KeymapIds.project, titleZh: '项目', titleEn: 'Project', keymapGroup: KeymapGroup.toolWindows, mac: ['meta 1'], other: ['alt 1']),
   KeymapAction(id: KeymapIds.commit, titleZh: '提交', titleEn: 'Commit', keymapGroup: KeymapGroup.toolWindows, mac: ['meta 0'], other: ['alt 0']),
@@ -101,6 +102,7 @@ const List<KeymapAction> keymapActions = [
   KeymapAction(id: KeymapIds.make, titleZh: 'make', titleEn: 'make', keymapGroup: KeymapGroup.toolWindows, intellijIds: ['ActivatemakeToolWindow']),
   KeymapAction(id: KeymapIds.gotoFile, titleZh: '转到文件', titleEn: 'Go to File', keymapGroup: KeymapGroup.navigation, mac: ['shift meta O'], other: ['ctrl shift N']),
   KeymapAction(id: KeymapIds.recentFiles, titleZh: '最近的文件', titleEn: 'Recent Files', keymapGroup: KeymapGroup.navigation, mac: ['meta E'], other: ['ctrl E']),
+  KeymapAction(id: KeymapIds.switcher, titleZh: '切换器', titleEn: 'Switcher', keymapGroup: KeymapGroup.navigation, mac: ['ctrl TAB', 'ctrl shift TAB'], other: ['ctrl TAB', 'ctrl shift TAB']),
   KeymapAction(id: KeymapIds.collapseRegion, titleZh: '折叠', titleEn: 'Collapse', keymapGroup: KeymapGroup.folding, mac: ['meta MINUS'], other: ['ctrl MINUS']),
   KeymapAction(id: KeymapIds.expandRegion, titleZh: '展开', titleEn: 'Expand', keymapGroup: KeymapGroup.folding, mac: ['meta EQUALS'], other: ['ctrl EQUALS']),
   KeymapAction(id: KeymapIds.collapseAll, titleZh: '全部折叠', titleEn: 'Collapse All', keymapGroup: KeymapGroup.folding, mac: ['shift meta MINUS'], other: ['ctrl shift MINUS']),
