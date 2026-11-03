@@ -104,6 +104,17 @@ class IntelliJTheme {
       primaryColor: accentBlue,
       canvasColor: popupBg,
       dialogTheme: const DialogThemeData(backgroundColor: popupBg),
+      // 所有悬停提示(blame、按钮……)统一成 IntelliJ 的深色提示:深底、白字、细边框
+      tooltipTheme: TooltipThemeData(
+        decoration: BoxDecoration(
+          color: popupBg,
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: stripeActiveBg),
+          boxShadow: const [BoxShadow(color: Color(0x66000000), blurRadius: 8, offset: Offset(0, 2))],
+        ),
+        textStyle: const TextStyle(color: textHigh, fontSize: 12, height: 1.45),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      ),
       cardColor: cardBg,
       dividerColor: borderSubtle,
       textTheme: const TextTheme(

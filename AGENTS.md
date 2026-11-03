@@ -71,6 +71,7 @@ CodeLiteX 是一款高性能的原生跨平台代码编辑器，内置 Git 管�
 **整体外观（分支 `feat/islands-ui`）**
 - 完整复刻 IntelliJ 新 UI 的「Islands Dark」：标题栏、活动条、状态栏和岛之间的缝是窗口底色 `#24282C`；编辑区、侧边工具窗、底部工具窗是一块块 8px 圆角的岛 `#181A1C`，岛之间留 5px 缝（缝就是拖动调整大小的地方）。颜色是从用户给的 IntelliJ 截图逐像素取的，见 `IntelliJTheme` / `IntelliJMetrics`、`core/theme/island.dart`。
 - 标题栏：左边红绿灯、项目、分支，左侧带项目颜色的光晕；右边 Current File ▾、运行、调试、⋮，再隔开是搜索和设置。没有搜索框、没有文件路径、没有撤销 / 重做按钮（⌘Z 照常）。
+- 悬停提示（所有 Tooltip：blame、按钮……）是深底白字：`popupBg` 底、细边框、圆角 6、阴影、`textHigh` 字，统一在 `IntelliJTheme.darkTheme` 的 `tooltipTheme` 里，单个 Tooltip 不要自己配颜色。
 - 编辑器标签是圆角块，选中的是蓝灰底 `#25334E`，没有下划线；× 只在选中或悬停时出现。活动条选中的按钮是实心灰色圆角块。代码区默认配色 Islands Dark（Markdown 标题是粉色 `#C77DBB`）。
 
 **工具窗与布局**
