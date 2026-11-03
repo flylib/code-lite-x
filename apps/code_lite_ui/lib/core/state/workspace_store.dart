@@ -84,6 +84,7 @@ class WorkspaceStore extends ChangeNotifier with DisposeSafeNotifier {
     }
     final target = snap.active != null && opened.contains(snap.active) ? snap.active : opened.lastOrNull;
     if (target != null) await openFile(target); // 顺带取大纲
+    _sessions.restoreRecent(snap.recent, snap.edited);
   }
 
   /// 诊断更新说明语言服务器重新分析过当前文件:状态栏的错误数要变,大纲也顺带刷新。

@@ -31,18 +31,26 @@ class TabSnapshot {
 /// 一个项目关掉(或应用退出)时的编辑区状态:打开的标签(按标签栏顺序)和当前标签。
 /// 只记真实文件的标签 —— Commit 差异、PR 页面这类特殊标签不恢复。
 class SessionSnapshot {
-  const SessionSnapshot({this.tabs = const [], this.active});
+  const SessionSnapshot({this.tabs = const [], this.active, this.recent = const [], this.edited = const []});
 
   final List<TabSnapshot> tabs;
 
   /// 当前标签的文件;null 时恢复后停在最后一个标签。
   final String? active;
 
+  /// 最近打开过的文件(新的在前,标签关了也算),Recent Files(⌘E)用。
+  final List<String> recent;
+
+  /// 改过的文件(新的在前),Recent Files 里「仅显示已编辑」用。
+  final List<String> edited;
+
   bool get isEmpty => tabs.isEmpty;
 
   Map<String, dynamic> toJson() => {
         'tabs': [for (final t in tabs) t.toJson()],
         if (active != null) 'active': active,
+        if (recent.isNotEmpty) 'recent': recent,
+        if (edited.isNotEmpty) 'edited': edited,
       };
 
   static SessionSnapshot fromJson(Object? j) {
@@ -53,7 +61,20 @@ class SessionSnapshot {
         if (TabSnapshot.fromJson(t) case final tab? when seen.add(tab.path)) tab,
     ];
     final active = j['active'];
-    return SessionSnapshot(tabs: tabs, active: active is String && seen.contains(active) ? active : null);
+    List<String> paths(Object? v) {
+      final out = <String>{};
+      for (final p in (v is List ? v : const [])) {
+        if (p is String && p.isNotEmpty) out.add(p);
+      }
+      return out.toList();
+    }
+
+    return SessionSnapshot(
+      tabs: tabs,
+      active: active is String && seen.contains(active) ? active : null,
+      recent: paths(j['recent']),
+      edited: paths(j['edited']),
+    );
   }
 
   /// 内容签名:没变就不必写盘。

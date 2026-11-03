@@ -91,6 +91,9 @@ CodeLiteX 是一款高性能的原生跨平台代码编辑器，内置 Git 管�
 **Go to File**
 - ⇧⌘O（其它平台 Ctrl+Shift+N，可在 Keymap 里改）弹出 IntelliJ 式的按文件名查找：文件清单常驻 Rust，打字实时模糊匹配；没有 `/` 只匹配文件名，有 `/` 匹配路径；`Foo.java:120:5` 打开后跳到那一行那一列；没输入时列出打开着的标签；↑↓ 选，回车打开，Esc 关。不收 `.git`、`node_modules`、`target`、`build`、`.dart_tool`、`.gradle`、`.idea`、`out` 下的文件（`.github` 这类点目录照收，同 IntelliJ）。
 
+**Recent Files**
+- ⌘E（其它平台 Ctrl+E，action id `RecentFiles`，Keymap 里归「导航」）弹出 IntelliJ 式的「最近的文件」：左栏是工具窗（提交、项目、make、终端、问题、结构、Git、Maven、打开的项目、拉取请求，有快捷键的显示快捷键，点了 / 回车打开那个工具窗，已开着就保持开着），右栏是最近打开过的文件（新的在前，**标签关了的也在**，已删除的不列），底部是选中文件所在目录（`~/` 开头）。打开时选中第二个（第一个是当前文件，⌘E 回车 = 回到上一个文件）。同名文件后面灰字标相对目录，项目外的文件标位置。弹出来后再按 ⌘E（或点右上角）切换「仅显示已编辑」（标题变「最近编辑的文件」）；直接打字是快速搜索（同文件树的匹配规则），Esc 先清搜索再关；↑↓ 选、←→ 换栏、回车打开；选中 / 悬停的行右边有「在右侧拆分中打开」。最近文件和编辑过的文件每个项目各记 50 个，存在会话里（`sessions.json` 的 `recent` / `edited`），别处改了磁盘内容不算编辑（`EditorSessionManager.recentFiles` / `editedFiles`、`recent_files_dialog.dart`）。
+
 **项目**
 - 一个进程同时打开多个项目，都留在内存里，切换只是换显示哪一个。「Opening Projects」列表里点 × 才真正关闭，关闭时有未保存的修改要问。
 - 标题栏的项目下拉：直接打字就开始搜索、过滤项目（IntelliJ 的做法）。

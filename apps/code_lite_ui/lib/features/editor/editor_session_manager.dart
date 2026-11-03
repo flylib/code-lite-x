@@ -78,6 +78,15 @@ class EditorSessionManager extends ChangeNotifier with DisposeSafeNotifier {
   String? _secondaryActivePath;
   SplitDirection _splitDirection = SplitDirection.none;
 
+  /// 最近打开过的文件(IntelliJ 的 Recent Files,⌘E):新的在前,标签关了也留着。
+  final List<String> _recent = [];
+
+  /// 改过的文件,新的在前(Recent Files 里「仅显示已编辑」)。
+  final List<String> _edited = [];
+
+  /// 两张表各留多少个(IntelliJ 的 Recent files limit 默认 50)。
+  static const int maxRecentFiles = 50;
+
   /// [appearance]:所有项目共用同一份外观设置(传进来);不传就自己建一份(单项目 / 测试)。
   EditorSessionManager({required this.client, EditorAppearance? appearance})
       : appearance = appearance ?? EditorAppearance(),
@@ -185,6 +194,45 @@ class EditorSessionManager extends ChangeNotifier with DisposeSafeNotifier {
   }
 
   Map<String, EditorTabState> get tabs => Map.unmodifiable(_tabs);
+
+  /// 最近打开过的文件,新的在前(包括已经关掉标签的)。
+  List<String> get recentFiles => List.unmodifiable(_recent);
+
+  /// 改过的文件,新的在前。
+  List<String> get editedFiles => List.unmodifiable(_edited);
+
+  /// 放到 [list] 最前面(已在最前就不动),超出上限丢最旧的。返回有没有变。
+  static bool _bump(List<String> list, String path) {
+    if (list.isNotEmpty && list.first == path) return false;
+    list.remove(path);
+    list.insert(0, path);
+    if (list.length > maxRecentFiles) list.removeRange(maxRecentFiles, list.length);
+    return true;
+  }
+
+  /// 恢复上次记下的最近文件 / 改过的文件(打开项目时),当前标签排在最前。
+  void restoreRecent(List<String> recent, List<String> edited) {
+    if (recent.isNotEmpty) {
+      _recent
+        ..clear()
+        ..addAll(recent.take(maxRecentFiles));
+    }
+    _edited
+      ..clear()
+      ..addAll(edited.take(maxRecentFiles));
+    final active = _activePath;
+    if (active != null && _tabs.containsKey(active)) _bump(_recent, active);
+    notifyListeners();
+  }
+
+  /// 每次状态变化时看一眼当前标签:换到了一个文件就把它排到最近文件的最前面。
+  /// (打开、切换、关掉后落到的标签都算;差异 / PR 这类特殊标签不算。)
+  @override
+  void notifyListeners() {
+    final active = _activePath;
+    if (active != null && _tabs.containsKey(active)) _bump(_recent, active);
+    super.notifyListeners();
+  }
   List<String> get openPaths => List.unmodifiable(_tabOrder);
   String? get activePath => _activePath;
   EditorTabState? get activeTab => _activePath != null ? _tabs[_activePath] : null;
@@ -250,7 +298,12 @@ class EditorSessionManager extends ChangeNotifier with DisposeSafeNotifier {
       tabs.add(TabSnapshot(path: path, line: pos.line, col: pos.col, scroll: tab.scrollOffset));
     }
     final active = _activePath;
-    return SessionSnapshot(tabs: tabs, active: tabs.any((t) => t.path == active) ? active : null);
+    return SessionSnapshot(
+      tabs: tabs,
+      active: tabs.any((t) => t.path == active) ? active : null,
+      recent: List.of(_recent),
+      edited: List.of(_edited),
+    );
   }
 
   /// Opens a tab or switches to it if already open.
@@ -294,6 +347,7 @@ class EditorSessionManager extends ChangeNotifier with DisposeSafeNotifier {
       if (tab.loadError == null) _queueChange(tab.filePath, c);
     });
     tab.controller.onTextChanged = () {
+      if (!_loadingExternal) _bump(_edited, tab.filePath);
       if (tab.loadError == null) {
         _scheduleDidChange(tab.filePath);
         if (autosave) _scheduleSave(tab.filePath);
@@ -338,6 +392,10 @@ class EditorSessionManager extends ChangeNotifier with DisposeSafeNotifier {
       _tabOrder[_tabOrder.indexOf(old)] = next;
       if (_activePath == old) _activePath = next;
       if (_secondaryActivePath == old) _secondaryActivePath = next;
+      for (final list in [_recent, _edited]) {
+        final i = list.indexOf(old);
+        if (i >= 0) list[i] = next;
+      }
       if (tab.loadError == null) {
         client.lspDidOpen(next, tab.controller.text);
         if (autosave && tab.isDirty) _scheduleSave(next);
@@ -396,9 +454,17 @@ class EditorSessionManager extends ChangeNotifier with DisposeSafeNotifier {
   void _loadExternal(EditorTabState tab, String disk) {
     tab.diskText = disk;
     tab.diskConflict = null;
-    tab.controller.replaceAllText(disk);
+    // 别处改的,不算「编辑过」
+    _loadingExternal = true;
+    try {
+      tab.controller.replaceAllText(disk);
+    } finally {
+      _loadingExternal = false;
+    }
     tab.controller.markSaved();
   }
+
+  bool _loadingExternal = false;
 
   /// 冲突时选「载入磁盘版本」:换成磁盘上的内容,这里没保存的修改丢掉(⌘Z 能找回)。
   void loadDiskVersion(String path) {
@@ -502,6 +568,8 @@ class EditorSessionManager extends ChangeNotifier with DisposeSafeNotifier {
     }
     _tabs.clear();
     _tabOrder.clear();
+    _recent.clear();
+    _edited.clear();
     _activePath = null;
     _secondaryActivePath = null;
     _splitDirection = SplitDirection.none;

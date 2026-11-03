@@ -14,6 +14,7 @@ import 'core/state/settings_store.dart';
 import 'core/keymap/keymap.dart';
 import 'core/platform/workspace_io.dart' as io;
 import 'core/state/workspace_store.dart';
+import 'core/theme/app_icons.dart';
 import 'core/theme/intellij_theme.dart';
 import 'core/theme/island.dart';
 import 'features/make/make_panel.dart';
@@ -43,6 +44,7 @@ import 'features/pull_requests/pr_timeline_tab.dart';
 import 'features/project_explorer/structure_widget.dart';
 import 'features/search/global_search_modal.dart';
 import 'features/search/goto_file_dialog.dart';
+import 'features/search/recent_files_dialog.dart';
 import 'features/settings/settings_dialog.dart';
 import 'features/status_bar/status_bar_widget.dart';
 import 'features/terminal/terminal_store.dart';
@@ -472,6 +474,7 @@ class _Workbench extends StatelessWidget {
       KeymapIds.problems: () => layout.selectBottomTab(BottomToolTab.problems),
       KeymapIds.hideAll: layout.toggleHideAll,
       KeymapIds.gotoFile: () => _gotoFile(context),
+      KeymapIds.recentFiles: () => _recentFiles(context, layout),
       KeymapIds.collapseRegion: () => context.sessionRead.activeTab?.controller.collapseRegionAtCaret(),
       KeymapIds.expandRegion: () => context.sessionRead.activeTab?.controller.expandRegionAtCaret(),
       KeymapIds.collapseAll: () => context.sessionRead.activeTab?.controller.collapseAllRegions(),
@@ -508,6 +511,112 @@ class _Workbench extends StatelessWidget {
     // 已经开着就用那个标签的路径;否则和文件树一样用绝对路径
     final path = tabs[target.path] ?? (target.path.startsWith('/') ? target.path : '$root/${target.path}');
     await openFileAt(workspace, sessions, path, (target.line ?? 1) - 1, (target.column ?? 1) - 1);
+  }
+
+  /// Recent Files(⌘E,同 IntelliJ):左边是工具窗,右边是最近打开过的文件(标签关了的也在,新的在前)。
+  /// 选文件就打开它(也可以在右侧拆分中打开),选工具窗就打开那个工具窗。
+  Future<void> _recentFiles(BuildContext context, LayoutStore layout) async {
+    final workspace = context.workspaceRead;
+    final sessions = context.sessionRead;
+    final root = workspace.rootPath;
+    if (root == null) return;
+    final home = io.homeDirectory();
+
+    // 同一个文件有时记的是相对路径、有时是绝对路径:按绝对路径合并,打开着的用标签自己的路径
+    final tabPaths = {
+      for (final p in sessions.openPaths)
+        if (!sessions.isSpecialTab(p)) absoluteFilePath(root, p): p,
+    };
+    final exists = <String, bool>{};
+    Future<List<String>> resolve(List<String> paths) async {
+      final out = <String>[];
+      for (final p in paths) {
+        final abs = absoluteFilePath(root, p);
+        if (out.contains(abs)) continue;
+        // 关掉的标签可能已经删了 / 改了名
+        if (!(exists[abs] ??= tabPaths.containsKey(abs) || await io.fileExists(abs))) continue;
+        out.add(abs);
+      }
+      return out;
+    }
+
+    final recent = await resolve(sessions.recentFiles);
+    final edited = await resolve(sessions.editedFiles);
+    if (!context.mounted) return;
+    String nameOf(String abs) => abs.substring(abs.lastIndexOf('/') + 1);
+    String dirOf(String abs) => abs.substring(0, abs.lastIndexOf('/'));
+    final nameCount = <String, int>{};
+    for (final abs in {...recent, ...edited}) {
+      nameCount[nameOf(abs)] = (nameCount[nameOf(abs)] ?? 0) + 1;
+    }
+    RecentFileItem item(String abs) {
+      final inProject = abs.startsWith('$root/');
+      final dir = dirOf(abs);
+      return RecentFileItem(
+        path: abs,
+        name: nameOf(abs),
+        // 项目外的文件标出位置;同名的标出所在目录(同 IntelliJ)
+        detail: !inProject ? abbreviatePath(dir, home) : ((nameCount[nameOf(abs)] ?? 0) > 1 && dir != root ? dir.substring(root.length + 1) : null),
+        directory: abbreviatePath(dir, home),
+      );
+    }
+
+    final keymap = settings.keymap;
+    String? keyLabel(String id) => keymap?.labelOf(id);
+    final tools = [
+      RecentToolItem(id: KeymapIds.commit, label: tr('提交', 'Commit'), icon: (c, s) => Icon(Icons.task_alt, color: c, size: s), shortcut: keyLabel(KeymapIds.commit)),
+      RecentToolItem(id: KeymapIds.project, label: tr('项目', 'Project'), icon: (c, s) => Icon(Icons.folder_outlined, color: c, size: s), shortcut: keyLabel(KeymapIds.project)),
+      if (make.hasMakefiles)
+        RecentToolItem(id: KeymapIds.make, label: 'make', icon: (c, s) => MakefileIcon(color: c, size: s), shortcut: keyLabel(KeymapIds.make)),
+      RecentToolItem(id: KeymapIds.terminal, label: tr('终端', 'Terminal'), icon: (c, s) => Icon(Icons.terminal_outlined, color: c, size: s), shortcut: keyLabel(KeymapIds.terminal)),
+      RecentToolItem(id: KeymapIds.problems, label: tr('问题', 'Problems'), icon: (c, s) => Icon(Icons.error_outline, color: c, size: s), shortcut: keyLabel(KeymapIds.problems)),
+      RecentToolItem(id: KeymapIds.structure, label: tr('结构', 'Structure'), icon: (c, s) => Icon(Icons.account_tree_outlined, color: c, size: s), shortcut: keyLabel(KeymapIds.structure)),
+      RecentToolItem(id: KeymapIds.git, label: 'Git', icon: (c, s) => GitBranchIcon(color: c, size: s), shortcut: keyLabel(KeymapIds.git)),
+      if (buildTools.hasProjects)
+        RecentToolItem(id: KeymapIds.build, label: buildTools.title, icon: (c, s) => BuildToolIcon(color: c, size: s), shortcut: keyLabel(KeymapIds.build)),
+      RecentToolItem(id: KeymapIds.openProjects, label: tr('打开的项目', 'Opening Projects'), icon: (c, s) => Icon(Icons.layers_outlined, color: c, size: s), shortcut: keyLabel(KeymapIds.openProjects)),
+      RecentToolItem(id: KeymapIds.pullRequests, label: tr('拉取请求', 'Pull Requests'), icon: (c, s) => PullRequestIcon(color: c, size: s), shortcut: keyLabel(KeymapIds.pullRequests)),
+    ];
+
+    final active = sessions.activePath;
+    final choice = await showRecentFilesDialog(
+      context,
+      files: [for (final abs in recent) item(abs)],
+      editedFiles: [for (final abs in edited) item(abs)],
+      tools: tools,
+      currentFile: active == null ? null : absoluteFilePath(root, active),
+      toggleKeys: [for (final k in keymap?.shortcutsOf(KeymapIds.recentFiles) ?? const <KeyStroke>[]) k.activator],
+      toggleLabel: keyLabel(KeymapIds.recentFiles),
+    );
+    if (choice == null || !context.mounted) return;
+
+    final tool = choice.tool;
+    if (tool != null) {
+      // 打开(已经开着就保持开着),不像按快捷键那样再按一次收起
+      switch (tool) {
+        case KeymapIds.terminal:
+          layout.showBottomTab(BottomToolTab.terminal);
+        case KeymapIds.git:
+          layout.showBottomTab(BottomToolTab.git);
+        case KeymapIds.problems:
+          layout.showBottomTab(BottomToolTab.problems);
+        default:
+          for (final t in SideTool.values) {
+            if (keymapIdOf(t) == tool) layout.showTool(t);
+          }
+      }
+      return;
+    }
+
+    final abs = choice.file!;
+    final path = tabPaths[abs] ?? abs;
+    final previous = sessions.activePath;
+    await workspace.openFile(path);
+    if (!choice.split) return;
+    // 在右侧拆分中打开:左边留着原来的文件,右边是这个
+    if (previous != null && previous != path) sessions.selectTab(previous);
+    final direction = sessions.splitDirection == SplitDirection.none ? SplitDirection.horizontal : sessions.splitDirection;
+    sessions.splitPane(direction, path);
   }
 
   void _openSearch(BuildContext context) {

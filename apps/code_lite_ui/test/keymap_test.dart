@@ -49,6 +49,7 @@ void main() {
         KeymapIds.hideAll: '⇧⌘F12',
         KeymapIds.make: null,
         KeymapIds.gotoFile: '⇧⌘O',
+        KeymapIds.recentFiles: '⌘E',
         KeymapIds.collapseRegion: '⌘-',
         KeymapIds.expandRegion: '⌘=',
         KeymapIds.collapseAll: '⇧⌘-',
