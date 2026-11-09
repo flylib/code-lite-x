@@ -86,6 +86,9 @@ class EditorViewWidget extends StatefulWidget {
   /// Blame 菜单的 Show in File History:打开 Git Log 并按文件筛选、选中该提交。
   final void Function(String hash, String path)? onShowInHistory;
 
+  /// 复制引用(⌥⇧⌘C / 右键 ▸ 复制/粘贴特殊 ▸ 复制引用):[path] 是这个面板的文件,光标在 [controller] 里。
+  final void Function(String path, CodeEditorController controller)? onCopyReference;
+
   /// 非文件标签(比如 `diff:路径` 的「Commit: 文件名」差异视图)的内容。返回 null 表示按普通文件处理。
   final Widget? Function(String tabId)? specialTabBuilder;
 
@@ -112,6 +115,7 @@ class EditorViewWidget extends StatefulWidget {
     this.projectName = '',
     this.appearance,
     this.onShowInHistory,
+    this.onCopyReference,
     this.specialTabBuilder,
     this.specialTabTitle,
     this.bannerBuilder,
@@ -683,6 +687,13 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
     if (_isShortcut(KeymapIds.duplicate, event)) {
       controller.duplicateLineOrSelection();
       imeBridge?.syncState();
+      return KeyEventResult.handled;
+    }
+
+    // 复制引用(默认 ⌥⇧⌘C)
+    if (widget.onCopyReference != null && _isShortcut(KeymapIds.copyReference, event)) {
+      final path = isPrimary ? widget.activeFile : widget.secondaryTab?.filePath;
+      if (path != null) widget.onCopyReference!(path, controller);
       return KeyEventResult.handled;
     }
 
@@ -1312,7 +1323,17 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
                               builder: (context, viewport) => SingleChildScrollView(
                               controller: horizontalScroll,
                               scrollDirection: Axis.horizontal,
-                              child: GestureDetector(
+                              child: ContextMenuRegion(
+                                // 右键点在选区外:光标先挪过去(同 IntelliJ),再弹菜单
+                                onOpen: (local) {
+                                  focusNode.requestFocus();
+                                  final pos = _positionAt(local, lines, highlighter, controller.folds);
+                                  final sel = controller.selection;
+                                  if (sel.isCollapsed || pos < sel.start || sel.end < pos) controller.setCursor(pos);
+                                  imeBridge?.syncState();
+                                },
+                                menuBuilder: (_) => _codeMenu(controller, filePath, imeBridge),
+                                child: GestureDetector(
                                 behavior: HitTestBehavior.opaque,
                                 onDoubleTapDown: (details) {
                                   final pos = _positionAt(details.localPosition, lines, highlighter, controller.folds);
@@ -1385,6 +1406,7 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
                                 ),
                               ),
                               ), // Listener
+                            ), // ContextMenuRegion
                             ),
                             ),
                           ),
@@ -1784,6 +1806,47 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
       }
     }
     return cols ~/ _indentUnit;
+  }
+
+  /// 代码区右键菜单(照 IntelliJ 编辑区的右键菜单,一项项补)。
+  List<Widget> _codeMenu(CodeEditorController controller, String filePath, ImeTextInputBridge? imeBridge) {
+    MenuSerializableShortcut? shortcutOf(String id) =>
+        (widget.keymap ?? _defaultKeymap).shortcutsOf(id).firstOrNull?.activator as MenuSerializableShortcut?;
+    final meta = defaultTargetPlatform == TargetPlatform.macOS;
+    return [
+      MenuItemButton(
+        shortcut: SingleActivator(LogicalKeyboardKey.keyX, meta: meta, control: !meta),
+        onPressed: () {
+          controller.cut();
+          imeBridge?.syncState();
+        },
+        child: Text(tr('剪切', 'Cut')),
+      ),
+      MenuItemButton(
+        shortcut: SingleActivator(LogicalKeyboardKey.keyC, meta: meta, control: !meta),
+        onPressed: controller.copy,
+        child: Text(tr('复制', 'Copy')),
+      ),
+      MenuItemButton(
+        shortcut: SingleActivator(LogicalKeyboardKey.keyV, meta: meta, control: !meta),
+        onPressed: () {
+          controller.paste();
+          imeBridge?.syncState();
+        },
+        child: Text(tr('粘贴', 'Paste')),
+      ),
+      SubmenuButton(
+        menuChildren: [
+          MenuItemButton(
+            key: const ValueKey('editor-copy-reference'),
+            shortcut: shortcutOf(KeymapIds.copyReference),
+            onPressed: widget.onCopyReference == null ? null : () => widget.onCopyReference!(filePath, controller),
+            child: Text(tr('复制引用', 'Copy Reference')),
+          ),
+        ],
+        child: Text(tr('复制/粘贴特殊', 'Copy / Paste Special')),
+      ),
+    ];
   }
 
   /// 行号栏右键菜单。

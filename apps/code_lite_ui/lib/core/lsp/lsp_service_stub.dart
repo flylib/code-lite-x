@@ -75,6 +75,10 @@ class LspService {
     }
   }
 
+  Future<LspLocation?> definition(String relPath, String text, int line, int col) async => null;
+
+  Future<List<LspWorkspaceSymbol>> workspaceSymbols(String query) async => const [];
+
   Future<Map<String, dynamic>> status() async => {'servers': <Map<String, dynamic>>[]};
 
   Future<void> dispose() async {

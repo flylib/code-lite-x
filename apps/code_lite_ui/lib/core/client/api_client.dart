@@ -174,6 +174,12 @@ class ApiClient {
   /// 结构大纲:LSP documentSymbol,拿不到时退回正则解析。
   Future<List<Map<String, dynamic>>> documentSymbols(String path, String text) => _lsp.documentSymbols(path, text);
 
+  /// 跳到定义(语言服务器);[line] / [col] 从 0 起。没有服务端、定义在工作区外时为 null。
+  Future<LspLocation?> lspDefinition(String path, String text, int line, int col) => _lsp.definition(path, text, line, col);
+
+  /// 工作区符号(语言服务器的 workspace/symbol):Search Everywhere 的「类」「符号」用。
+  Future<List<LspWorkspaceSymbol>> lspWorkspaceSymbols(String query) => _lsp.workspaceSymbols(query);
+
   Future<Map<String, dynamic>> lspStatus() => _lsp.status();
 
   void _attachLsp() {

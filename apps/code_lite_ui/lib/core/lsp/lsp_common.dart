@@ -32,6 +32,27 @@ class LspLaunch {
 }
 
 /// 分组 → 插件提供的启动方式;没有插件接管时返回 null(按系统里找到的命令启动)。
+/// 语言服务器给的一个位置:工作区相对路径 + 行列(都从 0 起)。
+class LspLocation {
+  const LspLocation(this.path, this.line, this.col);
+
+  final String path;
+  final int line;
+  final int col;
+}
+
+/// workspace/symbol 的一条结果。[kind] 是 LSP 的 SymbolKind(5 类、6 方法、8 字段、10 枚举、11 接口……)。
+class LspWorkspaceSymbol {
+  const LspWorkspaceSymbol({required this.name, required this.kind, required this.location, this.container});
+
+  final String name;
+  final int kind;
+  final String? container;
+  final LspLocation location;
+
+  bool get isType => kind == 5 || kind == 10 || kind == 11 || kind == 23;
+}
+
 typedef LspLaunchResolver = LspLaunch? Function(String group);
 
 /// 一处文本改动(LSP 增量同步的 contentChanges 一项):把旧文档里

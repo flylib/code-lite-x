@@ -481,6 +481,81 @@ class LspService {
   }
 
   // =========================================================================
+  // 跳到定义 / 工作区符号
+  // =========================================================================
+
+  /// textDocument/definition:[line] / [col] 从 0 起。返回定义所在位置(工作区相对路径);
+  /// 没有服务端、超时、定义在工作区外(JDK、依赖包)时返回 null。
+  Future<LspLocation?> definition(String relPath, String text, int line, int col) async {
+    try {
+      if (_disposed) return null;
+      final lang = languageIdFor(relPath);
+      if (lang == null) return null;
+      final server = _serverFor(lang);
+      if (server == null || server.fallback) return null;
+      _Doc? temp;
+      final doc = _docs[relPath];
+      if (doc == null) {
+        temp = _docs[relPath] = _Doc(lang, text)..temporary = true;
+        final proc = server.ready;
+        if (proc != null) _sendDidOpen(proc, relPath, temp);
+      } else if (doc.text != text) {
+        await didChange(relPath, text);
+      }
+      final result = await _request(server, 'textDocument/definition', {
+        'textDocument': {'uri': _uriFor(relPath)},
+        'position': {'line': line, 'character': col},
+      });
+      if (temp != null && temp.temporary && identical(_docs[relPath], temp)) {
+        _docs.remove(relPath);
+        server.ready?.notify('textDocument/didClose', {
+          'textDocument': {'uri': _uriFor(relPath)},
+        });
+      }
+      final first = result is List ? (result.isEmpty ? null : result.first) : result;
+      if (first is! Map) return null;
+      // Location 或 LocationLink
+      final uri = (first['uri'] ?? first['targetUri']) as String?;
+      final range = (first['targetSelectionRange'] ?? first['range'] ?? first['targetRange']) as Map?;
+      if (uri == null || range == null) return null;
+      final rel = _relFromUri(uri);
+      if (rel == null) return null;
+      final start = range['start'] as Map;
+      return LspLocation(rel, (start['line'] as num).toInt(), (start['character'] as num).toInt());
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// workspace/symbol:问所有在跑的语言服务器,只留工作区里的结果。没有服务端时返回空。
+  Future<List<LspWorkspaceSymbol>> workspaceSymbols(String query) async {
+    if (_disposed || query.trim().isEmpty) return const [];
+    final out = <LspWorkspaceSymbol>[];
+    for (final server in _servers.values.toList()) {
+      if (server.ready == null) continue;
+      try {
+        final result = await _request(server, 'workspace/symbol', {'query': query});
+        if (result is! List) continue;
+        for (final item in result) {
+          if (item is! Map) continue;
+          final loc = item['location'];
+          if (loc is! Map) continue;
+          final rel = _relFromUri(loc['uri'] as String? ?? '');
+          if (rel == null) continue;
+          final start = (loc['range'] as Map?)?['start'] as Map?;
+          out.add(LspWorkspaceSymbol(
+            name: item['name'] as String? ?? '',
+            kind: (item['kind'] as num?)?.toInt() ?? 0,
+            container: item['containerName'] as String?,
+            location: LspLocation(rel, (start?['line'] as num?)?.toInt() ?? 0, (start?['character'] as num?)?.toInt() ?? 0),
+          ));
+        }
+      } catch (_) {}
+    }
+    return out;
+  }
+
+  // =========================================================================
   // 状态 / 释放
   // =========================================================================
 

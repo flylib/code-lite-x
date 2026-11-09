@@ -60,6 +60,8 @@ CodeLiteX 是一款高性能的原生跨平台代码编辑器，内置 Git 管�
 - 编辑区最右边的错误条要窄：8px（原 12px 被嫌宽）。点错误条上的标记跳到那个问题（光标到出错的行和列并滚到可见），悬停显示手形光标和错误信息；点空白处滚到文件对应位置；重叠时错误优先于警告（同 IntelliJ）。
 - 文件在别处被改了（别的编辑器、格式化工具、脚本、git）：已打开的标签自动跟上。没保存修改的直接换成磁盘内容（可 ⌘Z 撤回）；有没保存修改的不覆盖任何一边，编辑区上方出提示条让用户选「载入磁盘版本 / 保留我的修改」，选之前不自动保存。靠项目目录的文件监视 + 切回窗口 / 切换项目时再对一遍 + 每次保存前先看一眼磁盘（`EditorSessionManager.syncWithDisk`）。
 - 中文 / 日文输入法：编辑区接上系统输入法时，可打印字符一律交给输入法（先组字再上屏，经 `ImeTextInputBridge.updateEditingValue` 写回文档），编辑器不自己插；组字时退格 / 回车 / 方向键也归输入法。候选窗跟着光标（`reportCaret`）。没有输入法连接时（测试）才直接插字。
+- **代码区右键菜单**（照 IntelliJ 编辑区的右键菜单，一项项补）：右键点在选区外先把光标挪过去，点在选区里保留选区；目前有剪切 / 复制 / 粘贴、**复制/粘贴特殊 ▸ 复制引用**。
+- **复制引用**（IntelliJ 的 Copy Reference，⌥⇧⌘C / 其它平台 Ctrl+Alt+Shift+C，action id `CopyReference`，Keymap 里归「编辑」）：Java 里光标在声明上复制 `com.foo.Bar`（嵌套类 `com.foo.Outer.Inner`）、`com.foo.Bar#baz(com.foo.Dto, int)`（参数是擦除泛型后的全限定名，去掉注解 / final，数组和 `...` 保留，按 import / java.lang / 同包推断）、`com.foo.Bar#count`；光标在调用处先问语言服务器跳到定义（2 秒超时）再按定义算；都没有（非 Java、局部变量、没语言服务器）复制 `相对路径:行号`。复制后右下角提示复制了什么（`core/lsp/java_reference.dart`、`features/editor/copy_reference.dart`）。
 - 每个项目都恢复上次的状态：打开的标签、光标、滚动位置。从文件树打开的标签存的是绝对路径，也要恢复。
 - Markdown 有 Editor / Editor+Preview / Preview 三种模式。能接开源库就接开源库（现用 `flutter_markdown_plus` + `markdown`）；两栏同步滚动不能卡。
 - HTML 文件：编辑器右上角列出本机装了的浏览器，点哪个就用哪个打开。打开方式同 IntelliJ：经内置服务器按 `http://localhost:63342/<项目名>/<相对路径>` 打开，不用 file://。**每个项目一个服务器**，第一次用时启动，项目关闭时随之关闭（`ProjectContext.browserUrlFor`、`core/platform/web_server_native.dart`）；63342 被占了（别的项目或 IntelliJ）就往后找空端口；只听本机、只认 Host 为 localhost 的请求。
@@ -95,6 +97,9 @@ CodeLiteX 是一款高性能的原生跨平台代码编辑器，内置 Git 管�
 **Recent Files**
 - ⌘E（其它平台 Ctrl+E，action id `RecentFiles`，Keymap 里归「导航」）弹出 IntelliJ 式的「最近的文件」：左栏是工具窗（提交、项目、make、终端、问题、结构、Git、Maven、打开的项目、拉取请求，有快捷键的显示快捷键，点了 / 回车打开那个工具窗，已开着就保持开着），右栏是最近打开过的文件（新的在前，**标签关了的也在**，已删除的不列），底部是选中文件所在目录（`~/` 开头）。打开时选中第二个（第一个是当前文件，⌘E 回车 = 回到上一个文件）。同名文件后面灰字标相对目录，项目外的文件标位置。弹出来后再按 ⌘E（或点右上角）切换「仅显示已编辑」（标题变「最近编辑的文件」）；直接打字是快速搜索（同文件树的匹配规则），Esc 先清搜索再关；↑↓ 选、←→ 换栏、回车打开；选中 / 悬停的行右边有「在右侧拆分中打开」。最近文件和编辑过的文件每个项目各记 50 个，存在会话里（`sessions.json` 的 `recent` / `edited`），别处改了磁盘内容不算编辑（`EditorSessionManager.recentFiles` / `editedFiles`、`recent_files_dialog.dart`）。
 - **Switcher**（⌃⇥，⌃⇧⇥ 反向，各平台都是 Ctrl，action id `Switcher`，Keymap 里归「导航」）：和 Recent Files 同一个弹窗（标题「切换器」），左栏工具窗前面是助记键（0 提交、1 项目、3 make、4 终端、6 问题、7 结构、9 Git、M Maven、O 打开的项目、P 拉取请求），右栏是**打开着的**文件，按最近用过的排（当前的在最前）。按住 Ctrl：Tab 往下选、⇧Tab 往上（到头绕回），**松开 Ctrl 打开选中的**；按住 Ctrl 再按助记键打开那个工具窗；方向键 / 回车 / Esc 照常。一开始选中第二个（⌃⇧⇥ 时选最后一个），所以 ⌃⇥ 按一下就松开 = 回到上一个文件。编辑区和终端里的 ⌃⇥ 不再当 Tab，交给 Switcher（`showSwitcherDialog`）。
+
+**Search Everywhere**
+- **连按两下 Shift**（中间不按别的键、间隔 400 ms 内；按着 Shift 打大写字母不算；action id `SearchEverywhere`，Keymap 里可以再加组合键）弹出「随处搜索」：标签 全部 / 类 / 文件 / 符号 / 操作（Tab / ⇧Tab 换标签），输入框，结果列表（「全部」按组列出，每组最多 6 条）。文件走 Rust 文件索引（支持 `Foo.java:12`）；类和符号走语言服务器的 `workspace/symbol`，类另外按文件名找源文件（没有语言服务器也能找）；操作是快捷键表里的操作，中英文都能搜，回车执行。**粘贴「复制引用」的结果**（`com.foo.Bar#baz(com.foo.Dto)`，前面的包可以只给后半段）：按包路径找到 `Bar.java`，在里面按参数类型挑出那个重载，**方法排第一行**、类排第二行，回车直接跳到方法（`search_everywhere_dialog.dart`、`search_everywhere_sources.dart`、`double_shift.dart`）。
 
 **项目**
 - 一个进程同时打开多个项目，都留在内存里，切换只是换显示哪一个。「Opening Projects」列表里点 × 才真正关闭，关闭时有未保存的修改要问。

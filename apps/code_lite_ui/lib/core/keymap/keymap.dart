@@ -75,6 +75,8 @@ abstract final class KeymapIds {
   static const gotoFile = 'GotoFile';
   static const recentFiles = 'RecentFiles';
   static const switcher = 'Switcher';
+  static const searchEverywhere = 'SearchEverywhere';
+  static const copyReference = 'CopyReference';
   static const make = 'ActivateMakeToolWindow';
   static const collapseRegion = 'CollapseRegion';
   static const expandRegion = 'ExpandRegion';
@@ -102,12 +104,15 @@ const List<KeymapAction> keymapActions = [
   KeymapAction(id: KeymapIds.make, titleZh: 'make', titleEn: 'make', keymapGroup: KeymapGroup.toolWindows, intellijIds: ['ActivatemakeToolWindow']),
   KeymapAction(id: KeymapIds.gotoFile, titleZh: '转到文件', titleEn: 'Go to File', keymapGroup: KeymapGroup.navigation, mac: ['shift meta O'], other: ['ctrl shift N']),
   KeymapAction(id: KeymapIds.recentFiles, titleZh: '最近的文件', titleEn: 'Recent Files', keymapGroup: KeymapGroup.navigation, mac: ['meta E'], other: ['ctrl E']),
+  // 默认是连按两下 Shift(不是组合键,固定有效);这里可以再加组合键
+  KeymapAction(id: KeymapIds.searchEverywhere, titleZh: '随处搜索', titleEn: 'Search Everywhere', keymapGroup: KeymapGroup.navigation),
   KeymapAction(id: KeymapIds.switcher, titleZh: '切换器', titleEn: 'Switcher', keymapGroup: KeymapGroup.navigation, mac: ['ctrl TAB', 'ctrl shift TAB'], other: ['ctrl TAB', 'ctrl shift TAB']),
   KeymapAction(id: KeymapIds.collapseRegion, titleZh: '折叠', titleEn: 'Collapse', keymapGroup: KeymapGroup.folding, mac: ['meta MINUS'], other: ['ctrl MINUS']),
   KeymapAction(id: KeymapIds.expandRegion, titleZh: '展开', titleEn: 'Expand', keymapGroup: KeymapGroup.folding, mac: ['meta EQUALS'], other: ['ctrl EQUALS']),
   KeymapAction(id: KeymapIds.collapseAll, titleZh: '全部折叠', titleEn: 'Collapse All', keymapGroup: KeymapGroup.folding, mac: ['shift meta MINUS'], other: ['ctrl shift MINUS']),
   KeymapAction(id: KeymapIds.expandAll, titleZh: '全部展开', titleEn: 'Expand All', keymapGroup: KeymapGroup.folding, mac: ['shift meta EQUALS'], other: ['ctrl shift EQUALS']),
   KeymapAction(id: KeymapIds.duplicate, titleZh: '复制行或所选内容', titleEn: 'Duplicate Line or Selection', keymapGroup: KeymapGroup.editing, mac: ['meta D'], other: ['ctrl D']),
+  KeymapAction(id: KeymapIds.copyReference, titleZh: '复制引用', titleEn: 'Copy Reference', keymapGroup: KeymapGroup.editing, mac: ['alt shift meta C'], other: ['ctrl alt shift C']),
   KeymapAction(id: KeymapIds.find, titleZh: '在当前文件中查找', titleEn: 'Find', keymapGroup: KeymapGroup.editing, mac: ['meta F'], other: ['ctrl F']),
   KeymapAction(id: KeymapIds.findNext, titleZh: '查找下一个', titleEn: 'Find Next', keymapGroup: KeymapGroup.editing, mac: ['meta G'], other: ['F3']),
   KeymapAction(id: KeymapIds.findPrevious, titleZh: '查找上一个', titleEn: 'Find Previous', keymapGroup: KeymapGroup.editing, mac: ['shift meta G'], other: ['shift F3']),

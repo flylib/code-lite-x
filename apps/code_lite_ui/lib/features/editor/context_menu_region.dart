@@ -7,9 +7,12 @@ import '../../core/theme/intellij_theme.dart';
 ///
 /// [menuBuilder] 拿到右键点在本区域内的位置,据此决定菜单内容(比如点的是第几行)。
 class ContextMenuRegion extends StatefulWidget {
-  const ContextMenuRegion({super.key, required this.menuBuilder, required this.child});
+  const ContextMenuRegion({super.key, required this.menuBuilder, required this.child, this.onOpen});
 
   final List<Widget> Function(Offset localPosition) menuBuilder;
+
+  /// 右键按下、菜单弹出之前(比如先把光标挪到点的地方)。
+  final void Function(Offset localPosition)? onOpen;
   final Widget child;
 
   @override
@@ -21,6 +24,7 @@ class _ContextMenuRegionState extends State<ContextMenuRegion> {
   Offset? _position;
 
   void _open(Offset local) {
+    widget.onOpen?.call(local);
     setState(() => _position = local);
     // 菜单内容依赖点击位置:先按新位置重建,下一帧再打开。
     WidgetsBinding.instance.addPostFrameCallback((_) {

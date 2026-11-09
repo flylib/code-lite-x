@@ -2,6 +2,7 @@ import 'package:code_lite_ui/features/editor/code_editor_controller.dart';
 import 'package:code_lite_ui/features/editor/editor_view_widget.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// 点击代码区:光标要在鼠标按下的那一刻就到位(IntelliJ 就是这样),不能等手势判定。
@@ -75,13 +76,26 @@ void main() {
     await done(tester);
   });
 
-  testWidgets('a right click does not move the caret', (tester) async {
+  testWidgets('a right click opens the menu: outside the selection it moves the caret there, inside it keeps the selection (IntelliJ)', (tester) async {
     await pumpEditor(tester);
-    final gesture = await tester.startGesture(pointOn(tester, 9), kind: PointerDeviceKind.mouse, buttons: kSecondaryButton);
+    var gesture = await tester.startGesture(pointOn(tester, 9), kind: PointerDeviceKind.mouse, buttons: kSecondaryButton);
     await tester.pump();
     await gesture.up();
     await tester.pumpAndSettle();
-    expect(ctrl.cursorPosition.line, 0);
+    expect(ctrl.cursorPosition.line, 9);
+    expect(find.text('复制/粘贴特殊'), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+
+    ctrl.setSelection(const EditorPosition(3, 0), const EditorPosition(12, 0));
+    gesture = await tester.startGesture(pointOn(tester, 9), kind: PointerDeviceKind.mouse, buttons: kSecondaryButton);
+    await tester.pump();
+    await gesture.up();
+    await tester.pumpAndSettle();
+    expect(ctrl.selection.start, const EditorPosition(3, 0), reason: '点在选区里:选区留着(右键 ▸ 复制)');
+    expect(ctrl.selection.end, const EditorPosition(12, 0));
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
     await done(tester);
   });
 }

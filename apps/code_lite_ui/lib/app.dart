@@ -25,7 +25,7 @@ import 'features/build_tools/build_tools_panel.dart';
 import 'features/build_tools/build_tools_store.dart';
 import 'features/commit/commit_panel.dart';
 import 'features/commit/diff_tab.dart';
-import 'features/editor/code_editor_controller.dart' show EditorPosition;
+import 'features/editor/code_editor_controller.dart' show CodeEditorController, EditorPosition;
 import 'features/editor/editor_appearance.dart';
 import 'features/editor/disk_conflict_banner.dart';
 import 'features/editor/editor_session_manager.dart';
@@ -45,6 +45,10 @@ import 'features/project_explorer/structure_widget.dart';
 import 'features/search/global_search_modal.dart';
 import 'features/search/goto_file_dialog.dart';
 import 'features/search/recent_files_dialog.dart';
+import 'features/search/double_shift.dart';
+import 'features/search/search_everywhere_dialog.dart';
+import 'features/search/search_everywhere_sources.dart';
+import 'features/editor/copy_reference.dart';
 import 'features/settings/settings_dialog.dart';
 import 'features/status_bar/status_bar_widget.dart';
 import 'features/terminal/terminal_store.dart';
@@ -229,7 +233,9 @@ class _Workbench extends StatelessWidget {
       },
       child: child!,
       ),
-      child: Focus(
+      child: DoubleShiftDetector(
+        onDoubleShift: () => _searchEverywhere(context, layout),
+        child: Focus(
         autofocus: true,
         child: Scaffold(
           backgroundColor: IntelliJTheme.frameBg,
@@ -378,6 +384,7 @@ class _Workbench extends StatelessWidget {
         ),
       ),
       ),
+      ), // DoubleShiftDetector
     );
   }
 
@@ -461,6 +468,15 @@ class _Workbench extends StatelessWidget {
   Map<ShortcutActivator, VoidCallback> _keymapBindings(BuildContext context, LayoutStore layout) {
     final keymap = settings.keymap;
     if (keymap == null) return const {};
+    final actions = _keymapActions(context, layout);
+    return {
+      for (final e in actions.entries)
+        for (final k in keymap.shortcutsOf(e.key)) k.activator: e.value,
+    };
+  }
+
+  /// 能用快捷键(和 Search Everywhere 的「操作」)执行的操作:action id → 做什么。
+  Map<String, VoidCallback> _keymapActions(BuildContext context, LayoutStore layout) {
     void side(SideTool tool) {
       if (tool == SideTool.build && !buildTools.hasProjects) return; // 项目里没有构建工具时没有这个窗
       if (tool == SideTool.make && !make.hasMakefiles) return;
@@ -480,11 +496,57 @@ class _Workbench extends StatelessWidget {
       KeymapIds.expandRegion: () => context.sessionRead.activeTab?.controller.expandRegionAtCaret(),
       KeymapIds.collapseAll: () => context.sessionRead.activeTab?.controller.collapseAllRegions(),
       KeymapIds.expandAll: () => context.sessionRead.activeTab?.controller.expandAllFolds(),
+      KeymapIds.searchEverywhere: () => _searchEverywhere(context, layout),
+      KeymapIds.copyReference: () {
+        final sessions = context.sessionRead;
+        final tab = sessions.activeTab;
+        if (tab != null) copyReferenceToClipboard(context, client, context.workspaceRead, sessions, tab.filePath, tab.controller);
+      },
     };
-    return {
-      for (final e in actions.entries)
-        for (final k in keymap.shortcutsOf(e.key)) k.activator: e.value,
-    };
+    return actions;
+  }
+
+  /// Search Everywhere(连按两下 Shift,同 IntelliJ):类、文件、符号、操作一起找;
+  /// 粘贴「复制引用」得到的 `com.foo.Bar#baz(com.foo.Dto)` 直接定位到那个方法。
+  Future<void> _searchEverywhere(BuildContext context, LayoutStore layout) async {
+    if (_searchEverywhereOpen) return;
+    final workspace = context.workspaceRead;
+    final sessions = context.sessionRead;
+    final root = workspace.rootPath;
+    if (root == null) return;
+    final actions = _keymapActions(context, layout)..remove(KeymapIds.searchEverywhere);
+    final tabPaths = _openTabPaths(root, sessions);
+    _searchEverywhereOpen = true;
+    final SearchHit? hit;
+    try {
+      hit = await showSearchEverywhere(
+        context,
+        sources: buildSearchSources(
+          root: root,
+          fileQuery: (q, limit) => client.fileIndexQuery(q, limit: limit),
+          workspaceSymbols: client.lspWorkspaceSymbols,
+          actions: actions,
+          keymap: settings.keymap,
+          readText: (abs) async {
+            final open = tabPaths[abs];
+            if (open != null) return sessions.tabs[open]?.controller.text;
+            final r = await client.fetchFile(abs);
+            return r['status'] == 'ok' ? r['content'] as String? : null;
+          },
+        ),
+      );
+    } finally {
+      _searchEverywhereOpen = false;
+    }
+    if (hit == null || !context.mounted) return;
+    final actionId = hit.actionId;
+    if (actionId != null) {
+      actions[actionId]?.call();
+      return;
+    }
+    final path = hit.path;
+    if (path == null) return;
+    await openFileAt(workspace, sessions, tabPaths[path] ?? path, hit.line ?? 0, hit.col ?? 0);
   }
 
   /// Go to File(⇧⌘O):在 Rust 常驻的文件清单上按文件名模糊查找;没输入时列出打开着的标签。
@@ -766,6 +828,7 @@ class _EditorRegion extends StatelessWidget {
           keymap: keymap,
           appearance: sessions.appearance,
           onShowInHistory: (hash, path) => _showInHistory(context, hash, path),
+          onCopyReference: (path, controller) => copyReferenceToClipboard(context, client, workspace, sessions, path, controller),
           specialTabBuilder: (id) => _specialTab(context, id, workspace, sessions),
           specialTabTitle: _specialTitle,
           bannerBuilder: (path) => Column(
@@ -1241,6 +1304,43 @@ Future<void> _cloneRepository(BuildContext context, ProjectManager manager) asyn
 
 /// 打开文件,光标放到第 [line] 行(0 起)第 [column] 列,并滚到看得见的地方(上方留三分之一屏)。
 /// 差异视图跳源文件、Go to File 的 `Foo.java:120` 共用。
+/// Search Everywhere 开着时不再开第二个(连按 Shift 又按了一遍)。
+bool _searchEverywhereOpen = false;
+
+/// 复制引用(IntelliJ 的 ⌥⇧⌘C):Java 声明处是 `com.foo.Bar#baz(com.foo.Dto)`,调用处先跳到定义再算,
+/// 其它情况是 `相对路径:行号`。复制到剪贴板,右下角提示复制了什么。
+Future<void> copyReferenceToClipboard(
+  BuildContext context,
+  ApiClient client,
+  WorkspaceStore workspace,
+  EditorSessionManager sessions,
+  String path,
+  CodeEditorController controller,
+) async {
+  final root = workspace.rootPath;
+  if (root == null) return;
+  final text = controller.text;
+  final pos = controller.cursorPosition;
+  final ref = await computeCopyReference(
+    root: root,
+    path: path,
+    text: text,
+    line: pos.line,
+    col: pos.col,
+    definition: () => client.lspDefinition(path, text, pos.line, pos.col).timeout(const Duration(seconds: 2), onTimeout: () => null),
+    readText: (target) async {
+      final abs = absoluteFilePath(root, target);
+      for (final MapEntry(key: p, value: tab) in sessions.tabs.entries) {
+        if (absoluteFilePath(root, p) == abs) return tab.controller.text;
+      }
+      final r = await client.fetchFile(target);
+      return r['status'] == 'ok' ? r['content'] as String? : null;
+    },
+  );
+  await Clipboard.setData(ClipboardData(text: ref));
+  if (context.mounted) showNotice(context, tr('已复制引用: $ref', 'Reference copied: $ref'));
+}
+
 Future<void> openFileAt(WorkspaceStore workspace, EditorSessionManager sessions, String path, int line, [int column = 0]) async {
   await workspace.openFile(path);
   final tab = sessions.tabs[path];
