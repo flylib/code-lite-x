@@ -265,6 +265,9 @@ class CodeEditorController extends ChangeNotifier {
   EditorSelection get selection => _selection;
   bool get hasSelection => !_selection.isCollapsed;
 
+  /// 选中的文字(没选中时为空)。
+  String get selectedText => hasSelection ? _rangeText(_selection.start, _selection.end) : '';
+
   bool get isDirty => _isDirty;
   bool get canUndo => _canUndo;
   bool get canRedo => _canRedo;

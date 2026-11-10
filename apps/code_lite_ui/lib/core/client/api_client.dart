@@ -197,16 +197,36 @@ class ApiClient {
     unawaited(_fileSaved.close());
   }
 
-  /// Searches the workspace(纯 Dart,后台 isolate,不卡界面)。
-  Future<Map<String, dynamic>> searchWorkspace(String query, [Map<String, dynamic>? options]) =>
-      fs.searchWorkspace(_root, query, _scoped(options));
+  /// Searches the workspace(Rust 并行搜索,没有 Rust 库时纯 Dart 在后台 isolate,不卡界面)。
+  /// 选项里有 `directory`(相对项目的目录)时只搜那个目录,结果路径仍然相对项目。
+  Future<Map<String, dynamic>> searchWorkspace(String query, [Map<String, dynamic>? options]) async {
+    final dir = _scopeDirectory(options);
+    if (dir == null) return fs.searchWorkspace(_root, query, _scoped(options));
+    final res = await fs.searchWorkspace('$_root/$dir', query, options);
+    final matches = res['matches'];
+    if (matches is! List) return res;
+    return {
+      ...res,
+      'matches': [
+        for (final m in matches) {...Map<String, dynamic>.from(m as Map), 'file_path': '$dir/${m['file_path']}'},
+      ],
+    };
+  }
+
+  /// 「目录」范围:相对项目的目录(单独打开的文件没有目录范围)。
+  String? _scopeDirectory(Map<String, dynamic>? options) {
+    final dir = (options?['directory'] as String?)?.trim().replaceAll(RegExp(r'^/+|/+$'), '');
+    return dir == null || dir.isEmpty || isSingleFile ? null : dir;
+  }
 
   /// 单独打开的文件:搜索 / 替换只在这一个文件里。
   Map<String, dynamic>? _scoped(Map<String, dynamic>? options) => isSingleFile ? {...?options, 'only_file': _singleName} : options;
 
   /// Replaces occurrences across the workspace.
-  Future<Map<String, dynamic>> replaceWorkspace(String query, String replacement, [Map<String, dynamic>? options]) =>
-      fs.replaceWorkspace(_root, query, replacement, _scoped(options));
+  Future<Map<String, dynamic>> replaceWorkspace(String query, String replacement, [Map<String, dynamic>? options]) {
+    final dir = _scopeDirectory(options);
+    return dir == null ? fs.replaceWorkspace(_root, query, replacement, _scoped(options)) : fs.replaceWorkspace('$_root/$dir', query, replacement, options);
+  }
 
   /// Executes command in interactive PTY/terminal.
   Future<Map<String, dynamic>> terminalExec(String cmd, List<String> args) async {

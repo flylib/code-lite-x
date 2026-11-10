@@ -229,6 +229,8 @@ class _Workbench extends StatelessWidget {
         },
         const SingleActivator(LogicalKeyboardKey.keyF, meta: true, shift: true): () => _openSearch(context),
         const SingleActivator(LogicalKeyboardKey.keyF, control: true, shift: true): () => _openSearch(context),
+        const SingleActivator(LogicalKeyboardKey.keyR, meta: true, shift: true): () => _openSearch(context, replace: true),
+        const SingleActivator(LogicalKeyboardKey.keyR, control: true, shift: true): () => _openSearch(context, replace: true),
         ..._keymapBindings(context, layout),
       },
       child: child!,
@@ -722,14 +724,50 @@ class _Workbench extends StatelessWidget {
     await _applyFileChoice(context, layout, choice, tabPaths);
   }
 
-  void _openSearch(BuildContext context) {
+  /// Find in Files(⇧⌘F)/ Replace in Files(⇧⌘R),同 IntelliJ:边打字边搜,底部预览。
+  /// 编辑器里选中了一行之内的文字就带进去;「目录」范围默认是当前文件所在的目录。
+  void _openSearch(BuildContext context, {bool replace = false}) {
     final workspace = context.workspaceRead;
+    final sessions = context.sessionRead;
+    final root = workspace.rootPath ?? '';
+    String rel(String p) => p.startsWith('$root/') ? p.substring(root.length + 1) : p;
+    final tab = sessions.activeTab;
+    String? selected;
+    if (tab != null && tab.controller.hasSelection) {
+      final sel = tab.controller.selectedText;
+      if (sel.isNotEmpty && !sel.contains('\n')) selected = sel;
+    }
+    final active = sessions.activePath;
+    final currentDir = active == null || sessions.isSpecialTab(active) || !rel(absoluteFilePath(root, active)).contains('/')
+        ? null
+        : rel(absoluteFilePath(root, active)).substring(0, rel(absoluteFilePath(root, active)).lastIndexOf('/'));
+    final tabPaths = root.isEmpty ? const <String, String>{} : _openTabPaths(root, sessions);
     GlobalSearchModal.show(
       context,
-      client: client,
-      onNavigate: (path, line) => workspace.openFile(path),
+      search: client.searchWorkspace,
+      replace: client.replaceWorkspace,
+      replaceMode: replace,
+      initialQuery: selected,
+      currentDirectory: currentDir,
+      colorScheme: sessions.appearance.colorScheme,
+      pickDirectory: () async {
+        final dir = await io.pickDirectory();
+        if (dir == null) return null;
+        return dir == root ? '' : rel(dir);
+      },
+      readFile: (path) async {
+        final open = tabPaths[absoluteFilePath(root, path)];
+        if (open != null) return sessions.tabs[open]?.controller.text;
+        final r = await client.fetchFile(path);
+        return r['status'] == 'ok' ? r['content'] as String? : null;
+      },
+      onNavigate: (path, line, col) {
+        final abs = absoluteFilePath(root, path);
+        openFileAt(workspace, sessions, tabPaths[abs] ?? abs, line, col);
+      },
     );
   }
+
 
 }
 
