@@ -584,6 +584,20 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
     setState(() {});
   }
 
+  /// [line] 跑出可视区了就滚一点让它刚好露出来(上移 / 下移行时用)。
+  void _keepLineVisible(CodeEditorController controller, int line) {
+    final primary = identical(controller, _controller);
+    final vScroll = primary ? _verticalScroll : widget.secondaryTab?.verticalScroll;
+    if (vScroll == null || !vScroll.hasClients) return;
+    final p = vScroll.position;
+    final top = _padV + controller.folds.rowOfLine(line) * _lineHeight;
+    if (top < p.pixels) {
+      vScroll.jumpTo(top.clamp(0.0, p.maxScrollExtent));
+    } else if (top + _lineHeight > p.pixels + p.viewportDimension) {
+      vScroll.jumpTo((top + _lineHeight - p.viewportDimension).clamp(0.0, p.maxScrollExtent));
+    }
+  }
+
   /// 选中这处匹配并滚到能看见(收起的段会展开)。
   void _revealMatch(CodeEditorController controller, FindMatch m) {
     controller.setSelection(EditorPosition(m.line, m.start), EditorPosition(m.line, m.end));
@@ -688,6 +702,15 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
       controller.duplicateLineOrSelection();
       imeBridge?.syncState();
       return KeyEventResult.handled;
+    }
+
+    // 上移 / 下移行(默认 ⇧⌘↑ / ⇧⌘↓,IntelliJ 的 Move Statement Up / Down);要在方向键之前,否则成了选到文件头 / 尾
+    for (final (id, delta) in [(KeymapIds.moveLineUp, -1), (KeymapIds.moveLineDown, 1)]) {
+      if (_isShortcut(id, event)) {
+        if (controller.moveLines(delta)) _keepLineVisible(controller, controller.cursorPosition.line);
+        imeBridge?.syncState();
+        return KeyEventResult.handled;
+      }
     }
 
     // 复制引用(默认 ⌥⇧⌘C)

@@ -83,6 +83,8 @@ abstract final class KeymapIds {
   static const collapseAll = 'CollapseAllRegions';
   static const expandAll = 'ExpandAllRegions';
   static const duplicate = 'EditorDuplicate';
+  static const moveLineUp = 'MoveStatementUp';
+  static const moveLineDown = 'MoveStatementDown';
   static const find = 'Find';
   static const findNext = 'FindNext';
   static const findPrevious = 'FindPrevious';
@@ -112,6 +114,8 @@ const List<KeymapAction> keymapActions = [
   KeymapAction(id: KeymapIds.collapseAll, titleZh: '全部折叠', titleEn: 'Collapse All', keymapGroup: KeymapGroup.folding, mac: ['shift meta MINUS'], other: ['ctrl shift MINUS']),
   KeymapAction(id: KeymapIds.expandAll, titleZh: '全部展开', titleEn: 'Expand All', keymapGroup: KeymapGroup.folding, mac: ['shift meta EQUALS'], other: ['ctrl shift EQUALS']),
   KeymapAction(id: KeymapIds.duplicate, titleZh: '复制行或所选内容', titleEn: 'Duplicate Line or Selection', keymapGroup: KeymapGroup.editing, mac: ['meta D'], other: ['ctrl D']),
+  KeymapAction(id: KeymapIds.moveLineUp, titleZh: '上移语句', titleEn: 'Move Statement Up', keymapGroup: KeymapGroup.editing, mac: ['shift meta UP'], other: ['ctrl shift UP']),
+  KeymapAction(id: KeymapIds.moveLineDown, titleZh: '下移语句', titleEn: 'Move Statement Down', keymapGroup: KeymapGroup.editing, mac: ['shift meta DOWN'], other: ['ctrl shift DOWN']),
   KeymapAction(id: KeymapIds.copyReference, titleZh: '复制引用', titleEn: 'Copy Reference', keymapGroup: KeymapGroup.editing, mac: ['alt shift meta C'], other: ['ctrl alt shift C']),
   KeymapAction(id: KeymapIds.find, titleZh: '在当前文件中查找', titleEn: 'Find', keymapGroup: KeymapGroup.editing, mac: ['meta F'], other: ['ctrl F']),
   KeymapAction(id: KeymapIds.findNext, titleZh: '查找下一个', titleEn: 'Find Next', keymapGroup: KeymapGroup.editing, mac: ['meta G'], other: ['F3']),

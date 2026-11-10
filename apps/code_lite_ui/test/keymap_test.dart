@@ -58,6 +58,8 @@ void main() {
         KeymapIds.expandAll: '⇧⌘=',
         KeymapIds.duplicate: '⌘D',
         KeymapIds.copyReference: '⌥⇧⌘C',
+        KeymapIds.moveLineUp: '⇧⌘↑',
+        KeymapIds.moveLineDown: '⇧⌘↓',
         KeymapIds.find: '⌘F',
         KeymapIds.findNext: '⌘G',
         KeymapIds.findPrevious: '⇧⌘G',

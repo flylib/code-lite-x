@@ -880,6 +880,32 @@ class CodeEditorController extends ChangeNotifier {
     _historySelection = _selection;
   }
 
+  /// 把光标所在行(有选区时是选区跨过的那几行)整行上移 / 下移一行(IntelliJ 的 ⇧⌘↑ / ⇧⌘↓),
+  /// 光标和选区跟着走,算一步撤销。[delta] 为 -1 上移、1 下移;已经在最上 / 最下时不动,返回 false。
+  /// 选区结束在下一行的行首(整行选中)时那一行不算。
+  bool moveLines(int delta) {
+    final sel = _selection;
+    final first = sel.start.line;
+    var last = sel.end.line;
+    if (!sel.isCollapsed && sel.end.col == 0 && last > first) last--;
+    if (delta < 0 && first == 0) return false;
+    if (delta > 0 && last >= _lines.length - 1) return false;
+    final block = _lines.sublist(first, last + 1);
+    _breakGroup = true; // 不和前面的输入合成一步撤销
+    EditorPosition shift(EditorPosition p) => EditorPosition(p.line + delta, p.col);
+    final after = EditorSelection(anchor: shift(sel.anchor), head: shift(sel.head));
+    if (delta < 0) {
+      final above = _lines[first - 1];
+      _edit(EditorPosition(first - 1, 0), EditorPosition(last, _lines[last].length), [...block, above].join('\n'), selectionAfter: after);
+    } else {
+      final below = _lines[last + 1];
+      _edit(EditorPosition(first, 0), EditorPosition(last + 1, below.length), [below, ...block].join('\n'), selectionAfter: after);
+    }
+    _breakGroup = true; // 接着打字也另起一步
+    _historySelection = _selection;
+    return true;
+  }
+
   /// Navigates the cursor in the given direction.
   void moveCursor({
     required NavigationDirection direction,
