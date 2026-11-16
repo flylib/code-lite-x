@@ -89,6 +89,9 @@ class EditorViewWidget extends StatefulWidget {
   /// 复制引用(⌥⇧⌘C / 右键 ▸ 复制/粘贴特殊 ▸ 复制引用):[path] 是这个面板的文件,光标在 [controller] 里。
   final void Function(String path, CodeEditorController controller)? onCopyReference;
 
+  /// 转到声明(⌘B / ⌘+单击):[path] 是这个面板的文件,光标在 [controller] 里。
+  final void Function(String path, CodeEditorController controller)? onGotoDeclaration;
+
   /// 非文件标签(比如 `diff:路径` 的「Commit: 文件名」差异视图)的内容。返回 null 表示按普通文件处理。
   final Widget? Function(String tabId)? specialTabBuilder;
 
@@ -116,6 +119,7 @@ class EditorViewWidget extends StatefulWidget {
     this.appearance,
     this.onShowInHistory,
     this.onCopyReference,
+    this.onGotoDeclaration,
     this.specialTabBuilder,
     this.specialTabTitle,
     this.bannerBuilder,
@@ -711,6 +715,13 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
         imeBridge?.syncState();
         return KeyEventResult.handled;
       }
+    }
+
+    // 转到声明(默认 ⌘B)
+    if (widget.onGotoDeclaration != null && _isShortcut(KeymapIds.gotoDeclaration, event)) {
+      final path = isPrimary ? widget.activeFile : widget.secondaryTab?.filePath;
+      if (path != null) widget.onGotoDeclaration!(path, controller);
+      return KeyEventResult.handled;
     }
 
     // 复制引用(默认 ⌥⇧⌘C)
@@ -1387,6 +1398,12 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
                                   final pos = _positionAt(event.localPosition, lines, highlighter, controller.folds);
                                   controller.setCursor(pos);
                                   imeBridge?.syncState();
+                                  // ⌘+单击(其它平台 Ctrl+单击):转到声明,同 IntelliJ
+                                  final keys = HardwareKeyboard.instance;
+                                  final mod = defaultTargetPlatform == TargetPlatform.macOS ? keys.isMetaPressed : keys.isControlPressed;
+                                  if (mod && !keys.isShiftPressed && !keys.isAltPressed && widget.onGotoDeclaration != null) {
+                                    widget.onGotoDeclaration!(filePath, controller);
+                                  }
                                 },
                                 // 代码区至少铺满视口:点击最长行右侧的空白也能把光标放到该行末尾。
                                 // 高度按全部行数给足(滚动条长度正确),里面只摆视口附近的行。

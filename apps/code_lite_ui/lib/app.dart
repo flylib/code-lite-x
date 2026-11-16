@@ -49,6 +49,7 @@ import 'features/search/double_shift.dart';
 import 'features/search/search_everywhere_dialog.dart';
 import 'features/search/search_everywhere_sources.dart';
 import 'features/editor/copy_reference.dart';
+import 'features/editor/goto_declaration.dart';
 import 'features/settings/settings_dialog.dart';
 import 'features/status_bar/status_bar_widget.dart';
 import 'features/terminal/terminal_store.dart';
@@ -499,6 +500,13 @@ class _Workbench extends StatelessWidget {
       KeymapIds.collapseAll: () => context.sessionRead.activeTab?.controller.collapseAllRegions(),
       KeymapIds.expandAll: () => context.sessionRead.activeTab?.controller.expandAllFolds(),
       KeymapIds.searchEverywhere: () => _searchEverywhere(context, layout),
+      KeymapIds.gotoDeclaration: () {
+        final sessions = context.sessionRead;
+        final tab = sessions.activeTab;
+        if (tab != null) gotoDeclaration(context, client, context.workspaceRead, sessions, tab.filePath, tab.controller);
+      },
+      KeymapIds.back: () => _goBackOrForward(context, back: true),
+      KeymapIds.forward: () => _goBackOrForward(context, back: false),
       KeymapIds.copyReference: () {
         final sessions = context.sessionRead;
         final tab = sessions.activeTab;
@@ -506,6 +514,14 @@ class _Workbench extends StatelessWidget {
       },
     };
     return actions;
+  }
+
+  /// ⌘[ / ⌘](IntelliJ 的 Back / Forward):回到 ⌘B 跳走之前的位置 / 再跳回去。
+  Future<void> _goBackOrForward(BuildContext context, {required bool back}) async {
+    final sessions = context.sessionRead;
+    final target = back ? sessions.takeBack() : sessions.takeForward();
+    if (target == null) return;
+    await openFileAt(context.workspaceRead, sessions, target.$1, target.$2.line, target.$2.col);
   }
 
   /// Search Everywhere(连按两下 Shift,同 IntelliJ):类、文件、符号、操作一起找;
@@ -867,6 +883,7 @@ class _EditorRegion extends StatelessWidget {
           appearance: sessions.appearance,
           onShowInHistory: (hash, path) => _showInHistory(context, hash, path),
           onCopyReference: (path, controller) => copyReferenceToClipboard(context, client, workspace, sessions, path, controller),
+          onGotoDeclaration: (path, controller) => gotoDeclaration(context, client, workspace, sessions, path, controller),
           specialTabBuilder: (id) => _specialTab(context, id, workspace, sessions),
           specialTabTitle: _specialTitle,
           bannerBuilder: (path) => Column(
@@ -1377,6 +1394,69 @@ Future<void> copyReferenceToClipboard(
   );
   await Clipboard.setData(ClipboardData(text: ref));
   if (context.mounted) showNotice(context, tr('已复制引用: $ref', 'Reference copied: $ref'));
+}
+
+/// 转到声明(IntelliJ 的 ⌘B / ⌘+单击):先问语言服务器,没有就按大纲、当前文件里的声明、同名源文件找
+/// (见 [findDeclaration])。跳走前记下位置,⌘[ 回来。找不到在右下角说一声。
+Future<void> gotoDeclaration(
+  BuildContext context,
+  ApiClient client,
+  WorkspaceStore workspace,
+  EditorSessionManager sessions,
+  String path,
+  CodeEditorController controller,
+) async {
+  final root = workspace.rootPath;
+  if (root == null) return;
+  final text = controller.text;
+  final pos = controller.cursorPosition;
+  final id = identifierAt(text, pos.line, pos.col);
+  if (id == null) return;
+  String? tabFor(String p) {
+    final abs = absoluteFilePath(root, p);
+    for (final t in sessions.openPaths) {
+      if (!sessions.isSpecialTab(t) && absoluteFilePath(root, t) == abs) return t;
+    }
+    return null;
+  }
+
+  const codeExtensions = {'java', 'kt', 'groovy', 'scala', 'dart', 'ts', 'tsx', 'js', 'swift', 'cs', 'go', 'rs', 'py'};
+  final target = await findDeclaration(
+    path: path,
+    text: text,
+    line: pos.line,
+    col: pos.col,
+    definition: () => client.lspDefinition(path, text, pos.line, pos.col).timeout(const Duration(seconds: 3), onTimeout: () => null),
+    outline: () => client.documentSymbols(path, text),
+    filesNamed: (name) {
+      final r = client.fileIndexQuery(name, limit: 100);
+      if (r['status'] != 'ok') return const [];
+      return [
+        for (final h in (r['results'] as List? ?? const []))
+          if (h['path'] case final String p)
+            if (p.split('/').last.split('.').first == name && codeExtensions.contains(p.split('.').last.toLowerCase())) p,
+      ];
+    },
+    readText: (p) async {
+      final open = tabFor(p);
+      if (open != null) return sessions.tabs[open]?.controller.text;
+      final r = await client.fetchFile(p);
+      return r['status'] == 'ok' ? r['content'] as String? : null;
+    },
+  );
+  if (!context.mounted) return;
+  if (target == null) {
+    showNotice(context, tr('找不到声明: ${id.name}', 'Cannot find declaration: ${id.name}'));
+    return;
+  }
+  final same = absoluteFilePath(root, target.path) == absoluteFilePath(root, path);
+  if (same && target.line == pos.line && target.col <= id.end && id.start <= target.col + id.name.length) {
+    showNotice(context, tr('已经在声明处: ${id.name}', 'Already at the declaration: ${id.name}'));
+    return;
+  }
+  sessions.recordJump();
+  final open = same ? path : (tabFor(target.path) ?? absoluteFilePath(root, target.path));
+  await openFileAt(workspace, sessions, open, target.line, target.col);
 }
 
 Future<void> openFileAt(WorkspaceStore workspace, EditorSessionManager sessions, String path, int line, [int column = 0]) async {

@@ -87,6 +87,10 @@ class EditorSessionManager extends ChangeNotifier with DisposeSafeNotifier {
   /// 两张表各留多少个(IntelliJ 的 Recent files limit 默认 50)。
   static const int maxRecentFiles = 50;
 
+  /// 跳转前的位置(⌘B 跳到声明后 ⌘[ 回来、⌘] 再去,同 IntelliJ 的 Back / Forward)。
+  final List<(String, EditorPosition)> _back = [];
+  final List<(String, EditorPosition)> _forward = [];
+
   /// [appearance]:所有项目共用同一份外观设置(传进来);不传就自己建一份(单项目 / 测试)。
   EditorSessionManager({required this.client, EditorAppearance? appearance})
       : appearance = appearance ?? EditorAppearance(),
@@ -200,6 +204,40 @@ class EditorSessionManager extends ChangeNotifier with DisposeSafeNotifier {
 
   /// 改过的文件,新的在前。
   List<String> get editedFiles => List.unmodifiable(_edited);
+
+  bool get canGoBack => _back.isNotEmpty;
+  bool get canGoForward => _forward.isNotEmpty;
+
+  (String, EditorPosition)? _here() {
+    final path = _activePath;
+    final tab = path == null ? null : _tabs[path];
+    return tab == null ? null : (path!, tab.controller.cursorPosition);
+  }
+
+  /// 要跳走了(⌘B 等):记下现在的位置,⌘[ 能回来;新的跳转清掉「前进」。
+  void recordJump() {
+    final here = _here();
+    if (here == null) return;
+    if (_back.isEmpty || _back.last != here) _back.add(here);
+    if (_back.length > maxRecentFiles) _back.removeAt(0);
+    _forward.clear();
+  }
+
+  /// ⌘[:取出上一个位置(现在的位置放进「前进」);没有返回 null。
+  (String, EditorPosition)? takeBack() {
+    if (_back.isEmpty) return null;
+    final here = _here();
+    if (here != null) _forward.add(here);
+    return _back.removeLast();
+  }
+
+  /// ⌘]:取出「前进」里的位置(现在的位置放回「后退」);没有返回 null。
+  (String, EditorPosition)? takeForward() {
+    if (_forward.isEmpty) return null;
+    final here = _here();
+    if (here != null) _back.add(here);
+    return _forward.removeLast();
+  }
 
   /// 放到 [list] 最前面(已在最前就不动),超出上限丢最旧的。返回有没有变。
   static bool _bump(List<String> list, String path) {
