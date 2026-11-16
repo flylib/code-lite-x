@@ -406,7 +406,7 @@ class _Workbench extends StatelessWidget {
               layout: layout,
               child: Island(
                 child: ListenableBuilder(
-                listenable: workspace,
+                listenable: Listenable.merge([workspace, settings]),
                 builder: (context, _) => switch (tool) {
                           SideTool.project => ProjectExplorerWidget(
                               treeData: workspace.tree,
@@ -416,6 +416,8 @@ class _Workbench extends StatelessWidget {
                               // 单独打开的文件:改了名就对不上 Opening 里记的路径,先不让改
                               onRename: workspace.isSingleFile ? null : workspace.renamePath,
                               keymap: settings.keymap,
+                              alwaysSelectOpened: settings.alwaysSelectOpenedFile,
+                              onAlwaysSelectOpenedChanged: settings.setAlwaysSelectOpenedFile,
                             ),
                           SideTool.commit => CommitPanel(
                               key: ValueKey(workspace.rootPath),

@@ -35,6 +35,11 @@ class ProjectExplorerWidget extends StatefulWidget {
   /// 快捷键表(⇧F6 改名);不传按默认键位。
   final KeymapStore? keymap;
 
+  /// 「总是选择打开的文件」(瞄准镜按钮点亮):编辑器换了文件,树就展开到它、选中它。
+  /// 不传 [onAlwaysSelectOpenedChanged] 时开关只记在这个 widget 里(测试 / 不需要记住的地方)。
+  final bool alwaysSelectOpened;
+  final ValueChanged<bool>? onAlwaysSelectOpenedChanged;
+
   const ProjectExplorerWidget({
     super.key,
     required this.treeData,
@@ -43,6 +48,8 @@ class ProjectExplorerWidget extends StatefulWidget {
     this.onLoadChildren,
     this.onRename,
     this.keymap,
+    this.alwaysSelectOpened = false,
+    this.onAlwaysSelectOpenedChanged,
   });
 
   @override
@@ -60,9 +67,37 @@ class _ProjectExplorerWidgetState extends State<ProjectExplorerWidget> {
 
   static const _sourceRoots = {'java', 'kotlin', 'scala', 'groovy'};
 
+  /// 没有外部开关时自己记的「总是选择打开的文件」。
+  late bool _localFollow = widget.alwaysSelectOpened;
+
+  bool get _follow => widget.onAlwaysSelectOpenedChanged != null ? widget.alwaysSelectOpened : _localFollow;
+
+  void _toggleFollow() {
+    final on = !_follow;
+    if (widget.onAlwaysSelectOpenedChanged != null) {
+      widget.onAlwaysSelectOpenedChanged!(on);
+    } else {
+      setState(() => _localFollow = on);
+    }
+    if (on) _selectOpenedFile();
+  }
+
+  /// 跟随时:下一帧定位到当前文件(这一帧 widget 的数据可能还没换完)。
+  void _followSoon() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _follow) _selectOpenedFile();
+    });
+  }
+
   @override
   void didUpdateWidget(ProjectExplorerWidget old) {
     super.didUpdateWidget(old);
+    if (_follow &&
+        (old.activeFilePath != widget.activeFilePath ||
+            old.treeData['path'] != widget.treeData['path'] ||
+            (!old.alwaysSelectOpened && widget.alwaysSelectOpened))) {
+      _followSoon();
+    }
     if (!identical(old.treeData, widget.treeData)) {
       // 重新扫描过(换项目或刷新):按需读的结果作废,展开状态在同一项目里保留。
       _lazy.clear();
@@ -184,6 +219,7 @@ class _ProjectExplorerWidgetState extends State<ProjectExplorerWidget> {
   @override
   void initState() {
     super.initState();
+    if (_follow) _followSoon(); // 工具窗重新打开时也定位一次
     _focus.addListener(() {
       // 失去焦点就退出搜索(和 IntelliJ 一样)
       if (!_focus.hasFocus && _query.isNotEmpty) setState(() => _query = '');
@@ -427,18 +463,20 @@ class _ProjectExplorerWidgetState extends State<ProjectExplorerWidget> {
                 const Icon(Icons.arrow_drop_down, size: 16, color: IntelliJTheme.textMuted),
                 const Spacer(),
                 Tooltip(
-                  message: tr('选择打开的文件', 'Select Opened File'),
+                  message: tr('总是选择打开的文件', 'Always Select Opened File'),
                   child: InkWell(
                     key: const ValueKey('tree-select-opened'),
-                    onTap: _canSelectOpened ? _selectOpenedFile : null,
+                    onTap: _toggleFollow,
                     borderRadius: BorderRadius.circular(4),
-                    child: Padding(
+                    child: Container(
+                      key: ValueKey('tree-select-opened-${_follow ? 'on' : 'off'}'),
                       padding: const EdgeInsets.all(3),
-                      child: Icon(
-                        Icons.my_location,
-                        size: 14,
-                        color: _canSelectOpened ? IntelliJTheme.textMuted : IntelliJTheme.textMuted.withValues(alpha: 0.4),
+                      // 点亮 = 跟随中(IntelliJ 工具栏开关按下的样子:灰底圆角块)
+                      decoration: BoxDecoration(
+                        color: _follow ? IntelliJTheme.stripeActiveBg : null,
+                        borderRadius: BorderRadius.circular(4),
                       ),
+                      child: Icon(Icons.my_location, size: 14, color: _follow ? IntelliJTheme.textHigh : IntelliJTheme.textMuted),
                     ),
                   ),
                 ),

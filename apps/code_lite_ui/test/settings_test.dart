@@ -58,6 +58,17 @@ void main() {
     s.dispose();
   });
 
+  test('Always Select Opened File (the lit target button) is remembered', () async {
+    final s = store();
+    await s.load();
+    expect(s.alwaysSelectOpenedFile, isFalse);
+    s.setAlwaysSelectOpenedFile(true);
+    expect(written.last['projectView'], {'alwaysSelectOpenedFile': true});
+    final again = store(initial: written.last);
+    await again.load();
+    expect(again.alwaysSelectOpenedFile, isTrue);
+  });
+
   test('bad values in the file are ignored', () async {
     final s = store(initial: {
       'editor': {'autosave': 'yes', 'autosaveDelayMs': 5, 'appearance': 'oops'},

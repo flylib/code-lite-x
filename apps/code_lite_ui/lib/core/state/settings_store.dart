@@ -90,6 +90,16 @@ class SettingsStore extends ChangeNotifier {
     _changed();
   }
 
+  /// 项目视图的「总是选择打开的文件」(标题栏的瞄准镜按钮点亮):文件树跟着编辑器当前的文件走。
+  bool get alwaysSelectOpenedFile => _alwaysSelectOpenedFile;
+  bool _alwaysSelectOpenedFile = false;
+
+  void setAlwaysSelectOpenedFile(bool value) {
+    if (value == _alwaysSelectOpenedFile) return;
+    _alwaysSelectOpenedFile = value;
+    _changed();
+  }
+
   bool _loading = false;
 
   /// 用户选过的界面语言;null = 没选过,跟系统走([L10n.systemLanguage])。
@@ -122,6 +132,8 @@ class SettingsStore extends ChangeNotifier {
     if (editor['appearance'] is Map) appearance.applyJson(Map<String, dynamic>.from(editor['appearance'] as Map));
     if (j['layout'] is Map) layout?.applyJson(Map<String, dynamic>.from(j['layout'] as Map));
     if (j['keymap'] is Map) keymap?.applyJson(Map<String, dynamic>.from(j['keymap'] as Map));
+    final pv = j['projectView'];
+    if (pv is Map && pv['alwaysSelectOpenedFile'] is bool) _alwaysSelectOpenedFile = pv['alwaysSelectOpenedFile'] as bool;
     final build = j['buildTools'];
     if (build is Map && build['makePath'] is String) _makePath = (build['makePath'] as String).trim();
     _savedLayout = _layoutSignature();
@@ -164,6 +176,7 @@ class SettingsStore extends ChangeNotifier {
         if (layout != null) 'layout': layout!.toJson(),
         if (keymap != null) 'keymap': keymap!.toJson(),
         if (_makePath.isNotEmpty) 'buildTools': {'makePath': _makePath},
+        if (_alwaysSelectOpenedFile) 'projectView': {'alwaysSelectOpenedFile': true},
       };
 
   String _layoutSignature() => layout == null ? '' : jsonEncode(layout!.toJson());
