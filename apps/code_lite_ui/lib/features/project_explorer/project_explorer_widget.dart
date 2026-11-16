@@ -79,9 +79,18 @@ class _ProjectExplorerWidgetState extends State<ProjectExplorerWidget> {
     return (node['children'] as List<dynamic>?)?.cast<Map<String, dynamic>>() ?? const [];
   }
 
-  Future<void> _load(String path) async {
+  /// 正在读的目录(定位文件时要等它读完)。
+  final Map<String, Future<void>> _inflight = {};
+
+  Future<void> _load(String path) {
     final loader = widget.onLoadChildren;
-    if (loader == null || _loading.contains(path) || _lazy.containsKey(path)) return;
+    if (loader == null || _lazy.containsKey(path)) return Future.value();
+    return _inflight[path] ??= _doLoad(path, loader).whenComplete(() {
+      _inflight.remove(path); // 别写成 `=> remove(...)`:返回的是这个 Future 自己,whenComplete 会等它 → 永远等不完
+    });
+  }
+
+  Future<void> _doLoad(String path, Future<Map<String, dynamic>> Function(String path) loader) async {
     setState(() => _loading.add(path));
     try {
       final node = await loader(path);
@@ -111,6 +120,53 @@ class _ProjectExplorerWidgetState extends State<ProjectExplorerWidget> {
   }
 
   bool _isExpanded(String path, {required bool isRoot}) => isRoot ? !_rootCollapsed : _expanded.contains(path);
+
+  /// 编辑器里打开的文件在不在这棵树里(不在就没法定位,按钮灰掉)。
+  bool get _canSelectOpened {
+    final target = widget.activeFilePath;
+    final root = widget.treeData['path'] as String?;
+    return target.isNotEmpty && root != null && (target == root || target.startsWith('$root/'));
+  }
+
+  /// IntelliJ 的 Select Opened File(瞄准镜按钮):展开编辑器当前文件所在的各级目录(没读过的先读),
+  /// 选中它并滚到中间。
+  Future<void> _selectOpenedFile() async {
+    if (!_canSelectOpened) return;
+    final target = widget.activeFilePath;
+    final root = widget.treeData;
+    setState(() {
+      _rootCollapsed = false;
+      _query = '';
+    });
+    var node = root;
+    while (node['path'] != target) {
+      if (node['loaded'] == false && !_lazy.containsKey(node['path'])) {
+        await _load(node['path'] as String);
+        if (!mounted || !identical(root, widget.treeData)) return;
+      }
+      final next = (_childrenOf(node) ?? const []).where((c) {
+        final p = c['path'] as String? ?? '';
+        return p == target || target.startsWith('$p/');
+      }).firstOrNull;
+      if (next == null) break; // 文件树还没刷新到这个文件:停在最近的那一级目录
+      node = next;
+      if (node['is_dir'] == true && node['path'] != target) _expanded.add(node['path'] as String);
+    }
+    // 压成一行的包(com.acme.app)用最深那级的路径;选中目标所在的那一行
+    final rows = _rows();
+    final row = rows.where((r) => r.selectable && r.path == target).firstOrNull ??
+        rows.lastWhere((r) => r.selectable && target.startsWith('${r.path}/'), orElse: () => rows.first);
+    setState(() => _selected = row.path);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scroll.hasClients) return;
+      final i = _rows().indexWhere((r) => r.path == row.path);
+      if (i < 0) return;
+      final pos = _scroll.position;
+      final top = 4 + i * _rowHeight;
+      if (top >= pos.pixels && top + _rowHeight <= pos.pixels + pos.viewportDimension) return;
+      _scroll.jumpTo((top - (pos.viewportDimension - _rowHeight) / 2).clamp(0.0, pos.maxScrollExtent));
+    });
+  }
 
   // --- 焦点、选中行与快速搜索 ----------------------------------------------------------
 
@@ -370,6 +426,22 @@ class _ProjectExplorerWidgetState extends State<ProjectExplorerWidget> {
                 const SizedBox(width: 4),
                 const Icon(Icons.arrow_drop_down, size: 16, color: IntelliJTheme.textMuted),
                 const Spacer(),
+                Tooltip(
+                  message: tr('选择打开的文件', 'Select Opened File'),
+                  child: InkWell(
+                    key: const ValueKey('tree-select-opened'),
+                    onTap: _canSelectOpened ? _selectOpenedFile : null,
+                    borderRadius: BorderRadius.circular(4),
+                    child: Padding(
+                      padding: const EdgeInsets.all(3),
+                      child: Icon(
+                        Icons.my_location,
+                        size: 14,
+                        color: _canSelectOpened ? IntelliJTheme.textMuted : IntelliJTheme.textMuted.withValues(alpha: 0.4),
+                      ),
+                    ),
+                  ),
+                ),
                 Tooltip(
                   message: tr('全部折叠', 'Collapse All'),
                   child: InkWell(

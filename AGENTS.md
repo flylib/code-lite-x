@@ -90,6 +90,7 @@ CodeLiteX 是一款高性能的原生跨平台代码编辑器，内置 Git 管�
 - 文件图标：同一种文件在文件树、编辑器标签、Go to File 里是同一个图标（`fileTypeIconWidget`）。Markdown 是画出来的 Markdown 标志（圆角框里 M + ↓，`MarkdownIcon`），Makefile 是 M（`MakefileIcon`），其余是按语言选的 Material 图标。
 - 别处新建 / 删除文件时文件树自动刷新（文件监视在 Rust，`target/`、`node_modules/`、`.git` 等构建产物和临时文件的事件不触发刷新）。
 - 快速搜索（IntelliJ 的 speed search）：**只在文件树有焦点时生效**（点一下文件树）。直接打字在已展开的节点里找，选中跳到第一个匹配（从当前选中往下找，到底回到顶上），匹配字符高亮，顶上浮一个搜索框（没匹配时红字）；↑↓ 在匹配间跳，回车打开文件 / 展开目录，Backspace 删字，Esc 或失去焦点退出。匹配不分大小写，先找连续出现，否则分段匹配、每段从词首开始（`admser` → admin-service，`stmgc` → SeaTunnelMigrationGroupController）。不搜时 ↑↓ 移动选中，→ 展开 / ← 收起或回到上一级，回车打开。
+- **选择打开的文件**（IntelliJ 的 Select Opened File）：项目工具窗标题栏「全部折叠」左边的瞄准镜按钮，点了展开编辑器当前文件所在的各级目录（没扫描过的先读出来）、选中这个文件、不在视口里就滚到中间；只展开那一路，别的目录不动。当前文件不在这棵树里（项目外的文件、没打开文件）时按钮灰掉。还没做 IntelliJ 的「总是选择打开的文件」（自动跟随）（`_selectOpenedFile`）。
 - **右键菜单**（照 IntelliJ 项目视图的右键菜单，一项项补）：右键一行（触控板双指轻点、macOS 上 Control+单击也算）先选中它，在点的地方弹菜单。目前有 **Rename...**（⇧F6，action id `RenameElement`，Keymap 里归「重构」）：弹「Rename」框 `Rename file 'X' to:`，文件选中扩展名前的部分、目录选中整个名字；回车确定、Esc 取消；名字带 `/`、为空或目标已存在就在框里标红说原因、不关框（不覆盖，只改大小写可以）。改名前先保存没保存的修改；打开着的标签（目录改名时是它下面的）跟到新路径，内容、光标、撤销历史都留着，语言服务器按新路径重开；展开着的目录保持展开。只改文件名，**不改代码里对它的引用**。项目根和单独打开的文件不能在这里改名（菜单项灰掉）（`WorkspaceStore.renamePath`、`EditorSessionManager.retargetPaths`、`rename_dialog.dart`）。
 
 **Go to File**
