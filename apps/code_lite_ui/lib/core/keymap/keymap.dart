@@ -78,6 +78,7 @@ abstract final class KeymapIds {
   static const searchEverywhere = 'SearchEverywhere';
   static const copyReference = 'CopyReference';
   static const gotoDeclaration = 'GotoDeclaration';
+  static const gotoLine = 'GotoLine';
   static const back = 'Back';
   static const forward = 'Forward';
   static const make = 'ActivateMakeToolWindow';
@@ -110,6 +111,7 @@ const List<KeymapAction> keymapActions = [
   KeymapAction(id: KeymapIds.gotoFile, titleZh: '转到文件', titleEn: 'Go to File', keymapGroup: KeymapGroup.navigation, mac: ['shift meta O'], other: ['ctrl shift N']),
   KeymapAction(id: KeymapIds.recentFiles, titleZh: '最近的文件', titleEn: 'Recent Files', keymapGroup: KeymapGroup.navigation, mac: ['meta E'], other: ['ctrl E']),
   KeymapAction(id: KeymapIds.gotoDeclaration, titleZh: '转到声明或用法', titleEn: 'Go to Declaration or Usages', keymapGroup: KeymapGroup.navigation, mac: ['meta B'], other: ['ctrl B']),
+  KeymapAction(id: KeymapIds.gotoLine, titleZh: '行:列', titleEn: 'Line/Column', keymapGroup: KeymapGroup.navigation, mac: ['meta L'], other: ['ctrl G']),
   KeymapAction(id: KeymapIds.back, titleZh: '后退', titleEn: 'Back', keymapGroup: KeymapGroup.navigation, mac: ['meta OPEN_BRACKET', 'alt meta LEFT'], other: ['ctrl alt LEFT']),
   KeymapAction(id: KeymapIds.forward, titleZh: '前进', titleEn: 'Forward', keymapGroup: KeymapGroup.navigation, mac: ['meta CLOSE_BRACKET', 'alt meta RIGHT'], other: ['ctrl alt RIGHT']),
   // 默认是连按两下 Shift(不是组合键,固定有效);这里可以再加组合键

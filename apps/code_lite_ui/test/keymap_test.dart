@@ -53,6 +53,7 @@ void main() {
         KeymapIds.switcher: '⌃⇥',
         KeymapIds.searchEverywhere: null,
         KeymapIds.gotoDeclaration: '⌘B',
+        KeymapIds.gotoLine: '⌘L',
         KeymapIds.back: '⌘[',
         KeymapIds.forward: '⌘]',
         KeymapIds.collapseRegion: '⌘-',

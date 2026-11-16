@@ -19,6 +19,7 @@ import 'code_editor_controller.dart';
 import 'editor_session_manager.dart';
 import 'find_bar.dart';
 import 'folding.dart';
+import 'go_to_line_dialog.dart';
 import '../../core/keymap/keymap.dart';
 import 'ime_text_input_client.dart';
 import 'lsp_overlay.dart';
@@ -92,6 +93,9 @@ class EditorViewWidget extends StatefulWidget {
   /// 转到声明(⌘B / ⌘+单击):[path] 是这个面板的文件,光标在 [controller] 里。
   final void Function(String path, CodeEditorController controller)? onGotoDeclaration;
 
+  /// 光标要跳远了(⌘L 转到行):记下现在的位置,⌘[ 能回来。
+  final VoidCallback? onBeforeJump;
+
   /// 非文件标签(比如 `diff:路径` 的「Commit: 文件名」差异视图)的内容。返回 null 表示按普通文件处理。
   final Widget? Function(String tabId)? specialTabBuilder;
 
@@ -120,6 +124,7 @@ class EditorViewWidget extends StatefulWidget {
     this.onShowInHistory,
     this.onCopyReference,
     this.onGotoDeclaration,
+    this.onBeforeJump,
     this.specialTabBuilder,
     this.specialTabTitle,
     this.bannerBuilder,
@@ -721,6 +726,12 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
     if (widget.onGotoDeclaration != null && _isShortcut(KeymapIds.gotoDeclaration, event)) {
       final path = isPrimary ? widget.activeFile : widget.secondaryTab?.filePath;
       if (path != null) widget.onGotoDeclaration!(path, controller);
+      return KeyEventResult.handled;
+    }
+
+    // 转到行:列(默认 ⌘L,其它平台 Ctrl+G)
+    if (_isShortcut(KeymapIds.gotoLine, event)) {
+      _goToLine(controller);
       return KeyEventResult.handled;
     }
 
@@ -1940,6 +1951,19 @@ class _EditorViewWidgetState extends State<EditorViewWidget> {
     final picked = await pickMnemonic(context, current: current, taken: taken);
     if (picked == null || !mounted) return;
     controller.setMnemonicBookmark(line, picked);
+  }
+
+  /// ⌘L:弹「转到行:列」,确定后光标跳过去(收起的段会展开)、那一行滚到可视区上三分之一,焦点回编辑器。
+  Future<void> _goToLine(CodeEditorController controller) async {
+    final focus = identical(controller, _controller) ? _focusNode : _secondaryFocusNode;
+    final cur = controller.cursorPosition;
+    final at = await showGoToLineDialog(context, line: cur.line, col: cur.col, lineLengths: [for (final l in controller.lines) l.length]);
+    if (!mounted) return;
+    if (at != null) {
+      if (at.line != cur.line) widget.onBeforeJump?.call();
+      _jumpToLine(controller, at.line, col: at.col);
+    }
+    focus.requestFocus();
   }
 
   void _jumpToLine(CodeEditorController controller, int line, {int col = 0}) {

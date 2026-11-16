@@ -884,6 +884,7 @@ class _EditorRegion extends StatelessWidget {
           onShowInHistory: (hash, path) => _showInHistory(context, hash, path),
           onCopyReference: (path, controller) => copyReferenceToClipboard(context, client, workspace, sessions, path, controller),
           onGotoDeclaration: (path, controller) => gotoDeclaration(context, client, workspace, sessions, path, controller),
+          onBeforeJump: sessions.recordJump,
           specialTabBuilder: (id) => _specialTab(context, id, workspace, sessions),
           specialTabTitle: _specialTitle,
           bannerBuilder: (path) => Column(
